@@ -150,3 +150,4 @@ table.nav th:first-child,table.nav td:first-child{text-align:left}
   #prof.min #profBody{display:block}
   .card{break-inside:avoid}
 }
+details.src summary{cursor:pointer;color:#1F5FA8;margin-top:4px}

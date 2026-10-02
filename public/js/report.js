@@ -43,6 +43,8 @@ function finalize(R, G, P) {
     else if (c.cause === "cloud") add("bad", "<b>In/an den Wolken:</b> geplante H\u00f6he liegt an oder \u00fcber der Wolkenbasis." + rng, c.x0, c.x1);
     else add("bad", "<b>Kein sicherer H\u00f6henkorridor:</b> " + CAUSE[c.cause] + rng, c.x0, c.x1);
   });
+  if (!(R.tight || []).length && R.minTerr < R.terrReserve) add("warn", "<b>Geringe Gel\u00e4ndereserve:</b> ~" + Math.floor(R.minTerr / 50) * 50 + " ft \u00fcber Gel\u00e4nde bei NM " +
+    Math.round(R.minTerrX) + " \u2013 weniger als 300 ft Reserve \u00fcber dem eingestellten Mindestabstand (" + P.terrClr + " ft). Fr\u00fch steigen oder Strecke anpassen.", R.minTerrX - 1, R.minTerrX + 1);
   (R.tight || []).forEach(function (t) {
     add("warn", "<b>" + (t.climb ? "Steigflug knapp" : "Gel\u00e4ndeabstand knapp") + ":</b> nur ~" + fmtFt(Math.max(0, t.clr)) + " ft \u00fcber Gel\u00e4nde (Soll " + P.terrClr +
       " ft)" + (t.climb ? " bei " + P.climb + " ft/min \u2013 fr\u00fch und z\u00fcgig steigen, Talmitte fliegen" : "") +

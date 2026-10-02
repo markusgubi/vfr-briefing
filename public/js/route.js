@@ -402,7 +402,7 @@ function evalRoute(G, P, depH, path, id, name, opt) {
   rs.forEach(function (r) { r.tStart = null; r.tEnd = null; r.cat = 0; r.minCloud = Infinity; r.minTerr = Infinity; r.conf = false; r.soft = false; r.circ = false; });
   circles.forEach(function (c) { rs[sampleAt({ samples: sm }, c.x).ri].circ = true; });
   /* Bewertung der Stichproben */
-  var minTerr = Infinity, minCloud = Infinity, conflicts = [], curC = null, tight = [], curT = null;
+  var minTerr = Infinity, minTerrX = 0, minCloud = Infinity, conflicts = [], curC = null, tight = [], curT = null;
   for (i = 0; i < n; i++) {
     var s = sm[i], r = rs[s.ri];
     s.p = p[i];
@@ -430,7 +430,7 @@ function evalRoute(G, P, depH, path, id, name, opt) {
       else { curT = { x0: s.x, x1: s.x, clr: clr, climb: atMax[i] || (p[i] > p[i - 1] + 1) }; tight.push(curT); }
       r.soft = true;
     } else curT = null;
-    if (s.dF >= ramp) { minTerr = Math.min(minTerr, s.p - s.tm); r.minTerr = Math.min(r.minTerr, s.p - s.tm); }
+    if (s.dF >= ramp) { if (s.p - s.tm < minTerr) { minTerr = s.p - s.tm; minTerrX = s.x; } r.minTerr = Math.min(r.minTerr, s.p - s.tm); }
     if (isFinite(s.base)) { minCloud = Math.min(minCloud, s.base - s.p); r.minCloud = Math.min(r.minCloud, s.base - s.p); }
   }
   var cat = 0, maxRisk = 0, rsum = 0, worstReason = null;
@@ -484,7 +484,7 @@ function evalRoute(G, P, depH, path, id, name, opt) {
   return { rawScore: rawScore, confLen: Math.round(confLen * 2) / 2, circles: circles, tight: tight, id: id, name: name, rs: rs, path: path, key: path.join(","),
     G: G, userAlt: opt.userAlt || null, D: D, samples: sm, circMin: circMin, spiralMin: spiralMin,
     depMin: depH * 60, arrMin: arrMin, ete: arrMin - depH * 60, maxAlt: Math.max.apply(null, p), cruiseMax: Math.max.apply(null, rs.map(function (r) { return r.alt; })),
-    minTerr: minTerr, minCloud: minCloud, maxRisk: maxRisk, avgRisk: avgRisk, worstReason: worstReason, conflicts: conflicts,
+    minTerr: minTerr, minTerrX: minTerrX, terrReserve: P.terrClr + 300, minCloud: minCloud, maxRisk: maxRisk, avgRisk: avgRisk, worstReason: worstReason, conflicts: conflicts,
     entries: entries, clr: clr, cat: cat, score: Math.max(0, Math.round(score)), night: night, dusk: dusk, dawn: dawn };
 }
 function sampleAt(R, x) {
@@ -609,6 +609,7 @@ function issueOf(R) {
     var tt = R.tight.slice().sort(function (a, b) { return a.clr - b.clr; })[0];
     return (tt.climb ? "im Steigflug " : "") + "Gel\u00e4ndeabstand nur ~" + fmtFt(Math.max(0, tt.clr)) + " ft bei NM " + Math.round(tt.x0);
   }
+  if (R.minTerr < R.terrReserve) return "Gel\u00e4ndeabstand nur ~" + Math.floor(R.minTerr / 50) * 50 + " ft bei NM " + Math.round(R.minTerrX) + " (weniger als 300 ft Reserve)";
   if (R.circMin > 1) return "unterwegs kreisend steigen n\u00f6tig (~" + Math.round(R.circMin) + " min)";
   if (R.spiralMin > 3) return "Sinkflug \u00fcber dem Ziel n\u00f6tig (~" + Math.round(R.spiralMin) + " min)";
   return null;
@@ -622,6 +623,7 @@ function whyHtml() {
     if (dir) { var di = issueOf(dir); t += di ? ", weil die Direktstrecke ein Problem hat: " + esc(di) + "." : ", weil sie mehr Reserven bietet (Wert " + best.score + " statt " + dir.score + ")."; }
     out.push("<p>" + t + "</p>");
   }
+  if (best.cat === 1) { var bi = issueOf(best); if (bi) out.push("<p><b>Einschr\u00e4nkung:</b> " + esc(bi) + ".</p>"); }
   rs.slice(1).forEach(function (r) {
     var i = issueOf(r);
     out.push("<p><b>" + esc(r.name) + ":</b> " + (i ? (r.cat === 2 ? "nicht empfohlen \u2013 " : "m\u00f6glich, Nachteil: ") + esc(i) : (r.score < best.score ? "geringere Reserven (Wert " + r.score + " statt " + best.score + ")" : "gleichwertig")) +

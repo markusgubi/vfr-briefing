@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#1F5FA8">
+<meta name="apple-mobile-web-app-title" content="VFR">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<link rel="icon" type="image/svg+xml" href="img/icon.svg">
+<link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
 <title>VFR Briefing 8.0</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="css/app.css">
@@ -44,8 +49,8 @@
   <div id="prog" class="prog"></div>
   <div id="out"></div>
   <div id="exp"></div>
-  <div class="note"><b>Entscheidungshilfe &ndash; kein Ersatz f&uuml;r amtliches Flugwetter-Briefing, NOTAM, GAFOR und AIP.</b>
-  Wetter: Open-Meteo (ICON, AROME, ECMWF, UKMO, GFS); Wolkenbasis aus Feuchteprofil (950&ndash;700&thinsp;hPa), R&uuml;ckfall Taupunktdifferenz. METAR/TAF: NOAA AviationWeather. Gel&auml;nde: AWS Terrain Tiles (+150&thinsp;ft Puffer). Luftraum, Flugpl&auml;tze, Frequenzen &amp; Meldepunkte: openAIP (Community-Daten, nicht amtlich). <b>Tempor&auml;re NOTAM-Beschr&auml;nkungen sind nicht enthalten.</b> Abstand zu Lufträumen 1&thinsp;NM seitlich, 300&thinsp;ft vertikal. Kurse magnetisch, Missweisung 5&deg;&thinsp;O.</div>
+  <div class="note"><b>Entscheidungshilfe &ndash; kein Ersatz f&uuml;r amtliches Flugwetter-Briefing, NOTAM, GAFOR und AIP.</b> <b>Tempor&auml;re NOTAM-Beschr&auml;nkungen sind nicht enthalten.</b>
+  <details class="src"><summary>Datenquellen &amp; Annahmen</summary>Wetter: Open-Meteo (ICON, AROME, ECMWF, UKMO, GFS); Wolkenbasis aus Feuchteprofil (950&ndash;700&thinsp;hPa), R&uuml;ckfall Taupunktdifferenz. METAR/TAF: NOAA AviationWeather. Gel&auml;nde: AWS Terrain Tiles (+150&thinsp;ft Puffer). Luftraum, Flugpl&auml;tze, Frequenzen &amp; Meldepunkte: openAIP (Community-Daten, nicht amtlich). Abstand zu Lufträumen 1&thinsp;NM seitlich, 300&thinsp;ft vertikal. Kurse magnetisch, Missweisung 5&deg;&thinsp;O.</details></div>
 </div>
 <div id="main">
   <div id="map"></div>

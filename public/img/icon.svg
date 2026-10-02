@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
+  <rect width="180" height="180" rx="36" fill="#1F5FA8"/>
+  <path d="M0 150 L40 108 L62 124 L98 74 L124 100 L146 82 L180 120 L180 180 L0 180 Z" fill="#8C7A5B"/>
+  <path d="M18 132 C 55 60, 110 50, 162 44" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round"/>
+  <path d="M150 30 L166 44 L148 56" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="22" y="54" font-family="Arial, sans-serif" font-size="38" font-weight="700" fill="#fff">VFR</text>
+</svg>

@@ -1,0 +1,13 @@
+{
+  "name": "VFR Briefing",
+  "short_name": "VFR",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F2F5F8",
+  "theme_color": "#1F5FA8",
+  "lang": "de",
+  "icons": [
+    { "src": "img/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "img/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

@@ -11,22 +11,25 @@ function firAt(G, p) {
   return f.length ? f[0] : null;
 }
 function firCountry(f) { return f ? (f.country || (f.name.match(/^[A-Z]{4}/) || [""])[0]) : ""; }
-/* Grenzuebertritte entlang des Profils (Wechsel der FIR zwischen zwei Stichproben, auf 0,1 NM genau) */
+/* Grenzuebertritte entlang des Profils: Wechsel des LANDES zwischen zwei Stichproben (auf ~0,1 NM genau).
+   Punkte ohne FIR (Datenluecke) zaehlen nicht, mehrere FIRs eines Landes (z. B. DE) auch nicht. */
 function detectCrossings(R, G) {
   if (!G.FIRS || !G.FIRS.length) return [];
-  var sm = R.samples, out = [], prev = firAt(G, sm[0]);
-  for (var i = 1; i < sm.length; i++) {
+  var sm = R.samples, out = [], prevI = -1, prev = null;
+  for (var i = 0; i < sm.length; i++) {
     var cur = firAt(G, sm[i]);
-    if ((cur && cur.id) === (prev && prev.id)) continue;
-    var a = sm[i - 1], b = sm[i], lo = 0, hi = 1;
-    for (var k = 0; k < 8; k++) {
-      var m = (lo + hi) / 2, q = { lat: a.lat + (b.lat - a.lat) * m, lon: a.lon + (b.lon - a.lon) * m };
-      if (((firAt(G, q) || {}).id) === (prev && prev.id)) lo = m; else hi = m;
+    if (!cur) continue;
+    if (prev && firCountry(cur) && firCountry(prev) && firCountry(cur) !== firCountry(prev)) {
+      var a = sm[prevI], b = sm[i], lo = 0, hi = 1, pc = firCountry(prev);
+      for (var k = 0; k < 8; k++) {
+        var m = (lo + hi) / 2, f0 = firAt(G, { lat: a.lat + (b.lat - a.lat) * m, lon: a.lon + (b.lon - a.lon) * m });
+        if (f0 && firCountry(f0) === pc) lo = m; else hi = m;
+      }
+      var f = (lo + hi) / 2;
+      out.push({ x: a.x + (b.x - a.x) * f, lat: a.lat + (b.lat - a.lat) * f, lon: a.lon + (b.lon - a.lon) * f, t: a.t + (b.t - a.t) * f,
+        from: prev, to: cur, fromC: pc, toC: firCountry(cur) });
     }
-    var f = (lo + hi) / 2;
-    out.push({ x: a.x + (b.x - a.x) * f, lat: a.lat + (b.lat - a.lat) * f, lon: a.lon + (b.lon - a.lon) * f, t: a.t + (b.t - a.t) * f,
-      from: prev, to: cur, fromC: firCountry(prev), toC: firCountry(cur) });
-    prev = cur;
+    prev = cur; prevI = i;
   }
   return out;
 }

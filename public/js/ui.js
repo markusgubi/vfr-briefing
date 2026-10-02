@@ -947,7 +947,12 @@ function setupCursor() {
   var mx = new Date(t.getTime() + 6 * 86400000);
   $("dDate").value = today; $("dDate").min = today;
   $("dDate").max = mx.getFullYear() + "-" + p2(mx.getMonth() + 1) + "-" + p2(mx.getDate());
-  $("dTime").value = p2(Math.min(20, t.getHours() + 1)) + ":00";
+  /* Vorschlag: naechste volle Stunde; ab 17 Uhr (bald dunkel) morgen 10:00 */
+  if (t.getHours() >= 17) {
+    var tm = new Date(t.getTime() + 86400000);
+    $("dDate").value = tm.getFullYear() + "-" + p2(tm.getMonth() + 1) + "-" + p2(tm.getDate());
+    $("dTime").value = "10:00";
+  } else $("dTime").value = p2(Math.max(8, t.getHours() + 1)) + ":00";
   setupAc("fIn", "fAc", "from");
   setupAc("tIn", "tAc", "to");
   loadSettings();
@@ -959,6 +964,8 @@ function setupCursor() {
   if (isMob()) setupMobile();
   $("lgT").addEventListener("click", function () { var l = $("legend"); l.classList.toggle("col"); $("lgA").innerHTML = l.classList.contains("col") ? "&#9656;" : "&#9662;"; });
   setupCursor();
+  /* Beim Drucken alle aufklappbaren Bereiche oeffnen */
+  window.addEventListener("beforeprint", function () { Array.prototype.forEach.call(document.querySelectorAll("#out details"), function (d) { d.open = true; }); });
   $("profHead").addEventListener("click", function () {
     var p = $("prof"); p.classList.toggle("min");
     $("profTgl").innerHTML = p.classList.contains("min") ? "&#9650;" : "&#9660;";
