@@ -1,0 +1,9 @@
+{
+  "type": "FeatureCollection",
+  "name": "GAFOR-Routen Oesterreich",
+  "hinweis": "Bitte aus der aktuellen AIP Austria (GAFOR-Karte, Austro Control) uebertragen: je Strecke ein Feature mit LineString (Koordinaten [Laenge, Breite], WGS84) und properties nr/name. Erst wenn alles gegen die AIP geprueft ist, 'geprueft' auf true setzen - vorher nutzt die App die Datei NICHT.",
+  "quelle": "",
+  "stand": "",
+  "geprueft": false,
+  "features": []
+}

@@ -91,6 +91,7 @@ function edgeStatic(G, e, AIR) {
   }
   e.tmax = tmax > -1e8 ? tmax : 0;
   e.tmaxC = tmaxC > -1e8 ? tmaxC : e.tmax;
+  e.gafor = !!GAFOR && nearGafor(lerp(na, nb, 0.5)) && nearGafor(na) && nearGafor(nb);
   var bb = [Math.min(na.lon, nb.lon) - 0.04, Math.min(na.lat, nb.lat) - 0.03, Math.max(na.lon, nb.lon) + 0.04, Math.max(na.lat, nb.lat) + 0.03];
   var cand = AIR.filter(function (as) { return bbOverlap(bb, as.bb); });
   e.hits = [];
@@ -111,6 +112,18 @@ function edgeStatic(G, e, AIR) {
     });
     if (f0 != null) e.hits.push({ as: as, lo: lo, hi: hi, f0: f0, f1: f1 });
   });
+}
+/* GAFOR-Strecken (public/data/gafor.geojson, nur wenn als geprueft markiert): Teilstrecken innerhalb
+   2,5 NM einer GAFOR-Strecke bekommen in der Routensuche einen Bonus, damit man bei
+   Wetterverschlechterung ins Tal absinken kann */
+var GAFOR = null, GAFOR_NM = 2.5;
+function nearGafor(p) {
+  if (!GAFOR) return false;
+  for (var k = 0; k < GAFOR.length; k++) {
+    var l = GAFOR[k].pts;
+    for (var i = 1; i < l.length; i++) if (segDist(p, l[i - 1], l[i]).d <= GAFOR_NM) return true;
+  }
+  return false;
 }
 function subtractIv(set, lo, hi) {
   var out = [];
@@ -202,6 +215,7 @@ function edgeCost(r, mode) {
   /* Gelaende nicht mit normalem Steigflug erreichbar: im Abflugbereich stark (dort wird nie gekreist),
      unterwegs schwaecher bestraft (Kreisen moeglich, aber Nachteil) */
   if (r.climbDef > 0) c += (r.noCirc ? 4 : 1) * r.e.len * Math.min(3, r.climbDef / 500) + (r.noCirc && r.climbDef > 500 ? 300 : 0);
+  if (r.e.gafor) c -= r.e.len * 0.15;
   return c;
 }
 function bestPath(G, P, depH, mode, extra) {

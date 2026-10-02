@@ -149,6 +149,7 @@ function finalize(R, G, P) {
   var ord = { bad: 0, warn: 1, info: 2, ok: 3 };
   H.sort(function (a, b) { return ord[a.l] - ord[b.l]; });
   R.hints = H;
+  R.gaforPct = GAFOR ? Math.round(100 * R.rs.reduce(function (a, r) { return a + (r.e.gafor ? r.e.len : 0); }, 0) / Math.max(1, R.D)) : null;
   R.alts = (RES.apts || []).filter(function (a) {
     return [4, 7, 8, 10].indexOf(a.type) < 0 && distNm(a, G.A) > 1 && distNm(a, G.B) > 1;
   }).map(function (a) {

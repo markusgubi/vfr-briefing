@@ -69,6 +69,29 @@ map.on("click", function (ev) {
   L.popup({ maxWidth: 400 }).setLatLng(ev.latlng).setContent(h).openOn(map);
 });
 
+/* GAFOR-Strecken laden: nur verwenden, wenn die Datei als geprueft markiert ist und Strecken enthaelt */
+var gaforLayer = L.layerGroup();
+async function loadGafor() {
+  try {
+    var j = await (await fetch("data/gafor.geojson", { cache: "no-cache" })).json();
+    if (!j || j.geprueft !== true || !Array.isArray(j.features) || !j.features.length) return;
+    GAFOR = [];
+    j.features.forEach(function (f) {
+      var g = f.geometry || {}, lines = g.type === "LineString" ? [g.coordinates] : g.type === "MultiLineString" ? g.coordinates : [];
+      lines.forEach(function (l) { GAFOR.push({ nr: (f.properties || {}).nr || "", name: (f.properties || {}).name || "", pts: l.map(function (c) { return { lat: c[1], lon: c[0] }; }) }); });
+    });
+    GAFOR.forEach(function (r) {
+      L.polyline(r.pts.map(function (q) { return [q.lat, q.lon]; }), { color: "#16A085", weight: 3, opacity: 0.7, dashArray: "2 6", interactive: true })
+        .bindTooltip("GAFOR " + esc(r.nr) + (r.name ? " " + esc(r.name) : "")).addTo(gaforLayer);
+    });
+    var d = document.createElement("label"); d.className = "chk"; d.style.marginTop = "6px";
+    d.innerHTML = "<input type='checkbox' id='gaforOn' checked> GAFOR-Strecken (" + esc(j.stand || "Stand ?") + ")";
+    $("legend").querySelector(".lg").appendChild(d);
+    gaforLayer.addTo(map);
+    $("gaforOn").addEventListener("change", function () { if (this.checked) gaforLayer.addTo(map); else map.removeLayer(gaforLayer); });
+  } catch (e) { GAFOR = null; }
+}
+
 /* ==================== 4. Flugplatzsuche & Einstellungen ==================== */
 function showSel(inpId, a) { var inp = $(inpId); inp.value = (a.icao ? a.icao + " \u2013 " : "") + a.name; inp.classList.add("ok"); }
 function searchLocal(q) {
@@ -321,6 +344,7 @@ function render(sel) {
     "<span>Gr\u00f6\u00dftes Wetterrisiko</span><b>" + Math.round(R.maxRisk * 100) + " %</b>" +
     "<span>Steig-/Sinkrate</span><b>" + P.climb + " / " + P.desc + " ft/min</b>" +
     "<span>QNH (Umrechnung FL)</span><b>" + Math.round(G.qnh) + " hPa" + (G.qnhKnown ? "" : " (Standard \u2013 keine METARs)") + "</b>" +
+    (R.gaforPct != null ? "<span>Entlang GAFOR-Strecken</span><b>" + R.gaforPct + " %</b>" : "") +
     (G.sun ? "<span>Sonne Start / Ziel</span><b>\u2191 " + fmtH(G.sun.depRise * 60) + " \u00b7 \u2193 " + fmtH(G.sun.destSet * 60) + "</b>" : "") +
     "</div></div>";
   h += "<div class='card'><h3>Navigationslog</h3><div class='navwrap'><table class='nav'><tr><th>Strecke</th><th>MK</th><th>MH</th><th>NM</th><th>Reiseh.</th><th>Wind</th><th>GS</th><th>min</th><th>ETO</th></tr>";
@@ -890,6 +914,7 @@ function setupCursor() {
     $("profTgl").innerHTML = p.classList.contains("min") ? "&#9650;" : "&#9660;";
   });
   loadCountry("AT", "apt").catch(function () {});
+  loadGafor();
   loadAirView();
   setSts("Bereit \u2013 Start und Ziel w\u00e4hlen, dann \u201eSicherste Route berechnen\u201c.");
 })();
