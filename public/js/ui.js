@@ -498,6 +498,7 @@ function drawRouteLines(R) {
 }
 function drawProfile(R) {
   $("profBody").innerHTML = profSvg(R); $("prof").style.display = "block";
+  $("prof").classList.toggle("editing", !!(EDIT.on && R.custom));
   if (CUR.x != null) showCursor(CUR.x);
 }
 function isMob() { return window.matchMedia("(max-width:860px)").matches; }
@@ -528,9 +529,10 @@ function showPane(id) {
 /* Vertikalprofil. Alle Beschriftungen laufen ueber eine Kollisionspruefung:
    ueberschneidet sich ein Text mit einem bereits gesetzten, wird er verschoben oder weggelassen. */
 function profSvg(R) {
-  var P = RES.P, G = RES.G, sm = R.samples, D = R.D, mob = false;
-  var W = mob ? 640 : 1100, H = mob ? 380 : 270, Lp = mob ? 64 : 54, Rp = 12, Tp = mob ? 26 : 18, Bp = mob ? 66 : 34;
-  var f1 = mob ? 17 : 11, f2 = mob ? 15 : 10;
+  var P = RES.P, G = RES.G, sm = R.samples, D = R.D, mob = MOB.on;
+  /* Handy: 880 px breites Bild (seitlich wischen), hoeher und mit groesserer Schrift */
+  var W = mob ? 880 : 1100, H = mob ? 500 : 270, Lp = mob ? 50 : 54, Rp = 12, Tp = mob ? 24 : 18, Bp = mob ? 60 : 34;
+  var f1 = mob ? 14 : 11, f2 = mob ? 12.5 : 10;
   var top = 0, i, g;
   sm.forEach(function (q) { top = Math.max(top, q.tm, q.p); });
   var yMax = RES.pvFreeze || Math.max(4000, Math.ceil((top + 2500) / 1000) * 1000);
