@@ -415,8 +415,8 @@ function evalRoute(G, P, depH, path, id, name, opt) {
       var climbing = false;
       for (var b = i; b > 0 && b > i - 60; b--) { if (atMax[b]) { climbing = true; break; } if (p[b] <= p[b - 1] + 1) break; }
       cause = climbing ? "climb" : s.user ? "low" : (isFinite(s.base) && s.base - P.cloudClr < s.req) ? "wx" : "air";
-    } else if (!s.user && s.lo > Ur[i] + 1 && s.p < s.req - 1) cause = (r.wxFail || s.base - P.cloudClr < s.lo) ? "wx" : "air";
-    else if (s.dF >= 1 && isFinite(s.base) && s.p > s.base - 100) cause = "cloud";
+    } else if (!s.user && s.lo > Ur[i] + 1) cause = (r.wxFail || s.base - P.cloudClr < s.lo) ? "wx" : "air";
+    else if (s.dF >= 1 && isFinite(s.base) && s.p > s.base - 100) cause = (!s.user && r.wxFail) ? "wx" : "cloud";
     s.conf = !!cause; s.cause = cause;
     if (cause) {
       if (curC && curC.cause === cause && s.x - curC.x1 < 1.01) { curC.x1 = s.x; curC.clr = Math.min(curC.clr, s.p - s.ter); }
