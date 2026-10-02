@@ -3,6 +3,7 @@
 function finalize(R, G, P) {
   if (R.final) return;
   R.final = true;
+  G = R.G || G;
   R.coords = [[G.A.lat, G.A.lon]].concat(R.rs.map(function (r) { var n = G.nodes[r.e.b]; return [n.lat, n.lon]; }));
   var D = R.D;
   /* Wegpunkte & Navigationslog */
@@ -30,7 +31,18 @@ function finalize(R, G, P) {
   var now = new Date(), isToday = P.date === now.getFullYear() + "-" + p2(now.getMonth() + 1) + "-" + p2(now.getDate());
   if (isToday && R.depMin < now.getHours() * 60 + now.getMinutes() - 10) add("warn", "Abflugzeit liegt in der Vergangenheit.");
   R.conflicts.forEach(function (c) {
-    add("bad", "<b>Kein sicherer H\u00f6henkorridor:</b> " + CAUSE[c.cause] + " <small>\u2013 NM " + Math.round(c.x0) + "\u2013" + Math.round(c.x1) + " (~" + fmtH(sampleAt(R, c.x0).t) + ")</small>", c.x0, c.x1);
+    if (c.cause === "forb") return;   /* steht als eigener Luftraum-Hinweis */
+    var rng = " <small>\u2013 NM " + Math.round(c.x0) + (Math.round(c.x1) > Math.round(c.x0) ? "\u2013" + Math.round(c.x1) : "") + " (~" + fmtH(sampleAt(R, c.x0).t) + ")</small>";
+    if (c.cause === "climb") add("bad", "<b>Steigflug reicht nicht:</b> Mit " + P.climb + " ft/min ist das Gel\u00e4nde nicht sicher zu \u00fcbersteigen (Abstand nur ~" +
+      fmtFt(Math.max(0, c.clr)) + " ft). Kein Kreisen \u00fcber dem Startplatz eingeplant \u2013 andere Route/Talweg w\u00e4hlen oder Steigleistung pr\u00fcfen." + rng, c.x0, c.x1);
+    else if (c.cause === "low") add("bad", "<b>Eigene H\u00f6he zu tief:</b> Gel\u00e4ndeabstand nur ~" + fmtFt(Math.max(0, c.clr)) + " ft." + rng, c.x0, c.x1);
+    else if (c.cause === "cloud") add("bad", "<b>In/an den Wolken:</b> geplante H\u00f6he liegt an oder \u00fcber der Wolkenbasis." + rng, c.x0, c.x1);
+    else add("bad", "<b>Kein sicherer H\u00f6henkorridor:</b> " + CAUSE[c.cause] + rng, c.x0, c.x1);
+  });
+  (R.tight || []).forEach(function (t) {
+    add("warn", "<b>" + (t.climb ? "Steigflug knapp" : "Gel\u00e4ndeabstand knapp") + ":</b> nur ~" + fmtFt(Math.max(0, t.clr)) + " ft \u00fcber Gel\u00e4nde (Soll " + P.terrClr +
+      " ft)" + (t.climb ? " bei " + P.climb + " ft/min \u2013 fr\u00fch und z\u00fcgig steigen, Talmitte fliegen" : "") +
+      " <small>\u2013 NM " + Math.round(t.x0) + (Math.round(t.x1) > Math.round(t.x0) ? "\u2013" + Math.round(t.x1) : "") + "</small>", t.x0, t.x1);
   });
   if (G.sun) {
     if (R.dawn) add("bad", "Abflug " + fmtH(R.depMin) + " vor Sonnenaufgang (" + fmtH(G.sun.depRise * 60) + ") \u2013 nur mit NVFR-Berechtigung.");
@@ -38,9 +50,8 @@ function finalize(R, G, P) {
     else if (R.dusk) add("warn", "Weniger als 30 min Tageslichtreserve (Sonnenuntergang Ziel " + fmtH(G.sun.destSet * 60) + ").", D);
   }
   R.circles.forEach(function (c) {
-    var lv = c.min > 6 ? "warn" : "info";
-    if (c.x < 0.6) add(lv, "<b>Steigflug:</b> Gel\u00e4nde voraus erfordert, \u00fcber dem Platz/Tal kreisend auf ~" + (Math.ceil(c.to / 100) * 100) + " ft MSL zu steigen (" + P.climb + " ft/min, ~" + Math.round(c.min) + " min), bevor die Strecke angetreten wird.", 0, 1.5);
-    else add(lv, "<b>Kreisend steigen</b> bei NM " + Math.round(c.x) + " (~" + fmtH(sampleAt(R, c.x).t) + ") von ~" + fmtFt(c.from) + " auf ~" + (Math.ceil(c.to / 100) * 100) + " ft MSL (~" + Math.round(c.min) + " min) \u2013 das Gel\u00e4nde danach steigt schneller als der Steigflug.", c.x - 0.5, c.x + 0.5);
+    add("warn", "<b>Kreisend steigen</b> bei NM " + Math.round(c.x) + " (~" + fmtH(sampleAt(R, c.x).t) + ") von ~" + fmtFt(c.from) + " auf ~" + (Math.ceil(c.to / 100) * 100) +
+      " ft MSL (~" + Math.round(c.min) + " min) \u2013 das Gel\u00e4nde danach steigt schneller als der Steigflug. Nachteil: Zeit, Platzbedarf im Tal.", c.x - 0.5, c.x + 0.5);
   });
   var o2min = 0, hiAlt = 0;
   for (var oi = 1; oi < R.samples.length; oi++) { var qo = R.samples[oi]; hiAlt = Math.max(hiAlt, qo.p); if (qo.p > 10000) o2min += qo.t - R.samples[oi - 1].t; }

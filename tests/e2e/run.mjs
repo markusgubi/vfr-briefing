@@ -29,13 +29,14 @@ await page.route("https://*.tile.opentopomap.org/**", r => r.fulfill({ status: 4
 
 await page.goto("http://127.0.0.1:8787/");
 await page.waitForFunction(() => window.APTDB && APTDB.AT && APTDB.AT.length);
-await page.evaluate(async ([f, t]) => {
+await page.evaluate(async ([f, t, climb]) => {
   await loadCountry("SI", "apt").catch(() => {});
   const all = Object.values(APTDB).flat();
   S.from = all.find(a => a.icao === f); S.to = all.find(a => a.icao === t);
   showSel("fIn", S.from); showSel("tIn", S.to);
   document.getElementById("dTime").value = "10:00";
-}, [from, to]);
+  if (climb) document.getElementById("climb").value = climb;
+}, [from, to, process.env.CLIMB || ""]);
 const t0 = Date.now();
 await page.evaluate(() => plan());
 await page.waitForFunction(() => !document.getElementById("go").disabled, null, { timeout: 120000 });

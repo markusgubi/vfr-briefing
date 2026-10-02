@@ -244,7 +244,7 @@ function render(sel) {
       "</td><td>" + Math.round(l.gs) + "</td><td>" + Math.round(l.mins) + "</td><td>" + fmtH(l.eto) + "</td></tr>";
   });
   h += "</table></div><div class='note' style='margin-top:6px'>Reiseh\u00f6he je Abschnitt; Steig-/Sinkfl\u00fcge siehe Profil. MK/MH magnetisch (" + MAGVAR + "\u00b0 O), Wind 850 hPa, Zeiten lokal" +
-    (R.circMin > 0 ? ", inkl. ~" + Math.round(R.circMin) + " min Kreisen am Start" : "") + (R.spiralMin > 0 ? ", inkl. ~" + Math.round(R.spiralMin) + " min Sinken am Ziel" : "") + ".</div></div>";
+    (R.circMin > 0 ? ", inkl. ~" + Math.round(R.circMin) + " min Kreisen unterwegs" : "") + (R.spiralMin > 0 ? ", inkl. ~" + Math.round(R.spiralMin) + " min Sinken am Ziel" : "") + ".</div></div>";
   if (RES.opt && RES.opt.length) {
     h += "<div class='card noprint'><h3>Beste Abflugzeit (" + esc(P.date.split("-").reverse().join(".")) + ")</h3><div class='opt'>";
     RES.opt.forEach(function (o) {
@@ -349,7 +349,7 @@ function drawMap(sel) {
       .bindTooltip(esc(x.name) + " \u2013 " + CAT_TXT[x.cat] + " (anklicken)").on("click", function () { render(k); }).addTo(routeLayer);
   });
   R.rs.forEach(function (r) {
-    var a = G.nodes[r.e.a], b = G.nodes[r.e.b];
+    var a = R.G.nodes[r.e.a], b = R.G.nodes[r.e.b];
     L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color: "#fff", weight: 9, opacity: 0.85, interactive: false }).addTo(routeLayer);
     L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color: CAT_COL[r.cat], weight: 5.5, bubblingMouseEvents: false })
       .bindTooltip("Reiseh\u00f6he " + r.alt + " ft \u00b7 " + CAT_TXT[r.cat]).addTo(routeLayer);
