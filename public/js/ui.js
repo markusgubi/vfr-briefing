@@ -406,7 +406,10 @@ function drawMap(sel) {
     var a = R.G.nodes[r.e.a], b = R.G.nodes[r.e.b];
     L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color: "#fff", weight: 9, opacity: 0.85, interactive: false }).addTo(routeLayer);
     L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color: CAT_COL[r.cat], weight: 5.5, bubblingMouseEvents: false })
-      .bindTooltip("Reiseh\u00f6he " + r.alt + " ft \u00b7 " + CAT_TXT[r.cat]).addTo(routeLayer);
+      .on("mousemove", function (ev) { showCursor(nearestX(R, ev.latlng), "map"); })
+      .on("mouseout", function () { hideCursor(); })
+      .on("click", function (ev) { routeLineClick(R, ev); })
+      .addTo(routeLayer);
   });
   R.wps.forEach(function (w, k) {
     if (k === 0 || k === R.wps.length - 1) return;
@@ -435,7 +438,10 @@ function drawMap(sel) {
     RES.fitted = true;
   }
 }
-function drawProfile(R) { $("profBody").innerHTML = profSvg(R); $("prof").style.display = "block"; }
+function drawProfile(R) {
+  $("profBody").innerHTML = profSvg(R); $("prof").style.display = "block";
+  if (CUR.x != null) showCursor(CUR.x);
+}
 function isMob() { return window.matchMedia("(max-width:860px)").matches; }
 /* Handy: vier Seiten (Planen / Karte / Profil / Ergebnis) mit Leiste unten */
 var MOB = { on: false };
@@ -548,7 +554,77 @@ function profSvg(R) {
   var leg = mob ? ["\u25ac Flugprofil (" + P.climb + "/" + P.desc + " ft/min) \u00b7 grau: Wolken \u00b7 blau: 0 \u00b0C", "Rahmen: Lufträume \u00b7 rot: kein Korridor \u00b7 gelb: Hinweis"]
     : ["\u25ac Flugprofil mit " + P.climb + "/" + P.desc + " ft/min \u00b7 grau: Wolken ab Basis \u00b7 blau gepunktet: 0 \u00b0C \u00b7 Rahmen: Lufträume \u00b7 rot: kein sicherer Korridor \u00b7 gelb: gew\u00e4hlter Hinweis"];
   leg.forEach(function (t, k) { txts += "<text x='" + Lp + "' y='" + (H - 4 - (leg.length - 1 - k) * (f2 + 4)) + "' font-size='" + (f2 - 1) + "' fill='#61717F'>" + esc(t) + "</text>"; });
-  return s + txts + "</svg>";
+  RES.pv = { W: W, H: H, Lp: Lp, Rp: Rp, Tp: Tp, Bp: Bp, yMax: yMax, D: D, X: X, Y: Y, f2: f2 };
+  return s + txts + "<g id='pedit'></g><g id='pcur'></g></svg>";
+}
+
+var EDIT = { on: false, drag: null };
+function routeLineClick(R, ev) { }
+/* ==================== 14b. Kopplung Profil <-> Karte ==================== */
+/* Maus/Finger im Hoehenprofil zeigt die Position als Marker auf der Karte, Maus ueber der Route auf der
+   Karte zeigt die Stelle im Profil (Linie + Werte) */
+var curLayer = L.layerGroup().addTo(map), CUR = { mk: null, x: null };
+function sampleInterp(R, x) {
+  var sm = R.samples, n = sm.length;
+  x = Math.max(0, Math.min(R.D, x));
+  var i = 1; while (i < n - 1 && sm[i].x < x) i++;
+  var a = sm[i - 1], b = sm[i], f = b.x > a.x ? Math.max(0, Math.min(1, (x - a.x) / (b.x - a.x))) : 0;
+  function m(k) { var u = a[k], v = b[k]; return (isFinite(u) && isFinite(v)) ? u + (v - u) * f : (f < 0.5 ? u : v); }
+  return { x: x, lat: m("lat"), lon: m("lon"), p: m("p"), tc: m("tc"), tm: m("tm"), base: m("base"), t: m("t"), ri: (f < 0.5 ? a : b).ri, conf: a.conf || b.conf };
+}
+function svgX(ev) {
+  var svg = $("profBody").querySelector("svg"); if (!svg || !RES || !RES.pv) return null;
+  var pt = svg.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY;
+  var sp = pt.matrixTransform(svg.getScreenCTM().inverse()), pv = RES.pv;
+  return { x: (sp.x - pv.Lp) / (pv.W - pv.Lp - pv.Rp) * pv.D, y: sp.y, sx: sp.x };
+}
+function cursorTxt(q) {
+  return "NM " + q.x.toFixed(0) + " \u00b7 " + fmtH(q.t) + " \u00b7 " + fmtFt(q.p) + " ft \u00b7 Gel\u00e4nde " + fmtFt(q.tc) +
+    (isFinite(q.base) ? " \u00b7 Basis " + fmtFt(q.base) : "");
+}
+function showCursor(x, from) {
+  if (!RES || !RES.pv || RES.sel == null) return;
+  var R = RES.routes[RES.sel], q = sampleInterp(R, x), pv = RES.pv, g = $("pcur");
+  CUR.x = x;
+  if (g) {
+    var X = pv.X(q.x), Yp = pv.Y(q.p), txt = cursorTxt(q), w = txt.length * pv.f2 * 0.56 + 12, left = X > pv.W / 2;
+    var bx = left ? X - w - 8 : X + 8, by = pv.Tp + 2;
+    g.innerHTML = "<line x1='" + X + "' x2='" + X + "' y1='" + pv.Tp + "' y2='" + (pv.H - pv.Bp) + "' stroke='#0F1D2A' stroke-width='1' stroke-dasharray='3 3'/>" +
+      "<circle cx='" + X + "' cy='" + Yp + "' r='5' fill='#fff' stroke='#B02E7A' stroke-width='2.5'/>" +
+      "<rect x='" + bx.toFixed(1) + "' y='" + by + "' width='" + w.toFixed(1) + "' height='" + (pv.f2 + 8) + "' rx='4' fill='#0F1D2A' fill-opacity='0.88'/>" +
+      "<text x='" + (bx + 6).toFixed(1) + "' y='" + (by + pv.f2 + 2) + "' font-size='" + pv.f2 + "' fill='#fff'>" + esc(txt) + "</text>";
+  }
+  var ll = [q.lat, q.lon];
+  if (!CUR.mk) {
+    CUR.mk = L.circleMarker(ll, { radius: 8, color: "#B02E7A", weight: 3, fillColor: "#fff", fillOpacity: 1, interactive: false }).addTo(curLayer);
+    CUR.mk.bindTooltip("", { permanent: true, direction: "right", offset: [10, 0], className: "curtip" });
+  } else CUR.mk.setLatLng(ll);
+  CUR.mk.setTooltipContent(esc(cursorTxt(q)));
+  if (from === "prof" && !MOB.on && !map.getBounds().pad(-0.05).contains(ll)) map.panTo(ll, { animate: true });
+}
+function hideCursor() {
+  CUR.x = null;
+  var g = $("pcur"); if (g) g.innerHTML = "";
+  curLayer.clearLayers(); CUR.mk = null;
+}
+function nearestX(R, ll) {
+  var best = null, kx = Math.cos(ll.lat * RAD);
+  R.samples.forEach(function (q) {
+    var dx = (q.lon - ll.lng) * kx, dy = q.lat - ll.lat, d = dx * dx + dy * dy;
+    if (!best || d < best.d) best = { d: d, x: q.x };
+  });
+  return best ? best.x : 0;
+}
+function setupCursor() {
+  var pb = $("profBody");
+  pb.addEventListener("pointermove", function (ev) {
+    if (EDIT.drag) return;
+    var c = svgX(ev); if (!c) return;
+    if (c.x < -0.5 || c.x > RES.pv.D + 0.5) { hideCursor(); return; }
+    showCursor(c.x, "prof");
+  });
+  pb.addEventListener("pointerdown", function (ev) { var c = svgX(ev); if (c && c.x >= 0 && c.x <= RES.pv.D) showCursor(c.x, "prof"); });
+  pb.addEventListener("pointerleave", function (ev) { if (ev.pointerType === "mouse" && !EDIT.drag) hideCursor(); });
 }
 
 /* ==================== 15. Start ==================== */
@@ -567,6 +643,7 @@ function profSvg(R) {
   $("avoidClr").addEventListener("change", saveSettings);
   if (isMob()) setupMobile();
   $("lgT").addEventListener("click", function () { var l = $("legend"); l.classList.toggle("col"); $("lgA").innerHTML = l.classList.contains("col") ? "&#9656;" : "&#9662;"; });
+  setupCursor();
   $("profHead").addEventListener("click", function () {
     var p = $("prof"); p.classList.toggle("min");
     $("profTgl").innerHTML = p.classList.contains("min") ? "&#9650;" : "&#9660;";

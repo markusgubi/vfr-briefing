@@ -56,6 +56,11 @@ const sum = await page.evaluate(() => {
     hints: (RES.routes[RES.sel].hints || []).map(h => h.l + ": " + h.t.replace(/<[^>]+>/g, ""))
   };
 });
+if (process.env.HOVER && !mob) {
+  const box = await page.locator("#profBody svg").boundingBox();
+  await page.mouse.move(box.x + box.width * +process.env.HOVER, box.y + box.height * 0.5);
+  await page.waitForTimeout(300);
+}
 await page.screenshot({ path: OUT + "/e2e-" + from + "-" + to + "-" + scenario + (mob ? "-mobil" : "") + ".png", fullPage: false });
 console.log(JSON.stringify({ ms, errors, ...sum }, null, 1));
 await browser.close();
