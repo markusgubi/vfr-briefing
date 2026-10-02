@@ -11,8 +11,10 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
 - Cloudflare Access schützt die ganze Seite (Policy "Cloudflare account members", 7 Tage Session).
 - Lokal testen: npm run dev (für /cfg wird OPENAIP_KEY in .dev.vars benötigt, nie committen).
 
-## Architektur (Stand v7.6)
-- Oberfläche als Workers Static Assets in public/ (index.html, css/app.css, js/*.js, data/gafor.geojson).
+## Architektur (Stand 8.0)
+- Oberfläche als Workers Static Assets in public/ (index.html, css/app.css, js/*.js, data/gafor.geojson,
+  img/ und manifest.webmanifest für den iPhone-Startbildschirm; Manifest mit crossorigin="use-credentials"
+  wegen Cloudflare Access).
   Klassische Skripte ohne Bundler, gemeinsamer globaler Namensraum, Reihenfolge laut index.html:
   util (Helfer, Geometrie) → data (Luftraum, openAIP, Gelände) → wx (Open-Meteo, METAR/TAF) →
   route (Netz, Höhenprofil evalRoute, eigene Routen, Kandidaten) → report (finalize: Navlog, Hinweise,
@@ -57,19 +59,23 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
 5. Hinweis "kein Ersatz für amtliches Briefing / NOTAM / AIP" bleibt immer sichtbar.
 
 ## Backlog
-Umgesetzt in v7.6: 1 (Start in Platzhöhe, kein Kreisen am Start), 2 (Fortschrittsanzeige), 3 (Profil↔Karte),
+Umgesetzt bis 8.0: 1 (Start in Platzhöhe, kein Kreisen am Start), 2 (Fortschrittsanzeige), 3 (Profil↔Karte),
 4 + 5 (Route und Höhen bearbeiten), 7 (Grenzübertritte, Meldepunkte), 8 (Frequenzen aus Daten, Luftraumteile
-zusammengefasst), 10 (iPhone: Kartenseite repariert, Profil lesbarer).
+zusammengefasst), 10 (Reiter-Ansicht für Handy und Touch-Tablets bis 1400 px mit eigenem Export-Reiter,
+Profil-Legende, Kartenseite repariert).
 
 Offen:
 6. GAFOR-Routen: Funktion fertig (Overlay, Bonus in der Routensuche, Kennzahl), aber OHNE Daten.
    public/data/gafor.geojson muss aus der aktuellen AIP Austria (GAFOR-Karte) befüllt und mit
    "geprueft": true freigegeben werden. Nicht raten.
-9. SkyDemon-Export mit Höhen: wartet auf eine echte, in SkyDemon gespeicherte .flightplan-Datei mit
-   Höhenänderungen als Vorlage; Format exakt danach nachbauen. GPX behält Höhen im Wegpunktnamen.
+9. SkyDemon-Export: nach dem Aufbau einer echten SkyDemon-Datei (Windy-Forum, Beispiel mit
+   Level="5000" LevelChange="B"/"F" je RhumbLineRoute) umgesetzt, Datei immer mit Endung .flightplan,
+   auf iPhone/iPad über das Teilen-Menü. Noch NICHT mit einer echten SkyDemon-Datei des Nutzers abgeglichen:
+   Übernimmt SkyDemon die Höhen nicht, eine in SkyDemon gespeicherte .flightplan-Datei mit Höhenänderungen
+   als Vorlage nehmen und skyDemonXml() exakt danach anpassen (Test: tests/unit/export.test.mjs).
 - Meldepunkte/Frequenzen/FIR-Grenzen nutzen openAIP-Felder (reporting-points: compulsory, airports;
-  airports: frequencies; airspaces Typ 10 = FIR). Mit echten Daten prüfen (LOLW → LJPZ), ggf. Feldnamen anpassen.
-- Mobile weiter beobachten: Beschriftungen in Grafiken dürfen sich nie überschneiden.
+  airports: frequencies; airspaces Typ 10 = FIR, Land aus "country"). Mit echten Daten prüfen (LOLW → LJPZ).
+- Beschriftungen in Grafiken dürfen sich nie überschneiden (lbl()-Kollisionsprüfung im Profil nutzen).
 
 ## Arbeitsweise
 - Vor jedem Commit: `npm run check` (node --check auf Server- und Client-Code) und `npm test` (Unit-Tests der
@@ -78,5 +84,7 @@ Offen:
   `node tests/e2e/run.mjs LOLW LOWZ gut` und `node tests/e2e/edit.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator und /test mitführen (aktuell v7.6, nächste v7.7).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 8.0, nächste 8.1).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
+- Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
+- Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.
