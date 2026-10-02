@@ -127,6 +127,12 @@ function loadSettings() {
     if (o.to) { S.to = o.to; showSel("tIn", o.to); }
   } catch (e) {}
 }
+/* Gespeicherte Plaetze (aeltere Version) mit aktuellen Daten (ID, Frequenzen) auffrischen */
+function freshApt(a) {
+  if (!a || !a.icao) return a;
+  var all = []; Object.keys(APTDB).forEach(function (c) { all = all.concat(APTDB[c]); });
+  return all.filter(function (x) { return x.icao === a.icao; })[0] || a;
+}
 function readP() {
   var tm = ($("dTime").value || "10:00").split(":");
   var P = {
@@ -179,6 +185,7 @@ function yieldUi() { return new Promise(function (r) { setTimeout(r, 0); }); }
 async function plan() {
   var A = S.from, B = S.to;
   if (!A || !B) { setSts("Bitte Start und Ziel aus der Vorschlagsliste wählen.", "err"); return; }
+  A = S.from = freshApt(A); B = S.to = freshApt(B);
   var P = readP(); saveSettings();
   var d = distNm(A, B);
   if (d < 3) { setSts("Start und Ziel liegen zu nah beieinander.", "err"); return; }
@@ -215,7 +222,7 @@ async function plan() {
     G.destElev = B.elevFt != null ? B.elevFt : (elevFt(B.lat, B.lon) || 0);
     G.demBox = [w - 0.07, s - 0.05, e + 0.07, n + 0.05]; G.demZ = d <= 160 ? 10 : 9;
     var got = await Promise.all([pAsp, pApt, pAwx]);
-    G.airFailed = got[0].failed; G.AIR = got[0].list; G.airBoxes = [[bw, bs, be, bn]];
+    G.airFailed = got[0].failed; G.AIR = got[0].list; G.FIRS = got[0].firs || []; G.airBoxes = [[bw, bs, be, bn]];
     if (!got[0].list.length && got[0].failed.length) throw new Error("Luftraumdaten nicht verfügbar (" + got[0].failed.join(", ") + ") – ohne Luftraumprüfung wird nicht geplant. Später erneut versuchen.");
     STN = buildStations(got[2]);
     var qs = STN.map(function (x) { return x.metar && x.metar.qnh; }).filter(Boolean);
@@ -255,8 +262,6 @@ async function plan() {
     $("go").disabled = false;
   }
 }
-/* Platzhalter fuer spaetere Nachbearbeitung der Routen (z. B. Meldepunkte im Ausland) */
-async function adjustRoutes(routes, G, P) { return routes; }
 
 /* ==================== 14. Darstellung ==================== */
 function verdictText(c) { return ["GUT FLIEGBAR (Prognose)", "EINGESCHR\u00c4NKT \u2013 nur mit Reserven", "KRITISCH \u2013 Flug nicht empfohlen"][c]; }
@@ -443,8 +448,17 @@ function drawMap(sel) {
   });
   drawRouteLines(R);
   drawEditMarkers(R);
+  (R.crossings || []).forEach(function (c) {
+    L.marker([c.lat, c.lon], { interactive: true, icon: L.divIcon({ className: "brd", html: "\u2691 " + esc(c.fromC) + "/" + esc(c.toC), iconSize: null, iconAnchor: [-6, 24] }) })
+      .bindTooltip("Grenz\u00fcbertritt " + esc(c.fromC) + " \u2192 " + esc(c.toC) + " bei NM " + Math.round(c.x) + " (~" + fmtH(c.t) + ")").addTo(routeLayer);
+  });
   R.wps.forEach(function (w, k) {
     if (k === 0 || k === R.wps.length - 1) return;
+    if (w.rp && !(EDIT.on && R.custom)) {
+      L.circleMarker([w.lat, w.lon], { radius: 6, color: "#fff", weight: 2, fillColor: "#1F5FA8", fillOpacity: 1, bubblingMouseEvents: false })
+        .bindTooltip(esc(w.name), { permanent: true, direction: "right", offset: [8, 0], className: "rptip" }).addTo(routeLayer);
+      return;
+    }
     var q = sampleAt(R, w.x), r = R.rs[q.ri];
     L.circleMarker([w.lat, w.lon], { radius: 5.5, color: "#fff", weight: 1.5, fillColor: CAT_COL[r.cat], fillOpacity: 1, bubblingMouseEvents: false })
       .bindPopup(nodePopup(r.wa, w.x, w.t, w.name), { maxWidth: 380 }).addTo(routeLayer);

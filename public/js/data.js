@@ -11,7 +11,8 @@ var KIND = {
 };
 function classify(a) {
   var t = a.type, c = a.icaoClass;
-  if (t === 10 || t === 11 || t === 15 || t === 27) return "ignore";
+  if (t === 10) return "fir";   /* FIR = Landesgrenze fuer Grenzuebertritte, nicht gezeichnet */
+  if (t === 11 || t === 15 || t === 27) return "ignore";
   if (c === 0 || t === 1 || t === 3) return "forbidden";
   if (t === 8 || t === 9) return "tra";
   if (t === 2) return "danger";
@@ -31,7 +32,7 @@ function fmtLimit(l) {
 function clsTxt(a) { return a.icaoClass != null && CLASS_TXT[a.icaoClass] ? "Klasse " + CLASS_TXT[a.icaoClass] : (TYPE_TXT[a.type] || "?"); }
 function freqTxt(a) {
   if (a.freq && a.freq.length) return " \u2013 Frequenz " + a.freq.map(function (f) { return esc(f.v) + (f.n ? " (" + esc(f.n) + ")" : ""); }).join(", ");
-  return " (Frequenz: ICAO-Karte/AIP)";
+  return " (Frequenz laut AIP/ICAO-Karte)";
 }
 function actTxt(a) {
   var t = [];
@@ -107,14 +108,19 @@ function normAsp(a) {
   o.temp = o.act.d || o.act.r || o.act.n || o.type === 8 || o.type === 9;
   return o;
 }
+function normFreq(list) {
+  return Array.isArray(list) ? list.filter(function (f) { return f && f.value; })
+    .map(function (f) { return { v: String(f.value), n: f.name || "", t: f.type, p: !!f.primary }; }) : [];
+}
 function normApt(a) {
   if (!a || !a.geometry || !Array.isArray(a.geometry.coordinates)) return null;
   var e = a.elevation || {};
-  return { icao: a.icaoCode || null, name: a.name || "?", country: a.country || "", type: a.type,
+  return { id: a._id || null, icao: a.icaoCode || null, name: a.name || "?", country: a.country || "", type: a.type, freq: normFreq(a.frequencies),
     lat: a.geometry.coordinates[1], lon: a.geometry.coordinates[0],
     elevFt: typeof e.value === "number" ? Math.round(e.unit === 1 ? e.value : e.value * M2FT) : null };
 }
-var AIRDB = {}, APTDB = {}, LOADING = {};
+var AIRDB = {}, APTDB = {}, RPDB = {}, LOADING = {};
+var OAIP_PATH = { asp: "airspaces", apt: "airports", rp: "reporting-points" }, NORM = { asp: normAsp, apt: normApt, rp: normRp };
 /* openAIP direkt aus dem Browser (eigene IP, kein Cloudflare-Rate-Limit),
    Ergebnis 24 h im Browser-Cache */
 var OAIP_KEY = null;
@@ -151,28 +157,36 @@ async function cachePut(url, data) {
     await c.put(url, new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", "x-t": String(Date.now()) } }));
   } catch (e) {}
 }
+/* VFR-Melde-/Pflichtmeldepunkte (openAIP reporting points). airports: IDs der zugehoerigen Flugplaetze */
+function normRp(a) {
+  if (!a || !a.geometry || !Array.isArray(a.geometry.coordinates)) return null;
+  return { id: a._id || a.id || a.name, name: a.name || "?", compulsory: !!a.compulsory, country: a.country || "",
+    lat: a.geometry.coordinates[1], lon: a.geometry.coordinates[0],
+    airports: (Array.isArray(a.airports) ? a.airports : []).map(function (x) { return typeof x === "string" ? x : x && (x._id || x.id); }).filter(Boolean) };
+}
 function slim(x, t) {
-  if (t === "apt") return { icaoCode: x.icaoCode, name: x.name, country: x.country, type: x.type, geometry: x.geometry, elevation: x.elevation };
+  if (t === "apt") return { _id: x._id, icaoCode: x.icaoCode, name: x.name, country: x.country, type: x.type, geometry: x.geometry, elevation: x.elevation, frequencies: x.frequencies };
+  if (t === "rp") return { _id: x._id, name: x.name, compulsory: x.compulsory, country: x.country, geometry: x.geometry, airports: x.airports };
   return { _id: x._id, name: x.name, type: x.type, icaoClass: x.icaoClass, lowerLimit: x.lowerLimit, upperLimit: x.upperLimit,
     geometry: x.geometry, country: x.country, frequencies: x.frequencies, onDemand: x.onDemand, onRequest: x.onRequest, byNotam: x.byNotam };
 }
 async function loadCountry(c, t) {
   var k = c + t;
   if (!LOADING[k]) LOADING[k] = (async function () {
-    var ck = "https://cache.local/oaip/" + c + "/" + t;
+    var ck = "https://cache.local/oaip2/" + c + "/" + t;
     var raw = await cacheGet(ck, 86400000);
     if (!raw) {
       raw = [];
       for (var page = 1; page <= 15; page++) {
-        var j = await oaipGet((t === "asp" ? "airspaces" : "airports") + "?country=" + c + "&limit=1000&page=" + page);
+        var j = await oaipGet(OAIP_PATH[t] + "?country=" + c + "&limit=1000&page=" + page);
         (j.items || []).forEach(function (x) { raw.push(slim(x, t)); });
         var more = j.nextPage != null ? j.nextPage > page : (j.totalPages ? page < j.totalPages : false);
         if (!more) break;
       }
       await cachePut(ck, raw);
     }
-    var list = raw.map(t === "asp" ? normAsp : normApt).filter(Boolean);
-    (t === "asp" ? AIRDB : APTDB)[c] = list;
+    var list = raw.map(NORM[t]).filter(Boolean);
+    (t === "asp" ? AIRDB : t === "rp" ? RPDB : APTDB)[c] = list;
     return list;
   })();
   try { return await LOADING[k]; } catch (e) { delete LOADING[k]; throw e; }
@@ -183,15 +197,15 @@ async function dataIn(t, w, s, e, n, onCountry) {
     return loadCountry(c, t).finally(function () { done++; if (onCountry) onCountry(done, cs.length); });
   }));
   var failed = cs.filter(function (c, i) { return res[i].status !== "fulfilled"; });
-  var db = t === "asp" ? AIRDB : APTDB, seen = {}, out = [];
+  var db = t === "asp" ? AIRDB : t === "rp" ? RPDB : APTDB, seen = {}, out = [], firs = [];
   cs.forEach(function (c) {
     (db[c] || []).forEach(function (a) {
-      if (t === "asp") { if (seen[a.id] || !bbOverlap([w, s, e, n], a.bb)) return; seen[a.id] = 1; }
+      if (t === "asp") { if (seen[a.id] || !bbOverlap([w, s, e, n], a.bb)) return; seen[a.id] = 1; if (a.kind === "fir") { firs.push(a); return; } }
       else { if (a.lon < w || a.lon > e || a.lat < s || a.lat > n) return; }
       out.push(a);
     });
   });
-  return { list: out, failed: failed };
+  return { list: out, failed: failed, firs: firs };
 }
 
 /* ==================== 5. Gelaende (Terrarium-Kacheln) ==================== */

@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../public/js");
-const FILES = ["util.js", "data.js", "wx.js", "route.js", "report.js"];
+const FILES = ["util.js", "data.js", "wx.js", "route.js", "report.js", "border.js"];
 
 export function loadApp() {
   const ctx = { console, Math, Date, JSON, Promise, setTimeout, clearTimeout,

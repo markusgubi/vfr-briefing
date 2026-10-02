@@ -25,7 +25,7 @@ function finalize(R, G, P) {
     var tc = courseDeg(w0, w1), wind = vecMean(es.map(function (r) { return r.wind; })), g = gsCalc(P.tas, tc, wind);
     var dist = es.reduce(function (s, r) { return s + r.e.len; }, 0);
     var mins = es.length ? es[es.length - 1].tEnd - es[0].tStart : 0;
-    R.legs.push({ from: w0.name, to: w1.name, tc: tc, mc: tc - MAGVAR, mh: tc + g.wca - MAGVAR, dist: dist, alt: es.length ? es[0].alt : 0,
+    R.legs.push({ from: (w0.border ? "\u2691 " : "") + w0.name, to: (w1.border ? "\u2691 " : "") + w1.name, tc: tc, mc: tc - MAGVAR, mh: tc + g.wca - MAGVAR, dist: dist, alt: es.length ? es[0].alt : 0,
       wind: wind, gs: mins > 0 ? dist / (mins / 60) : g.gs, mins: mins, eto: k === wps.length - 1 ? R.arrMin : w1.t,
       cat: Math.max.apply(null, es.map(function (r) { return r.cat; }).concat([0])) });
   }
@@ -64,22 +64,52 @@ function finalize(R, G, P) {
   else if (o2min > 0) add("info", "~" + Math.round(o2min) + " min \u00fcber 10.000 ft (unter 30 min ohne Sauerstoff zul\u00e4ssig) \u2013 auf Hypoxie-Anzeichen achten.");
   if (R.spiralMin > 0) add(R.spiralMin > 6 ? "warn" : "info", "<b>Sinkflug:</b> Gel\u00e4nde vor dem Ziel erlaubt erst sp\u00e4t zu sinken \u2013 Ankunft \u00fcber dem Platz in ~" +
     fmtFt(R.samples[R.samples.length - 1].p) + " ft, dann im Tal auf Platzrundenh\u00f6he sinken (~" + Math.round(R.spiralMin) + " min).", D - 1.5, D);
+  /* Luftraeume: gleichnamige Teile (z. B. mehrere "TMA LOWL"-Sektoren) werden zu einem Hinweis zusammengefasst */
+  var groups = [], gidx = {};
   R.entries.forEach(function (x) {
-    var a = x.as, nm = esc(a.name), lim = fmtLimit(a.lower) + " \u2013 " + fmtLimit(a.upper);
-    var where = "NM " + Math.round(x.x0) + " (~" + fmtH(x.t0) + ")";
-    var reqX = Math.max(0, x.x0 - 10), req = "NM " + Math.round(reqX) + " (~" + fmtH(sampleAt(R, reqX).t) + ")";
-    var at = actTxt(a), atx = at ? " <b>" + at + "</b> \u2013 NOTAM/FIS pr\u00fcfen." : "";
-    if (!x.inside) { if (a.kind === "clearance") add("info", "Unter <b>" + nm + "</b> bleiben: Untergrenze ~" + fmtFt(x.lo) + " ft MSL, geplant bis " + fmtFt(x.alt) + " ft.", x.x0, x.x1); return; }
-    if (a.kind === "forbidden") add("bad", "<b>" + nm + "</b> (" + (TYPE_TXT[a.type] || clsTxt(a)) + ", " + lim + ") wird bei " + where + " ber\u00fchrt \u2013 so nicht zul\u00e4ssig." + atx, x.x0, x.x1);
-    else if (a.kind === "clearance") {
-      if (x.x0 < 0.6) add("warn", "<b>Freigabe Abflug</b> aus <b>" + nm + "</b> (" + clsTxt(a) + ", " + lim + "): vor dem Rollen beim Turm einholen" + freqTxt(a) + ".", x.x0, x.x1);
-      else if (x.x1 > D - 0.6) add("warn", "<b>Freigabe Ziel</b> <b>" + nm + "</b> (" + clsTxt(a) + ", " + lim + "): sp\u00e4testens bei " + req + " anfordern, Einflug \u00fcber Pflichtmeldepunkt laut Sichtanflugkarte" + freqTxt(a) + ".", x.x0, x.x1);
-      else add("warn", "<b>Freigabe</b> <b>" + nm + "</b> (" + clsTxt(a) + ", " + lim + "): Einflug bei " + where + " \u2013 sp\u00e4testens bei " + req + " anfordern" + freqTxt(a) + ".", x.x0, x.x1);
-    } else if (a.kind === "danger" || a.kind === "tra") add("warn", "Durchflug <b>" + nm + "</b> (" + (TYPE_TXT[a.type] || "") + ", " + lim + ") ab " + where + ":" + (atx || " Aktivierung per NOTAM/FIS pr\u00fcfen."), x.x0, x.x1);
-    else if (a.kind === "tmz") add("info", "<b>" + nm + "</b> ab " + where + ": Transponder (Mode S, ALT) einschalten.", x.x0, x.x1);
-    else if (a.kind === "rmz") add("info", "<b>" + nm + "</b> ab " + where + ": Funkkontakt/H\u00f6rbereitschaft erforderlich" + freqTxt(a) + ".", x.x0, x.x1);
-    else if (a.type === 19 || a.type === 29 || a.type === 21) add("info", "<b>" + nm + "</b> (" + TYPE_TXT[a.type] + ") ab " + where + ": Auflagen/Mindesth\u00f6hen laut AIP beachten." + atx, x.x0, x.x1);
+    var key = x.as.kind + "|" + (x.inside ? "E" : "B") + "|" + baseName(x.as.name), g = gidx[key];
+    if (!g) { g = gidx[key] = { key: key, items: [], x0: x.x0, x1: x.x1, t0: x.t0, lo: x.lo, hi: x.hi, alt: x.alt, inside: x.inside, as: x.as }; groups.push(g); }
+    g.items.push(x); g.x0 = Math.min(g.x0, x.x0); g.x1 = Math.max(g.x1, x.x1); g.lo = Math.min(g.lo, x.lo); g.hi = Math.max(g.hi, x.hi); g.alt = Math.max(g.alt, x.alt);
+    if (x.t0 < g.t0) g.t0 = x.t0;
   });
+  groups.sort(function (p, q) { return p.x0 - q.x0; });
+  groups.forEach(function (g) {
+    var a = g.as, multi = g.items.length > 1;
+    var nm = "<b>" + esc(multi ? baseName(a.name) : a.name) + "</b>" + (multi ? " <small>(" + g.items.length + " Teile: " + esc(g.items.map(function (i) { return partName(i.as.name); }).join(", ")) + ")</small>" : "");
+    var lim = multi ? "~" + fmtFt(g.lo) + " – " + fmtFt(g.hi) + " ft MSL" : fmtLimit(a.lower) + " – " + fmtLimit(a.upper);
+    var where = "NM " + Math.round(g.x0) + " (~" + fmtH(g.t0) + ")";
+    var reqX = Math.max(0, g.x0 - 10), req = "NM " + Math.round(reqX) + " (~" + fmtH(sampleAt(R, reqX).t) + ")";
+    var at = actTxt(a), atx = at ? " <b>" + at + "</b> – NOTAM/FIS prüfen." : "";
+    var fq = unitFreq(a, G);
+    if (!g.inside) { if (a.kind === "clearance") add("info", "Unter " + nm + " bleiben: Untergrenze ~" + fmtFt(g.lo) + " ft MSL, geplant bis " + fmtFt(g.alt) + " ft.", g.x0, g.x1); return; }
+    if (a.kind === "forbidden") add("bad", nm + " (" + (TYPE_TXT[a.type] || clsTxt(a)) + ", " + lim + ") wird bei " + where + " berührt – so nicht zulässig." + atx, g.x0, g.x1);
+    else if (a.kind === "clearance") {
+      if (g.x0 < 0.6) add("warn", "<b>Freigabe Abflug</b> aus " + nm + " (" + clsTxt(a) + ", " + lim + "): vor dem Rollen einholen" + fq + ".", g.x0, g.x1);
+      else if (g.x0 < 5) add("warn", "<b>Freigabe vor dem Abflug anfordern:</b> " + nm + " (" + clsTxt(a) + ", " + lim + ") wird schon bei " + where + " erreicht" + fq + ".", g.x0, g.x1);
+      else if (g.x1 > D - 0.6) add("warn", "<b>Freigabe Ziel</b> " + nm + " (" + clsTxt(a) + ", " + lim + "): spätestens bei " + req + " anfordern, Einflug über Pflichtmeldepunkt laut Sichtanflugkarte" + fq + ".", g.x0, g.x1);
+      else add("warn", "<b>Freigabe</b> " + nm + " (" + clsTxt(a) + ", " + lim + "): Einflug bei " + where + " – spätestens bei " + req + " anfordern" + fq + ".", g.x0, g.x1);
+    } else if (a.kind === "danger" || a.kind === "tra") add("warn", "Durchflug " + nm + " (" + (TYPE_TXT[a.type] || "") + ", " + lim + ") ab " + where + ":" + (atx || " Aktivierung per NOTAM/FIS prüfen."), g.x0, g.x1);
+    else if (a.kind === "tmz") add("info", nm + " ab " + where + ": Transponder (Mode S, ALT) einschalten.", g.x0, g.x1);
+    else if (a.kind === "rmz") add("info", nm + " ab " + where + ": Funkkontakt/Hörbereitschaft erforderlich" + fq + ".", g.x0, g.x1);
+    else if (a.type === 19 || a.type === 29 || a.type === 21) add("info", nm + " (" + TYPE_TXT[a.type] + ") ab " + where + ": Auflagen/Mindesthöhen laut AIP beachten." + atx, g.x0, g.x1);
+  });
+  /* Grenzuebertritte (immer anzeigen) und Meldepunkte */
+  R.crossings = detectCrossings(R, G);
+  R.crossings.forEach(function (c) {
+    var wp = (R.wps || []).filter(function (w) { return w.border && Math.abs(w.x - c.x) < 6; })[0];
+    var via = wp ? (wp.rp ? " über Meldepunkt <b>" + esc(wp.name) + "</b>" + (wp.rp.compulsory ? " (Pflichtmeldepunkt)" : "") : " über <b>" + esc(wp.name) + "</b>") : "";
+    var ff = c.to && c.to.freq && c.to.freq.length ? " – " + esc(c.to.name) + ": " + c.to.freq.map(function (f) { return esc(f.v) + (f.n ? " " + esc(f.n) : ""); }).join(", ") : "";
+    add("warn", "<b>Grenzübertritt " + esc(c.fromC || "?") + " → " + esc(c.toC || "?") + "</b> bei NM " + Math.round(c.x) + " (~" + fmtH(c.t) + ")" + via +
+      ". Flugplan und Grenzformalitäten laut AIP prüfen (SERA.4001), FIS-Wechsel" + (ff || " – Frequenz laut AIP/ICAO-Karte") + ".", c.x - 1, c.x + 1);
+  });
+  (R.wps || []).forEach(function (w) {
+    if (w.rp && !w.border) add("info", "Anflug über Meldepunkt <b>" + esc(w.name) + "</b>" + (w.rp.compulsory ? " (Pflichtmeldepunkt)" : "") + " bei NM " + Math.round(w.x) + " – Verfahren laut Sichtanflugkarte (AIP AD 2).", w.x, w.x);
+  });
+  (R.rpNotes || []).forEach(function (n) {
+    if (n === "norp") add("warn", "Kein veröffentlichter Meldepunkt (openAIP) innerhalb " + BORDER_RP_NM + " NM vom Grenzübertritt – Übertrittspunkt laut AIP/VFR-Karte wählen.");
+    if (n === "nodest") add("warn", "Kein Meldepunkt für " + esc(G.B.icao || G.B.name) + " in openAIP gefunden – Anflug laut Sichtanflugkarte (AIP AD 2) planen.");
+  });
+  if (G.rpFailed && G.rpFailed.length) add("warn", "Meldepunkte für " + G.rpFailed.join(", ") + " nicht geladen – Grenzübertritt/Anflug laut AIP planen.");
   var acc = {}, order = [];
   R.rs.forEach(function (r, idx) {
     function put(key, lvl, txt) {
@@ -143,4 +173,44 @@ function finalize(R, G, P) {
   var compl = G.modelsOk.length / MODELS.length, offN = 0;
   [R.rs[0].wa, R.rs[R.rs.length - 1].wb].forEach(function (w) { if (w && w.off) offN++; });
   R.conf = { v: Math.max(5, Math.min(99, Math.round(100 * agree * lead * Math.sqrt(compl) * (0.88 + 0.06 * offN)))), agree: agree, lead: lead, leadH: leadH, compl: compl, offN: offN };
+}
+
+/* Grundname eines Luftraums ohne Sektor-/Teilbezeichnung: "TMA LOWL 1" -> "TMA LOWL", "LOWW TMA SECTOR A" -> "LOWW TMA" */
+function baseName(n) {
+  var s = String(n || "").toUpperCase().replace(/\s+/g, " ").trim();
+  s = s.replace(/\s*\b(SECTOR|SEKTOR|SECT|SEC|PART|TEIL)\b.*$/, "");
+  for (var k = 0; k < 2; k++) s = s.replace(/[\s\-_/]+([0-9]{1,2}[A-Z]?|[A-H]|[IVX]{1,4})$/, "");
+  return s.trim() || String(n || "");
+}
+function partName(n) { var b = baseName(n), s = String(n || "").toUpperCase().replace(/\s+/g, " ").trim(); return s.indexOf(b) === 0 ? (s.slice(b.length).trim() || s) : s; }
+/* Zustaendige Stelle und Frequenz NUR aus Daten: Frequenzen des Luftraums, sonst des zugehoerigen Platzes
+   (ICAO-Code im Luftraumnamen oder Platz innerhalb einer CTR). Sonst Verweis auf AIP/ICAO-Karte. */
+var FQ_TWR = [14], FQ_APP = [0, 13, 2, 6];
+function aptForAsp(as, G) {
+  var apts = (RES && RES.apts) || [], all = apts.concat([G.A, G.B]), name = String(as.name || "").toUpperCase();
+  var codes = name.match(/\b[A-Z]{4}\b/g) || [];
+  for (var k = 0; k < codes.length; k++) { var hit = all.filter(function (a) { return a && a.icao === codes[k]; })[0]; if (hit) return hit; }
+  if (as.type === 4 || as.type === 13) {
+    var inside = all.filter(function (a) { return a && a.icao && inBox(a, as.bb) && inGeom(as.geometry, a.lon, a.lat); });
+    inside.sort(function (a, b) { return ((b.freq || []).length - (a.freq || []).length); });
+    if (inside.length) return inside[0];
+  }
+  return null;
+}
+function pickFreq(list, types, re) {
+  var l = list.filter(function (f) { return types.indexOf(f.t) >= 0 || re.test(f.n); });
+  l.sort(function (a, b) { return (b.p - a.p); });
+  return l;
+}
+function unitFreq(as, G) {
+  function fmt(l) { return l.slice(0, 2).map(function (f) { return (f.n ? esc(f.n) + " " : "") + esc(f.v); }).join(" / "); }
+  if (as.freq && as.freq.length) return " – " + fmt(as.freq.map(function (f) { return { v: f.v, n: f.n || as.name }; }));
+  var ap = aptForAsp(as, G);
+  if (ap && ap.freq && ap.freq.length) {
+    var isCtr = as.type === 4 || as.type === 13;
+    var l = isCtr ? pickFreq(ap.freq, FQ_TWR, /TOWER|TWR/i) : pickFreq(ap.freq, FQ_APP, /APP|RADAR|APPROACH|DIRECTOR|ARR|DEP/i);
+    if (!l.length && !isCtr) l = pickFreq(ap.freq, FQ_TWR, /TOWER|TWR/i);
+    if (l.length) return " – " + fmt(l) + " <small>(openAIP, " + esc(ap.icao || ap.name) + ")</small>";
+  }
+  return " (Frequenz laut AIP/ICAO-Karte)";
 }
