@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1F5FA8">
+<title>VFR Briefing v7.5</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="side">
+  <h1>VFR <em>&#9656;</em> Route &amp; Wetter</h1>
+  <div class="sub">v7.5 &middot; sicherste Route aus 5 Wettermodellen, Gel&auml;nde, Luftraum und METAR/TAF</div>
+  <div class="noprint">
+    <label>Von</label>
+    <div class="acw"><input id="fIn" placeholder="ICAO oder Name, z.B. LOLW" autocomplete="off"><div class="ac" id="fAc"></div></div>
+    <label>Nach</label>
+    <div class="acw"><input id="tIn" placeholder="ICAO oder Name, z.B. LOWZ" autocomplete="off"><div class="ac" id="tAc"></div></div>
+    <div class="row">
+      <div><label>Datum</label><input id="dDate" type="date"></div>
+      <div><label>Abflug (lokal)</label><input id="dTime" type="time"></div>
+    </div>
+    <div class="row">
+      <div><label>Reise-TAS (kt)</label><input id="tas" type="number" value="100" min="50" max="250"></div>
+      <div><label>Max. H&ouml;he (ft MSL)</label><input id="maxAlt" type="number" value="12500" min="3000" max="13000" step="500"></div>
+    </div>
+    <label class="chk"><input type="checkbox" id="avoidClr"> Freigabepflichtige Lufträume meiden</label>
+    <details class="adv"><summary>Erweiterte Einstellungen</summary>
+      <div class="row">
+        <div><label>Min. Gel&auml;ndeabstand (ft)</label><input id="terrClr" type="number" value="1000" min="500" max="3000" step="100"></div>
+        <div><label>Min. Wolkenabstand (ft)</label><input id="cloudClr" type="number" value="1000" min="500" max="3000" step="100"></div>
+      </div>
+      <div class="row">
+        <div><label>Wunschh&ouml;he &uuml;b. Gel&auml;nde (ft)</label><input id="prefAgl" type="number" value="2000" min="1000" max="5000" step="100"></div>
+        <div><label>Steigen / Sinken (ft/min)</label>
+          <div class="row"><div><input id="climb" type="number" value="500" min="200" max="2000" step="50"></div><div><input id="desc" type="number" value="500" min="200" max="2000" step="50"></div></div></div>
+      </div>
+    </details>
+    <button class="btn" id="go">Sicherste Route berechnen</button>
+  </div>
+  <div id="sts"></div>
+  <div id="out"></div>
+  <div class="note"><b>Entscheidungshilfe &ndash; kein Ersatz f&uuml;r amtliches Flugwetter-Briefing, NOTAM, GAFOR und AIP.</b>
+  Wetter: Open-Meteo (ICON, AROME, ECMWF, UKMO, GFS); Wolkenbasis aus Feuchteprofil (950&ndash;700&thinsp;hPa), R&uuml;ckfall Taupunktdifferenz. METAR/TAF: NOAA AviationWeather. Gel&auml;nde: AWS Terrain Tiles (+150&thinsp;ft Puffer). Luftraum &amp; Flugpl&auml;tze: openAIP (Community-Daten, nicht amtlich). <b>Tempor&auml;re NOTAM-Beschr&auml;nkungen sind nicht enthalten.</b> Abstand zu Lufträumen 1&thinsp;NM seitlich, 300&thinsp;ft vertikal. Kurse magnetisch, Missweisung 5&deg;&thinsp;O.</div>
+</div>
+<div id="main">
+  <div id="map"></div>
+  <div id="mchip"></div>
+  <div id="legend" class="noprint"><div id="lgT" style="font-weight:700;cursor:pointer;user-select:none">Legende &amp; Filter <span id="lgA">&#9662;</span></div><div class="lg">
+    <div><i style="background:#C0392B"></i>Verboten (R / P / Klasse A)</div>
+    <div><i style="background:#E67E22"></i>Gefahren-/Aktivierungsgebiet</div>
+    <div><i style="background:#1F5FA8"></i>Freigabepflichtig (CTR, B/C/D)</div>
+    <div><i style="background:#8E44AD"></i>TMZ / RMZ</div>
+    <div><i style="background:#7F8C8D"></i>Sonstiges</div>
+    <div><i style="border:2px dashed #444;background:none;width:9px;height:9px"></i>zeitweise aktiv</div>
+    <label>Anzeigen bis Untergrenze</label>
+    <select id="asFilter">
+      <option value="10000">10.000 ft</option>
+      <option value="15000" selected>15.000 ft</option>
+      <option value="19500">FL 195</option>
+      <option value="0">alle</option>
+    </select>
+    <div style="font-size:10.5px;color:#61717F;margin-top:4px">Klick in die Karte: alle Lufträume an diesem Punkt</div></div>
+  </div>
+  <div id="prof"><div id="profHead"><span>Vertikalprofil</span><span id="profTgl">&#9660;</span></div><div id="profBody"></div></div>
+</div>
+<nav id="mnav"><button data-p="side" class="on"><b>&#9998;</b>Planen</button><button data-p="main"><b>&#128506;</b>Karte</button><button data-p="pProf" disabled><b>&#9968;</b>Profil</button><button data-p="pRes" disabled><b>&#9776;</b>Ergebnis</button></nav>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="js/util.js"></script>
+<script src="js/data.js"></script>
+<script src="js/wx.js"></script>
+<script src="js/route.js"></script>
+<script src="js/report.js"></script>
+<script src="js/export.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>

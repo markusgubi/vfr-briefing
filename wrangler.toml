@@ -2,5 +2,9 @@ name = "vfr"
 main = "src/worker.js"
 compatibility_date = "2026-10-02"
 
+# Oberflaeche (HTML/CSS/JS) als Static Assets; alle anderen Pfade gehen an den Worker
+[assets]
+directory = "./public"
+
 [observability]
 enabled = true
