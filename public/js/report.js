@@ -78,7 +78,7 @@ function finalize(R, G, P) {
     var nm = "<b>" + esc(multi ? baseName(a.name) : a.name) + "</b>" + (multi ? " <small>(" + g.items.length + " Teile: " + esc(g.items.map(function (i) { return partName(i.as.name); }).join(", ")) + ")</small>" : "");
     var lim = multi ? "~" + fmtFt(g.lo) + " – " + fmtFt(g.hi) + " ft MSL" : fmtLimit(a.lower) + " – " + fmtLimit(a.upper);
     var where = "NM " + Math.round(g.x0) + " (~" + fmtH(g.t0) + ")";
-    var reqX = Math.max(0, g.x0 - 10), req = "NM " + Math.round(reqX) + " (~" + fmtH(sampleAt(R, reqX).t) + ")";
+    var reqX = Math.max(0, g.x0 - 10), req = reqX < 1 ? "direkt nach dem Start" : "spätestens bei NM " + Math.round(reqX) + " (~" + fmtH(sampleAt(R, reqX).t) + ")";
     var at = actTxt(a), atx = at ? " <b>" + at + "</b> – NOTAM/FIS prüfen." : "";
     var fq = unitFreq(a, G);
     if (!g.inside) { if (a.kind === "clearance") add("info", "Unter " + nm + " bleiben: Untergrenze ~" + fmtFt(g.lo) + " ft MSL, geplant bis " + fmtFt(g.alt) + " ft.", g.x0, g.x1); return; }
@@ -86,8 +86,8 @@ function finalize(R, G, P) {
     else if (a.kind === "clearance") {
       if (g.x0 < 0.6) add("warn", "<b>Freigabe Abflug</b> aus " + nm + " (" + clsTxt(a) + ", " + lim + "): vor dem Rollen einholen" + fq + ".", g.x0, g.x1);
       else if (g.x0 < 5) add("warn", "<b>Freigabe vor dem Abflug anfordern:</b> " + nm + " (" + clsTxt(a) + ", " + lim + ") wird schon bei " + where + " erreicht" + fq + ".", g.x0, g.x1);
-      else if (g.x1 > D - 0.6) add("warn", "<b>Freigabe Ziel</b> " + nm + " (" + clsTxt(a) + ", " + lim + "): spätestens bei " + req + " anfordern, Einflug über Pflichtmeldepunkt laut Sichtanflugkarte" + fq + ".", g.x0, g.x1);
-      else add("warn", "<b>Freigabe</b> " + nm + " (" + clsTxt(a) + ", " + lim + "): Einflug bei " + where + " – spätestens bei " + req + " anfordern" + fq + ".", g.x0, g.x1);
+      else if (g.x1 > D - 0.6) add("warn", "<b>Freigabe Ziel</b> " + nm + " (" + clsTxt(a) + ", " + lim + "): " + req + " anfordern, Einflug über Pflichtmeldepunkt laut Sichtanflugkarte" + fq + ".", g.x0, g.x1);
+      else add("warn", "<b>Freigabe</b> " + nm + " (" + clsTxt(a) + ", " + lim + "): Einflug bei " + where + " – " + req + " anfordern" + fq + ".", g.x0, g.x1);
     } else if (a.kind === "danger" || a.kind === "tra") add("warn", "Durchflug " + nm + " (" + (TYPE_TXT[a.type] || "") + ", " + lim + ") ab " + where + ":" + (atx || " Aktivierung per NOTAM/FIS prüfen."), g.x0, g.x1);
     else if (a.kind === "tmz") add("info", nm + " ab " + where + ": Transponder (Mode S, ALT) einschalten.", g.x0, g.x1);
     else if (a.kind === "rmz") add("info", nm + " ab " + where + ": Funkkontakt/Hörbereitschaft erforderlich" + fq + ".", g.x0, g.x1);

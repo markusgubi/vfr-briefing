@@ -336,17 +336,6 @@ function render(sel) {
   h += "</div>";
   h += "<div class='card'><h3>Hinweise &amp; Freigaben <span style='text-transform:none;letter-spacing:0;font-weight:400'>(anklicken = auf Karte zeigen)</span></h3>" +
     R.hints.map(function (x, k) { return "<div class='hint " + x.l + (x.x0 != null ? " clk" : "") + "'" + (x.x0 != null ? " data-hi='" + k + "'" : "") + ">" + x.t + "</div>"; }).join("") + "</div>";
-  h += "<div class='card'><h3>Kennzahlen</h3><div class='kv'>" +
-    "<span>Abflug \u2192 Ankunft</span><b>" + fmtH(R.depMin) + " \u2192 " + fmtH(R.arrMin) + " (" + Math.round(R.ete) + " min)</b>" +
-    "<span>Distanz</span><b>" + R.D.toFixed(1) + " NM (direkt " + G.d.toFixed(1) + ")</b>" +
-    "<span>Min. Gel\u00e4ndeabstand</span><b>" + (isFinite(R.minTerr) ? fmtFt(R.minTerr) + " ft" : "\u2013") + "</b>" +
-    "<span>Min. Wolkenabstand</span><b>" + (isFinite(R.minCloud) ? fmtFt(R.minCloud) + " ft" : "keine Wolkendecke") + "</b>" +
-    "<span>Gr\u00f6\u00dftes Wetterrisiko</span><b>" + Math.round(R.maxRisk * 100) + " %</b>" +
-    "<span>Steig-/Sinkrate</span><b>" + P.climb + " / " + P.desc + " ft/min</b>" +
-    "<span>QNH (Umrechnung FL)</span><b>" + Math.round(G.qnh) + " hPa" + (G.qnhKnown ? "" : " (Standard \u2013 keine METARs)") + "</b>" +
-    (R.gaforPct != null ? "<span>Entlang GAFOR-Strecken</span><b>" + R.gaforPct + " %</b>" : "") +
-    (G.sun ? "<span>Sonne Start / Ziel</span><b>\u2191 " + fmtH(G.sun.depRise * 60) + " \u00b7 \u2193 " + fmtH(G.sun.destSet * 60) + "</b>" : "") +
-    "</div></div>";
   h += "<div class='card'><h3>Navigationslog</h3><div class='navwrap'><table class='nav'><tr><th>Strecke</th><th>MK</th><th>MH</th><th>NM</th><th>Reiseh.</th><th>Wind</th><th>GS</th><th>min</th><th>ETO</th></tr>";
   R.legs.forEach(function (l) {
     h += "<tr><td><span style='color:" + CAT_COL[l.cat] + "'>\u25cf</span> " + esc(l.from) + "\u2192" + esc(l.to) + "</td><td>" + deg3(l.mc) + "</td><td>" + deg3(l.mh) +
@@ -363,7 +352,18 @@ function render(sel) {
     });
     h += "</div><div class='note'>Beste Route je volle Abflugstunde (nur Tageslicht). Balken anklicken = Zeit \u00fcbernehmen und neu berechnen.</div></div>";
   }
-  h += "<div class='card'><h3>Start- &amp; Zielplatz</h3>";
+  h += "<details class='card'><summary><h3>Kennzahlen</h3></summary><div class='kv'>" +
+    "<span>Abflug \u2192 Ankunft</span><b>" + fmtH(R.depMin) + " \u2192 " + fmtH(R.arrMin) + " (" + Math.round(R.ete) + " min)</b>" +
+    "<span>Distanz</span><b>" + R.D.toFixed(1) + " NM (direkt " + G.d.toFixed(1) + ")</b>" +
+    "<span>Min. Gel\u00e4ndeabstand</span><b>" + (isFinite(R.minTerr) ? fmtFt(R.minTerr) + " ft" : "\u2013") + "</b>" +
+    "<span>Min. Wolkenabstand</span><b>" + (isFinite(R.minCloud) ? fmtFt(R.minCloud) + " ft" : "keine Wolkendecke") + "</b>" +
+    "<span>Gr\u00f6\u00dftes Wetterrisiko</span><b>" + Math.round(R.maxRisk * 100) + " %</b>" +
+    "<span>Steig-/Sinkrate</span><b>" + P.climb + " / " + P.desc + " ft/min</b>" +
+    "<span>QNH (Umrechnung FL)</span><b>" + Math.round(G.qnh) + " hPa" + (G.qnhKnown ? "" : " (Standard \u2013 keine METARs)") + "</b>" +
+    (R.gaforPct != null ? "<span>Entlang GAFOR-Strecken</span><b>" + R.gaforPct + " %</b>" : "") +
+    (G.sun ? "<span>Sonne Start / Ziel</span><b>\u2191 " + fmtH(G.sun.depRise * 60) + " \u00b7 \u2193 " + fmtH(G.sun.destSet * 60) + "</b>" : "") +
+    "</div></details>";
+  h += "<details class='card'><summary><h3>Start- &amp; Zielplatz (METAR/TAF)</h3></summary>";
   R.fields.forEach(function (f, k) {
     h += "<div style='margin-top:" + (k ? "10px" : "0") + "'><b>" + esc((f.apt.icao ? f.apt.icao + " \u2013 " : "") + f.apt.name) + "</b> <small style='color:#61717F'>" +
       fmtFt(f.elev) + " ft \u00b7 " + (k ? "Ankunft " : "Abflug ") + fmtH(f.t) + (f.da != null ? " \u00b7 Dichteh\u00f6he ~" + fmtFt(f.da) + " ft" : "") + "</small>";
@@ -375,18 +375,15 @@ function render(sel) {
     } else h += "<div class='note' style='margin-top:3px'>Keine METAR/TAF-Station im Umkreis von 15 NM.</div>";
     h += "</div>";
   });
-  h += "</div>";
-  h += "<div class='card'><h3>Ausweichpl\u00e4tze entlang der Route (\u226410 NM)</h3>";
+  h += "</details>";
+  h += "<details class='card'><summary><h3>Ausweichpl\u00e4tze (" + R.alts.length + ")</h3></summary>";
   if (!R.alts.length) h += "<div class='note' style='margin-top:0'>Keine gefunden.</div>";
   else h += "<table class='nav'><tr><th>Platz</th><th>bei NM</th><th>seitl. NM</th><th>Elev ft</th></tr>" + R.alts.map(function (o) {
     return "<tr><td>" + esc((o.a.icao ? o.a.icao + " " : "") + o.a.name) + "</td><td>" + Math.round(o.x) + "</td><td>" + o.d.toFixed(1) + "</td><td>" + (o.a.elevFt != null ? o.a.elevFt : "\u2013") + "</td></tr>";
-  }).join("") + "</table><div class='note'>Status, \u00d6ffnungszeiten und PPR immer im AIP pr\u00fcfen.</div>";
-  h += "</div>";
-  h += "<div class='card noprint'><h3>Export</h3><div class='btnrow'><button class='btn2' id='bSky'>SkyDemon (.flightplan, mit H\u00f6hen)</button><button class='btn2' id='bGpx'>GPX</button>" +
-    "<button class='btn2' id='bPrint'>Drucken</button><button class='btn2' id='bWindy'>Windy-Routenplaner (VFR)</button></div>" +
-    "<div class='note'><b>SkyDemon:</b> Die .flightplan-Datei enth\u00e4lt die Reiseh\u00f6he je Abschnitt (in SkyDemon \u00f6ffnen). GPX \u00fcbertr\u00e4gt nur Wegpunkte \u2013 SkyDemon ignoriert dort H\u00f6hen, deshalb stehen sie im Wegpunktnamen (z.\u202fB. \u201eWP3 9000FT\u201c).<br><b>Windy:</b> \u00f6ffnet den VFR-Routenplaner mit diesen Wegpunkten (nur Desktop-Browser). Abflugzeit \u00fcber die Zeitleiste unten verschieben; mit Windy-Login l\u00e4sst sich die Route als Favorit speichern.</div></div>";
+  }).join("") + "</table><div class='note'>Entlang der Route (\u226410 NM seitlich). Status, \u00d6ffnungszeiten und PPR immer im AIP pr\u00fcfen.</div>";
+  h += "</details>";
   var c = R.conf;
-  h += "<div class='card'><h3>Datenbasis &amp; Vertrauen " + c.v + " %</h3><div class='kv'>" +
+  h += "<details class='card'><summary><h3>Datenbasis &amp; Vertrauen " + c.v + " %</h3></summary><div class='kv'>" +
     "<span>Modell-\u00dcbereinstimmung</span><b>" + Math.round(c.agree * 100) + " %</b>" +
     "<span>Vorlaufzeit</span><b>" + (c.leadH > 0 ? Math.round(c.leadH) + " h" : "jetzt") + " (Faktor " + c.lead.toFixed(2) + ")</b>" +
     "<span>Modelle verf\u00fcgbar</span><b>" + G.modelsOk.length + " / " + MODELS.length + "</b>" +
@@ -394,14 +391,49 @@ function render(sel) {
     "<span>Netz / Wetterpunkte</span><b>" + G.nodes.length + " / " + G.wpts.length + "</b>" +
     "<span>Modelle</span><b style='font-weight:400'>" + esc(G.modelsOk.join(", ")) +
     (G.modelsFail.length ? "<br><i style='color:#C0392B;font-style:normal'>ohne Daten: " + esc(G.modelsFail.join(", ")) + "</i>" : "") + "</b>" +
-    "</div></div>";
+    "</div></details>";
   $("out").innerHTML = h;
+  $("exp").innerHTML = expHtml(R);
   drawMap(sel);
   drawProfile(R);
   updateChip(R);
   if (MOB.on) {
     $("profSum").innerHTML = "<b>" + esc(R.name) + "</b> \u00b7 " + CAT_TXT[R.cat] + " \u00b7 " + Math.round(R.D) + " NM \u00b7 Reiseh\u00f6he bis " + R.cruiseMax + " ft<br>Profil seitlich wischen \u2192";
     Array.prototype.forEach.call(document.querySelectorAll("#mnav button"), function (b) { b.disabled = false; });
+  }
+}
+/* Export: auf Handy/Tablet eigener Reiter, am Computer unter dem Ergebnis */
+function canShareFiles() {
+  try { return MOB.on && typeof File === "function" && navigator.canShare && navigator.canShare({ files: [new File(["x"], "t.flightplan", { type: "application/octet-stream" })] }); }
+  catch (e) { return false; }
+}
+function expHtml(R) {
+  var alts = wpAlts(R), share = canShareFiles();
+  var h = "<div class='card noprint'><h3>Export \u00b7 " + esc(R.name) + "</h3>" +
+    "<button class='btn exp1' id='bSky'>\u2708 SkyDemon-Flugplan mit H\u00f6hen" + (share ? " \u2013 teilen" : "") + "</button>" +
+    "<div class='note' style='margin-top:6px'>" + (share ? "Im Teilen-Men\u00fc <b>SkyDemon</b> w\u00e4hlen. " : "Datei <b>.flightplan</b> in SkyDemon \u00f6ffnen. ") +
+    "Enth\u00e4lt alle Wegpunkte und die Reiseh\u00f6he je Teilstrecke (Liste unten zum Abgleich).</div>" +
+    "<div class='btnrow' style='margin-top:10px'><button class='btn2' id='bGpx'>GPX</button>" +
+    (MOB.on ? "" : "<button class='btn2' id='bPrint'>Drucken</button><button class='btn2' id='bWindy'>Windy (VFR)</button>") + "</div>" +
+    "<table class='nav' style='margin-top:10px'><tr><th>Wegpunkt</th><th>Reiseh\u00f6he ab hier</th></tr>" +
+    R.wps.map(function (w, k) {
+      var last = k === R.wps.length - 1;
+      return "<tr><td>" + (w.border ? "\u2691 " : "") + esc(w.name) + "</td><td>" + (last ? "Landung (Platzh\u00f6he " + Math.round(alts[k]) + " ft)" : alts[k] + " ft") + "</td></tr>";
+    }).join("") + "</table>" +
+    "<div class='note'>GPX \u00fcbertr\u00e4gt in SkyDemon keine H\u00f6hen (dort stehen sie im Wegpunktnamen). " +
+    "Falls SkyDemon die H\u00f6hen aus der .flightplan-Datei nicht \u00fcbernimmt: Datei mit H\u00f6hen aus SkyDemon speichern und als Vorlage schicken.</div></div>";
+  return h;
+}
+function onExpClick(e) {
+  if (!RES) return;
+  var R = RES.routes[RES.sel], id = e.target.closest("button") && e.target.closest("button").id, share = canShareFiles();
+  if (id === "bSky") exportSkyDemon(R, share);
+  if (id === "bGpx") exportGpx(R, share);
+  if (id === "bPrint") window.print();
+  if (id === "bWindy") {
+    var c = lerp(RES.G.A, RES.G.B, 0.5);
+    window.open("https://www.windy.com/distance/vfr/" + R.wps.map(function (w) { return w.lat.toFixed(4) + "," + w.lon.toFixed(4); }).join(";") +
+      "?clouds," + c.lat.toFixed(3) + "," + c.lon.toFixed(3) + ",8", "_blank");
   }
 }
 function verdictHtml(R) {
@@ -452,15 +484,6 @@ function onOutClick(e) {
   if (e.target.id === "bEditEnd") { stopEdit(); return; }
   if (e.target.id === "bAltAuto") { EDIT.ua = {}; render(evalUser()); return; }
   if (e.target.id === "bUserDel") { discardUser(); return; }
-  if (e.target.id === "bGpx") exportGpx(R);
-  if (e.target.id === "bSky") exportSkyDemon(R);
-  if (e.target.id === "bPrint") window.print();
-  if (e.target.id === "bWindy") {
-    var c = lerp(RES.G.A, RES.G.B, 0.5);
-    var url = "https://www.windy.com/distance/vfr/" + R.wps.map(function (w) { return w.lat.toFixed(4) + "," + w.lon.toFixed(4); }).join(";") +
-      "?clouds," + c.lat.toFixed(3) + "," + c.lon.toFixed(3) + ",8";
-    window.open(url, "_blank");
-  }
 }
 function drawMap(sel) {
   var G = RES.G, R = RES.routes[sel], nb = { bubblingMouseEvents: false };
@@ -520,12 +543,32 @@ function drawRouteLines(R) {
       .addTo(lineLayer);
   });
 }
+function profLegend() {
+  var f = RES.pvLeg || {}, it = [];
+  function sw(svg, t) { it.push("<span><svg width='26' height='12' viewBox='0 0 26 12'>" + svg + "</svg>" + t + "</span>"); }
+  sw("<path d='M1 10 L9 3 L25 3' fill='none' stroke='#B02E7A' stroke-width='2.6'/>", "Geplante Flugh\u00f6he (Steig-/Sinkflug)");
+  sw("<path d='M0 12 L6 5 L12 8 L19 2 L26 6 L26 12 Z' fill='#CDBB9E'/><path d='M0 12 L6 7 L12 10 L19 5 L26 9 L26 12 Z' fill='#8C7A5B'/>", "Gel\u00e4nde: dunkel auf der Linie, hell bis 1 NM seitlich");
+  if (f.cloud) sw("<rect x='0' y='0' width='26' height='7' fill='#9AAAB8' fill-opacity='0.5'/><path d='M0 7 H26' stroke='#5E7386' stroke-width='1.5'/>", "Wolken ab Basis (Modelle/METAR)");
+  if (f.fz) sw("<path d='M0 6 H26' stroke='#2E86C9' stroke-width='1.5' stroke-dasharray='2 3'/>", "0-\u00b0C-Grenze (Vereisung)");
+  if (f.maxAlt) sw("<path d='M0 6 H26' stroke='#9AA7B0' stroke-width='1.5' stroke-dasharray='6 4'/>", "Max. H\u00f6he (Einstellung)");
+  var seen = {};
+  (f.kinds || []).forEach(function (k) { if (seen[k] || !KIND[k]) return; seen[k] = 1;
+    sw("<rect x='1' y='1' width='24' height='10' fill='" + KIND[k].c + "' fill-opacity='0.12' stroke='" + KIND[k].c + "' stroke-dasharray='4 3'/>", "Luftraum: " + KIND[k].t); });
+  if (f.conf) sw("<rect x='0' y='0' width='26' height='12' fill='#C0392B' fill-opacity='0.25'/>", "Kein sicherer H\u00f6henkorridor");
+  if (f.circ) sw("<text x='4' y='11' font-size='12' fill='#B02E7A' font-weight='700'>\u21bb</text>", "Kreisend steigen");
+  if (f.hl) sw("<rect x='0' y='0' width='26' height='12' fill='#FFD400' fill-opacity='0.4'/>", "Gew\u00e4hlter Hinweis");
+  if (f.edit) sw("<circle cx='13' cy='6' r='4.5' fill='#fff' stroke='#B02E7A' stroke-width='2'/>", "Griff ziehen = Reiseh\u00f6he \u00e4ndern");
+  return it.join("");
+}
 function drawProfile(R) {
   $("profBody").innerHTML = profSvg(R); $("prof").style.display = "block";
+  $("profLeg").innerHTML = profLegend();
   $("prof").classList.toggle("editing", !!(EDIT.on && R.custom));
   if (CUR.x != null) showCursor(CUR.x);
 }
-function isMob() { return window.matchMedia("(max-width:860px)").matches; }
+/* Reiter-Ansicht fuer Handy und Tablet (auch iPad quer): schmale Fenster oder Touch-Geraete bis 1400 px */
+var MOB_Q = "(max-width:860px), (pointer:coarse) and (max-width:1400px)";
+function isMob() { return window.matchMedia(MOB_Q).matches; }
 /* Handy: vier Seiten (Planen / Karte / Profil / Ergebnis) mit Leiste unten */
 var MOB = { on: false };
 function setupMobile() {
@@ -533,6 +576,7 @@ function setupMobile() {
   $("side").classList.add("pane");
   $("main").classList.add("pane");
   var pr = document.createElement("div"); pr.id = "pRes"; pr.className = "pane"; document.body.appendChild(pr); pr.appendChild($("out"));
+  var px = document.createElement("div"); px.id = "pExp"; px.className = "pane"; document.body.appendChild(px); px.appendChild($("exp"));
   var pp = document.createElement("div"); pp.id = "pProf"; pp.className = "pane"; document.body.appendChild(pp);
   pp.innerHTML = "<div id='profSum' class='note' style='margin:0 0 8px'>Noch keine Route berechnet.</div>";
   pp.appendChild($("prof"));
@@ -543,7 +587,7 @@ function setupMobile() {
 }
 function showPane(id) {
   if (!MOB.on) return;
-  ["side", "main", "pProf", "pRes"].forEach(function (p) { $(p).classList.toggle("on", p === id); });
+  ["side", "main", "pProf", "pRes", "pExp"].forEach(function (p) { $(p).classList.toggle("on", p === id); });
   Array.prototype.forEach.call(document.querySelectorAll("#mnav button"), function (b) { b.classList.toggle("on", b.getAttribute("data-p") === id); });
   if (id === "main") setTimeout(function () {
     map.invalidateSize();
@@ -555,7 +599,7 @@ function showPane(id) {
 function profSvg(R) {
   var P = RES.P, G = RES.G, sm = R.samples, D = R.D, mob = MOB.on;
   /* Handy: 880 px breites Bild (seitlich wischen), hoeher und mit groesserer Schrift */
-  var W = mob ? 880 : 1100, H = mob ? 500 : 270, Lp = mob ? 50 : 54, Rp = 12, Tp = mob ? 24 : 18, Bp = mob ? 60 : 34;
+  var W = mob ? 880 : 1100, H = mob ? 470 : 250, Lp = mob ? 50 : 54, Rp = 12, Tp = mob ? 24 : 18, Bp = mob ? 30 : 22;
   var f1 = mob ? 14 : 11, f2 = mob ? 12.5 : 10;
   var top = 0, i, g;
   sm.forEach(function (q) { top = Math.max(top, q.tm, q.p); });
@@ -589,12 +633,15 @@ function profSvg(R) {
     s += "<rect x='" + X(Math.max(0, c.x0 - 0.25)) + "' y='" + Tp + "' width='" + Math.max(3, X(Math.min(D, c.x1 + 0.25)) - X(Math.max(0, c.x0 - 0.25))) +
       "' height='" + (H - Tp - Bp) + "' fill='#C0392B' fill-opacity='0.12'/>";
   });
-  for (i = 0; i < sm.length - 1; i++) {
-    var b = sm[i].base;
-    if (!isFinite(b) || b >= yMax) continue;
-    s += "<rect x='" + X(sm[i].x) + "' y='" + Y(yMax) + "' width='" + Math.max(0.5, X(sm[i + 1].x) - X(sm[i].x) + 0.6).toFixed(1) +
-      "' height='" + Math.max(0, Y(b) - Y(yMax)).toFixed(1) + "' fill='#9AAAB8' fill-opacity='0.35'/>";
+  /* Wolken: zusammenhaengende Flaeche von der Basis bis zum oberen Rand */
+  var run = [];
+  function flushCloud() {
+    if (run.length > 1) s += "<path d='M " + X(run[0].x) + " " + Y(yMax) + run.map(function (q) { return " L " + X(q.x) + " " + Y(q.base); }).join("") +
+      " L " + X(run[run.length - 1].x) + " " + Y(yMax) + " Z' fill='#9AAAB8' fill-opacity='0.35'/>";
+    run = [];
   }
+  sm.forEach(function (q) { if (isFinite(q.base) && q.base < yMax) run.push(q); else flushCloud(); });
+  flushCloud();
   var bl = "", pen = false;
   sm.forEach(function (q) { if (isFinite(q.base) && q.base < yMax) { bl += (pen ? " L " : " M ") + X(q.x) + " " + Y(q.base); pen = true; } else pen = false; });
   if (bl) s += "<path d='" + bl + "' fill='none' stroke='#5E7386' stroke-width='1.5'/>";
@@ -630,15 +677,17 @@ function profSvg(R) {
   if (!(EDIT.on && R.custom)) R.legs.forEach(function (l, k) {   /* im Bearbeiten-Modus zeigen die Griffe die Hoehen */
     var xm = (R.wps[k].x + R.wps[k + 1].x) / 2;
     if (X(R.wps[k + 1].x) - X(R.wps[k].x) < (mob ? 40 : 30)) return;
+    if (Math.abs(sampleAt(R, xm).p - l.alt) > 150) return;   /* nur beschriften, wo die Hoehe auch geflogen wird */
     txts += lbl(X(xm), Y(sampleAt(R, xm).p) - 7, String(l.alt), f2, "#B02E7A", "middle", true, [0, -f2 * 1.2, f2 * 1.6, -f2 * 2.4]);
   });
   R.circles.forEach(function (c) { txts += lbl(X(c.x) + 6, Y(c.to) + f2 + 4, "\u21bb " + fmtFt(c.to), f2, "#B02E7A", "start", true); });
   if (R.spiralMin > 0) txts += lbl(X(D) - 6, Y(sm[sm.length - 1].p) + f2 + 4, "\u21ba Sinken im Tal", f2, "#B02E7A", "end", true);
   if (P.maxAlt < yMax) txts += lbl(W - Rp - 4, Y(P.maxAlt) - 4, "max. " + P.maxAlt + " ft", f2, "#61717F", "end", false, [0, f2 * 1.4]);
   bandLbl.forEach(function (b) { txts += lbl(b.x, b.y, b.t, f2, b.c, "start", false, [0, f2 * 1.2, f2 * 2.4].filter(function (o) { return o + f2 < b.hgt; })); });
-  var leg = mob ? ["\u25ac Flugprofil (" + P.climb + "/" + P.desc + " ft/min) \u00b7 grau: Wolken \u00b7 blau: 0 \u00b0C", "Rahmen: Lufträume \u00b7 rot: kein Korridor \u00b7 gelb: Hinweis"]
-    : ["\u25ac Flugprofil mit " + P.climb + "/" + P.desc + " ft/min \u00b7 grau: Wolken ab Basis \u00b7 blau gepunktet: 0 \u00b0C \u00b7 Rahmen: Lufträume \u00b7 rot: kein sicherer Korridor \u00b7 gelb: gew\u00e4hlter Hinweis"];
-  leg.forEach(function (t, k) { txts += "<text x='" + Lp + "' y='" + (H - 4 - (leg.length - 1 - k) * (f2 + 4)) + "' font-size='" + (f2 - 1) + "' fill='#61717F'>" + esc(t) + "</text>"; });
+  /* Legende als HTML unter dem Bild: nur was im Profil vorkommt */
+  RES.pvLeg = { cloud: !!bl, fz: !!fl, maxAlt: P.maxAlt < yMax, kinds: R.bands.filter(function (b) { return b.lo < yMax; }).map(function (b) { return b.as.kind; }),
+    conf: R.conflicts.length > 0, hl: !!RES.hl, circ: R.circles.length > 0, edit: EDIT.on && R.custom };
+  txts += "<text x='" + (Lp - 6) + "' y='" + (Tp - 6) + "' text-anchor='end' font-size='" + (f2 - 1) + "' fill='#61717F'>ft MSL</text>";
   return s + txts + "<g id='pedit'>" + (EDIT.on && R.custom ? editSvg(R, X, Y, f2) : "") + "</g><g id='pcur'></g></svg>";
 }
 
@@ -904,6 +953,7 @@ function setupCursor() {
   loadSettings();
   $("go").addEventListener("click", plan);
   $("out").addEventListener("click", onOutClick);
+  $("exp").addEventListener("click", onExpClick);
   $("asFilter").addEventListener("change", function () { drawAir(); saveSettings(); });
   $("avoidClr").addEventListener("change", saveSettings);
   if (isMob()) setupMobile();

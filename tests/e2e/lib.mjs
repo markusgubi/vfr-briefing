@@ -6,9 +6,10 @@ const require = createRequire(import.meta.url);
 let pw;
 try { pw = require("playwright"); } catch (e) { pw = require(process.env.PLAYWRIGHT_PATH || "/opt/node-tools/node_modules/playwright"); }
 
-export async function openApp({ mob = false, scenario = "gut", url = "http://127.0.0.1:8787/" } = {}) {
+export async function openApp({ mob = false, tablet = false, scenario = "gut", url = "http://127.0.0.1:8787/" } = {}) {
   const browser = await pw.chromium.launch();
-  const ctx = await browser.newContext(mob ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : { viewport: { width: 1500, height: 950 } });
+  const ctx = await browser.newContext(tablet ? { viewport: { width: 1180, height: 820 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 }
+    : mob ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : { viewport: { width: 1500, height: 950 } });
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", e => errors.push("pageerror: " + e.message));

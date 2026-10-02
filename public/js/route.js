@@ -624,7 +624,7 @@ function whyHtml() {
   }
   rs.slice(1).forEach(function (r) {
     var i = issueOf(r);
-    out.push("<p><b>" + esc(r.name) + ":</b> " + (i ? "nicht empfohlen \u2013 " + esc(i) : (r.score < best.score ? "geringere Reserven (Wert " + r.score + " statt " + best.score + ")" : "gleichwertig")) +
+    out.push("<p><b>" + esc(r.name) + ":</b> " + (i ? (r.cat === 2 ? "nicht empfohlen \u2013 " : "m\u00f6glich, Nachteil: ") + esc(i) : (r.score < best.score ? "geringere Reserven (Wert " + r.score + " statt " + best.score + ")" : "gleichwertig")) +
       (r.D > best.D + 2 ? ", " + Math.round(r.D - best.D) + " NM l\u00e4nger" : "") + ".</p>");
   });
   return "<div class='why'>" + out.join("") + "</div>";

@@ -36,6 +36,13 @@ details.adv summary{cursor:pointer;color:#1F5FA8;font-size:12.5px}
 .ps.run{color:#1F5FA8;font-weight:700}.ps.ok{color:#1F7A4C}.ps.err{color:#C0392B;font-weight:600}
 .ps small{color:#8A97A3;font-weight:400}
 .card{background:#fff;border:1px solid #E1E7EC;border-radius:10px;padding:11px 13px;margin-top:12px;box-shadow:0 1px 2px rgba(15,29,42,.05)}
+details.card>summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}
+details.card>summary::-webkit-details-marker{display:none}
+details.card>summary::after{content:"\25B8";color:#61717F;font-size:12px}
+details.card[open]>summary::after{content:"\25BE"}
+details.card>summary h3{margin:0}
+details.card[open]>summary{margin-bottom:8px}
+.btn.exp1{margin-top:4px}
 .card h3{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:#61717F}
 .verdict{border-radius:10px;padding:12px 14px;margin-top:12px;color:#fff}
 .verdict.ok{background:#1F7A4C}.verdict.warn{background:#C1810B}.verdict.bad{background:#C0392B}
@@ -78,7 +85,9 @@ table.nav th:first-child,table.nav td:first-child{text-align:left}
 #prof{position:absolute;left:10px;right:10px;bottom:22px;z-index:1000;background:#fff;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,.2);display:none}
 #profHead{display:flex;justify-content:space-between;align-items:center;padding:5px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#61717F;cursor:pointer;user-select:none}
 #profBody{padding:0 8px 6px}
-#prof.min #profBody{display:none}
+#prof.min #profBody,#prof.min #profLeg{display:none}
+#profLeg{display:flex;flex-wrap:wrap;gap:3px 14px;padding:0 12px 8px;font-size:11px;color:#3D4C59}
+#profLeg span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
 #profBody svg{width:100%;height:auto;display:block}
 .pop{font-size:12px;min-width:250px}
 .pop b.h{font-size:13.5px}
@@ -103,7 +112,8 @@ table.nav th:first-child,table.nav td:first-child{text-align:left}
 #prof.editing #profBody svg{touch-action:pan-x}
 .navwrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
 #mnav,#mchip{display:none}
-@media(max-width:860px){
+@media (max-width:860px), (pointer:coarse) and (max-width:1400px){
+  .pane:not(#main){padding-left:max(12px, calc((100vw - 760px) / 2));padding-right:max(12px, calc((100vw - 760px) / 2))}
   html,body{height:100%;max-width:100%;overflow:hidden}
   body{display:block}
   .pane{position:fixed;left:0;right:0;top:0;bottom:calc(58px + env(safe-area-inset-bottom));overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;background:#F2F5F8;display:none;padding:calc(10px + env(safe-area-inset-top)) 12px 28px}

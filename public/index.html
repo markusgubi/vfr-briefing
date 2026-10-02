@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#1F5FA8">
-<title>VFR Briefing v7.6</title>
+<title>VFR Briefing 8.0</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
 <div id="side">
   <h1>VFR <em>&#9656;</em> Route &amp; Wetter</h1>
-  <div class="sub">v7.6 &middot; sicherste Route aus 5 Wettermodellen, Gel&auml;nde, Luftraum und METAR/TAF</div>
+  <div class="sub">Version 8.0 &middot; sicherste Route aus 5 Wettermodellen, Gel&auml;nde, Luftraum und METAR/TAF</div>
   <div class="noprint">
     <label>Von</label>
     <div class="acw"><input id="fIn" placeholder="ICAO oder Name, z.B. LOLW" autocomplete="off"><div class="ac" id="fAc"></div></div>
@@ -43,6 +43,7 @@
   <div id="sts"></div>
   <div id="prog" class="prog"></div>
   <div id="out"></div>
+  <div id="exp"></div>
   <div class="note"><b>Entscheidungshilfe &ndash; kein Ersatz f&uuml;r amtliches Flugwetter-Briefing, NOTAM, GAFOR und AIP.</b>
   Wetter: Open-Meteo (ICON, AROME, ECMWF, UKMO, GFS); Wolkenbasis aus Feuchteprofil (950&ndash;700&thinsp;hPa), R&uuml;ckfall Taupunktdifferenz. METAR/TAF: NOAA AviationWeather. Gel&auml;nde: AWS Terrain Tiles (+150&thinsp;ft Puffer). Luftraum, Flugpl&auml;tze, Frequenzen &amp; Meldepunkte: openAIP (Community-Daten, nicht amtlich). <b>Tempor&auml;re NOTAM-Beschr&auml;nkungen sind nicht enthalten.</b> Abstand zu Lufträumen 1&thinsp;NM seitlich, 300&thinsp;ft vertikal. Kurse magnetisch, Missweisung 5&deg;&thinsp;O.</div>
 </div>
@@ -65,9 +66,9 @@
     </select>
     <div style="font-size:10.5px;color:#61717F;margin-top:4px">Klick in die Karte: alle Lufträume an diesem Punkt</div></div>
   </div>
-  <div id="prof"><div id="profHead"><span>Vertikalprofil</span><span id="profTgl">&#9660;</span></div><div id="profBody"></div></div>
+  <div id="prof"><div id="profHead"><span>Vertikalprofil</span><span id="profTgl">&#9660;</span></div><div id="profBody"></div><div id="profLeg"></div></div>
 </div>
-<nav id="mnav"><button data-p="side" class="on"><b>&#9998;</b>Planen</button><button data-p="main"><b>&#128506;</b>Karte</button><button data-p="pProf" disabled><b>&#9968;</b>Profil</button><button data-p="pRes" disabled><b>&#9776;</b>Ergebnis</button></nav>
+<nav id="mnav"><button data-p="side" class="on"><b>&#9998;</b>Planen</button><button data-p="main"><b>&#128506;</b>Karte</button><button data-p="pProf" disabled><b>&#9968;</b>Profil</button><button data-p="pRes" disabled><b>&#9776;</b>Ergebnis</button><button data-p="pExp" disabled><b>&#8681;</b>Export</button></nav>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="js/util.js"></script>
 <script src="js/data.js"></script>
