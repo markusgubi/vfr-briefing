@@ -337,9 +337,11 @@ function evalRoute(G, P, depH, path, id, name, opt) {
       var ter = near ? tc : tm;
       var req = near ? tc + full * dF / ramp : tm + full;
       var hard = Math.min(req, near ? tc + (DEM.buf + 500) * dF / ramp : tm + DEM.buf + 500);
-      var lo = (r.iv[0] > r.floor + 1 && dF >= 5) ? Math.max(req, r.iv[0]) : req;
       var hi = Math.min(r.iv[1], P.maxAlt);
       if (r.wxFail) hi = Math.min(hi, Math.max(r.ceilWx, r.floor));
+      /* Geplant wird mit 300 ft Reserve ueber dem Mindestabstand, soweit Wolken/Luftraum Platz lassen */
+      var aim = Math.max(req, Math.min(req + 300 * Math.min(1, dF / ramp), hi));
+      var lo = (r.iv[0] > r.floor + 1 && dF >= 5) ? Math.max(aim, r.iv[0]) : aim;
       var T = Math.min(r.alt, destElev + 1000 + gD * Math.max(0, D - xx - 2));
       sm.push({ x: xx, ri: ri, f: f, lat: c.lat, lon: c.lon, tc: tc, tm: tm, ter: ter, base: base, fz: fz, dF: dF,
         req: req, hard: hard, lo: lo, hi: hi, T: T, user: r.user, nod: nod });
@@ -516,7 +518,7 @@ function computeRoutes(G, P) {
   if (direct && best !== direct) routes.push(direct);
   return routes;
 }
-function optimizer(G, P) {
+async function optimizer(G, P, onHour) {
   var span = G.d / P.tas, lo = G.sun ? Math.ceil(G.sun.depRise) : 6, hi = G.sun ? Math.floor(G.sun.destSet - span - 0.25) : 19;
   var now = new Date(), isToday = P.date === now.getFullYear() + "-" + p2(now.getMonth() + 1) + "-" + p2(now.getDate());
   if (isToday) lo = Math.max(lo, now.getHours() + 1);
@@ -527,6 +529,7 @@ function optimizer(G, P) {
     var best = null;
     ps.forEach(function (p) { var R = evalRoute(G, P, h, p, "", ""); if (!best || rankCmp(R, best) < 0) best = R; });
     out.push(best ? { h: h, score: best.score, cat: best.cat } : { h: h, score: 0, cat: 2 });
+    if (onHour) { onHour(h - Math.max(0, lo) + 1, Math.min(23, hi) - Math.max(0, lo) + 1, h); await new Promise(function (r) { setTimeout(r, 0); }); }
   }
   return out;
 }

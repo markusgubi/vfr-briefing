@@ -28,6 +28,13 @@ details.adv summary{cursor:pointer;color:#1F5FA8;font-size:12.5px}
 .btn2{height:32px;padding:0 10px;border:1px solid #1F5FA8;border-radius:6px;background:#fff;color:#1F5FA8;font:inherit;font-size:12.5px;cursor:pointer}
 #sts{margin-top:10px;font-size:12.5px;color:#61717F;min-height:1.2em}
 #sts.err{color:#C0392B;font-weight:600}
+.prog{display:none;margin-top:8px}
+.pbar{position:relative;height:22px;border-radius:11px;background:#E1E7EC;overflow:hidden}
+.pbar>div{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,#1F5FA8,#3B7FD0);transition:width .25s}
+.pbar>span{position:relative;display:block;text-align:center;line-height:22px;font-size:12px;font-weight:700;color:#0F1D2A;text-shadow:0 0 3px #fff}
+.psteps{display:flex;flex-wrap:wrap;gap:3px 10px;margin-top:6px;font-size:11.5px;color:#61717F}
+.ps.run{color:#1F5FA8;font-weight:700}.ps.ok{color:#1F7A4C}.ps.err{color:#C0392B;font-weight:600}
+.ps small{color:#8A97A3;font-weight:400}
 .card{background:#fff;border:1px solid #E1E7EC;border-radius:10px;padding:11px 13px;margin-top:12px;box-shadow:0 1px 2px rgba(15,29,42,.05)}
 .card h3{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:#61717F}
 .verdict{border-radius:10px;padding:12px 14px;margin-top:12px;color:#fff}

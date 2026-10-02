@@ -124,64 +124,118 @@ function readP() {
   return P;
 }
 
-/* ==================== 13. Ablauf ==================== */
+/* ==================== 13. Fortschritt & Ablauf ==================== */
+/* Fortschrittsanzeige: gewichtete Schritte, je Schritt Anteil 0..1 und Zustand (wait/run/ok/err/skip) */
+var PROG = null;
+function progStart(steps) {
+  PROG = { steps: steps.map(function (x) { return { id: x[0], l: x[1], w: x[2], f: 0, st: "wait", info: "" }; }) };
+  progDraw();
+}
+function progSet(id, f, st, info) {
+  if (!PROG) return;
+  var x = PROG.steps.filter(function (q) { return q.id === id; })[0]; if (!x) return;
+  if (f != null) x.f = Math.max(0, Math.min(1, f));
+  if (st) x.st = st; else if (x.st === "wait") x.st = "run";
+  if (st === "ok" || st === "skip") x.f = 1;
+  if (info != null) x.info = info;
+  progDraw();
+}
+function progPct() {
+  var w = 0, d = 0;
+  PROG.steps.forEach(function (x) { w += x.w; d += x.w * (x.st === "err" ? 1 : x.f); });
+  return w ? Math.round(100 * d / w) : 0;
+}
+function progDraw() {
+  var el = $("prog"); if (!el) return;
+  if (!PROG) { el.innerHTML = ""; el.style.display = "none"; return; }
+  var pct = progPct(), ic = { wait: "○", run: "◔", ok: "✓", err: "✗", skip: "–" };
+  var cur = PROG.steps.filter(function (x) { return x.st === "run"; }).map(function (x) { return x.l; });
+  el.style.display = "block";
+  el.innerHTML = "<div class='pbar'><div style='width:" + pct + "%'></div><span>" + pct + " %" + (cur.length ? " · " + esc(cur[0]) : "") + "</span></div>" +
+    "<div class='psteps'>" + PROG.steps.map(function (x) {
+      return "<span class='ps " + x.st + "' title='" + esc(x.info) + "'>" + ic[x.st] + " " + esc(x.l) +
+        (x.st === "run" && x.f > 0 && x.f < 1 ? " " + Math.round(x.f * 100) + "%" : "") + (x.info && x.st !== "run" ? " <small>" + esc(x.info) + "</small>" : "") + "</span>";
+    }).join("") + "</div>";
+}
+function progEnd(keep) { if (!keep) PROG = null; progDraw(); }
+function yieldUi() { return new Promise(function (r) { setTimeout(r, 0); }); }
+
 async function plan() {
   var A = S.from, B = S.to;
-  if (!A || !B) { setSts("Bitte Start und Ziel aus der Vorschlagsliste w\u00e4hlen.", "err"); return; }
+  if (!A || !B) { setSts("Bitte Start und Ziel aus der Vorschlagsliste wählen.", "err"); return; }
   var P = readP(); saveSettings();
   var d = distNm(A, B);
   if (d < 3) { setSts("Start und Ziel liegen zu nah beieinander.", "err"); return; }
-  if (d > 250) { setSts("Strecke " + Math.round(d) + " NM \u2013 maximal 250 NM. Bitte mit Zwischenlandung planen.", "err"); return; }
-  if (!P.date) { setSts("Bitte Datum w\u00e4hlen.", "err"); return; }
-  $("go").disabled = true; hlLayer.clearLayers();
+  if (d > 250) { setSts("Strecke " + Math.round(d) + " NM – maximal 250 NM. Bitte mit Zwischenlandung planen.", "err"); return; }
+  if (!P.date) { setSts("Bitte Datum wählen.", "err"); return; }
+  $("go").disabled = true; hlLayer.clearLayers(); setSts("");
+  progStart([["dem", "Gelände", 14], ["asp", "Luftraum", 9], ["apt", "Flugplätze", 3], ["awx", "METAR/TAF", 3]]
+    .concat(MODELS.map(function (m, mi) { return ["wx" + mi, m.l.replace(/ \(.*\)/, ""), 6]; }))
+    .concat([["net", "Streckennetz", 10], ["route", "Routensuche", 12], ["opt", "Abflugzeit-Optimierer", 19]]));
   try {
-    setSts("1/6 Gel\u00e4nde laden \u2026");
     var G = buildGraph(A, B, d);
     var w = 180, s = 90, e = -180, n = -90;
     G.nodes.forEach(function (q) { w = Math.min(w, q.lon); e = Math.max(e, q.lon); s = Math.min(s, q.lat); n = Math.max(n, q.lat); });
-    await ensureDem(w - 0.07, s - 0.05, e + 0.07, n + 0.05, d <= 160 ? 10 : 9);
-    G.depElev = A.elevFt != null ? A.elevFt : (elevFt(A.lat, A.lon) || 0);
-    G.destElev = B.elevFt != null ? B.elevFt : (elevFt(B.lat, B.lon) || 0);
-    setSts("2/6 Lufträume, Flugpl\u00e4tze, METAR/TAF \u2026");
     var bw = w - 0.2, bs = s - 0.2, be = e + 0.2, bn = n + 0.2;
     var awxKey = [Math.floor((bs - 0.1) * 2) / 2, Math.floor((bw - 0.1) * 2) / 2, Math.ceil((bn + 0.1) * 2) / 2, Math.ceil((be + 0.1) * 2) / 2].join(",");
-    var got = await Promise.all([
-      dataIn("asp", bw, bs, be, bn),
-      dataIn("apt", bw, bs, be, bn).catch(function () { return { list: [], failed: [] }; }),
-      fetchJSON("/awx?bbox=" + awxKey, 2).catch(function () { return { metar: [], taf: [] }; })
-    ]);
-    G.airFailed = got[0].failed;
-    if (!got[0].list.length && got[0].failed.length) throw new Error("Luftraumdaten nicht verf\u00fcgbar (" + got[0].failed.join(", ") + ") \u2013 ohne Luftraumpr\u00fcfung wird nicht geplant. Sp\u00e4ter erneut versuchen.");
+    G.t0 = new Date(P.date + "T00:00:00").getTime() / 1000;
+    /* Alle Downloads parallel: Gelaende, Luftraum, Plaetze, METAR/TAF und die 5 Wettermodelle */
+    var pDem = ensureDem(w - 0.07, s - 0.05, e + 0.07, n + 0.05, d <= 160 ? 10 : 9, function (k, t) { progSet("dem", k / t, null, k + "/" + t + " Kacheln"); })
+      .then(function () { progSet("dem", 1, "ok"); }, function (er) { progSet("dem", 1, "err", er.message); throw er; });
+    progSet("asp", 0); progSet("apt", 0); progSet("awx", 0);
+    var pAsp = dataIn("asp", bw, bs, be, bn, function (k, t) { progSet("asp", k / t, null, k + "/" + t + " Länder"); })
+      .then(function (r) { progSet("asp", 1, r.failed.length ? "err" : "ok", r.failed.length ? "fehlt: " + r.failed.join(", ") : r.list.length + " Lufträume"); return r; });
+    var pApt = dataIn("apt", bw, bs, be, bn).then(function (r) { progSet("apt", 1, "ok", r.list.length + ""); return r; },
+      function () { progSet("apt", 1, "err"); return { list: [], failed: [] }; });
+    var pAwx = fetchJSON("/awx?bbox=" + awxKey, 2).then(function (j) { progSet("awx", 1, "ok", (j.metar || []).length + " METAR"); return j; },
+      function () { progSet("awx", 1, "err", "nicht verfügbar"); return { metar: [], taf: [] }; });
+    var pWx = Promise.all(MODELS.map(function (m, mi) {
+      progSet("wx" + mi, 0.1);
+      return fetchModel(mi, G.wpts, P.date).then(function (x) { progSet("wx" + mi, 1, "ok"); return x; }, function (er) { progSet("wx" + mi, 1, "err", er.message); return null; });
+    }));
+    var pSun = fetchSun(A, B, P.date).catch(function () { return null; });
+    await pDem;
+    G.depElev = A.elevFt != null ? A.elevFt : (elevFt(A.lat, A.lon) || 0);
+    G.destElev = B.elevFt != null ? B.elevFt : (elevFt(B.lat, B.lon) || 0);
+    G.demBox = [w - 0.07, s - 0.05, e + 0.07, n + 0.05]; G.demZ = d <= 160 ? 10 : 9;
+    var got = await Promise.all([pAsp, pApt, pAwx]);
+    G.airFailed = got[0].failed; G.AIR = got[0].list; G.airBox = [bw, bs, be, bn];
+    if (!got[0].list.length && got[0].failed.length) throw new Error("Luftraumdaten nicht verfügbar (" + got[0].failed.join(", ") + ") – ohne Luftraumprüfung wird nicht geplant. Später erneut versuchen.");
     STN = buildStations(got[2]);
     var qs = STN.map(function (x) { return x.metar && x.metar.qnh; }).filter(Boolean);
     G.qnh = qs.length ? avg(qs) : 1013.25; G.qnhKnown = qs.length > 0;
-    setSts("3/6 Streckennetz analysieren (" + G.edges.length + " Teilstrecken) \u2026");
-    await sleep(20);
-    G.edges.forEach(function (ed) { edgeStatic(G, ed, got[0].list); });
-    setSts("4/6 Wetter von " + MODELS.length + " Modellen (" + G.wpts.length + " Wetterpunkte) \u2026");
-    G.t0 = new Date(P.date + "T00:00:00").getTime() / 1000;
-    var res = await Promise.all(MODELS.map(function (m, mi) { return fetchModel(mi, G.wpts, P.date).then(function (x) { return x; }, function () { return null; }); }));
+    /* Streckennetz in Paketen, damit die Anzeige mitlaeuft */
+    for (var k = 0; k < G.edges.length; k++) {
+      edgeStatic(G, G.edges[k], G.AIR);
+      if (k % 150 === 149) { progSet("net", k / G.edges.length, null, G.edges.length + " Teilstrecken"); await yieldUi(); }
+    }
+    progSet("net", 1, "ok", G.edges.length + " Teilstrecken");
+    var res = await pWx;
     G.wx = res; G.modelsOk = []; G.modelsFail = [];
     res.forEach(function (x, mi) { (x ? G.modelsOk : G.modelsFail).push(MODELS[mi].l); });
     if (!G.modelsOk.length) throw new Error("Kein Wettermodell lieferte Daten (Datum zu weit in der Zukunft oder Netzwerkproblem).");
-    G.sun = await fetchSun(A, B, P.date).catch(function () { return null; });
-    setSts("5/6 Routen berechnen \u2026");
-    await sleep(20);
+    G.sun = await pSun;
+    progSet("route", 0.2); await yieldUi();
     RES = { G: G, P: P, apts: got[1].list || [], routes: [], hl: null };
     RES.routes = computeRoutes(G, P);
-    setSts("6/6 Beste Abflugzeit ermitteln \u2026");
-    await sleep(20);
-    RES.opt = optimizer(G, P);
+    await adjustRoutes(RES.routes, G, P);
+    progSet("route", 1, "ok", RES.routes.length + " Varianten");
+    RES.opt = await optimizer(G, P, function (k, t, h) { progSet("opt", k / t, null, p2(h) + ":00"); });
+    progSet("opt", 1, "ok", RES.opt.length + " Stunden");
     RES.fitted = false;
     render(0);
     if (MOB.on) showPane("main");
-    setSts("Fertig \u00b7 Modelle: " + G.modelsOk.join(", ") + (G.modelsFail.length ? " \u00b7 ohne Daten: " + G.modelsFail.join(", ") : ""));
+    progEnd();
+    setSts("Fertig · Modelle: " + G.modelsOk.join(", ") + (G.modelsFail.length ? " · ohne Daten: " + G.modelsFail.join(", ") : ""));
   } catch (err) {
+    progEnd(true);
     setSts("Fehler: " + esc(err.message), "err");
   } finally {
     $("go").disabled = false;
   }
 }
+/* Platzhalter fuer spaetere Nachbearbeitung der Routen (z. B. Meldepunkte im Ausland) */
+async function adjustRoutes(routes, G, P) { return routes; }
 
 /* ==================== 14. Darstellung ==================== */
 function verdictText(c) { return ["GUT FLIEGBAR (Prognose)", "EINGESCHR\u00c4NKT \u2013 nur mit Reserven", "KRITISCH \u2013 Flug nicht empfohlen"][c]; }

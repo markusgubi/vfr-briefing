@@ -177,9 +177,11 @@ async function loadCountry(c, t) {
   })();
   try { return await LOADING[k]; } catch (e) { delete LOADING[k]; throw e; }
 }
-async function dataIn(t, w, s, e, n) {
-  var cs = countriesFor(w, s, e, n);
-  var res = await Promise.allSettled(cs.map(function (c) { return loadCountry(c, t); }));
+async function dataIn(t, w, s, e, n, onCountry) {
+  var cs = countriesFor(w, s, e, n), done = 0;
+  var res = await Promise.allSettled(cs.map(function (c) {
+    return loadCountry(c, t).finally(function () { done++; if (onCountry) onCountry(done, cs.length); });
+  }));
   var failed = cs.filter(function (c, i) { return res[i].status !== "fulfilled"; });
   var db = t === "asp" ? AIRDB : APTDB, seen = {}, out = [];
   cs.forEach(function (c) {
@@ -209,14 +211,15 @@ async function loadTile(z, x, y) {
   for (var i = 0; i < 65536; i++) out[i] = (px[4 * i] * 256 + px[4 * i + 1] + px[4 * i + 2] / 256 - 32768) * M2FT;
   DEM.data[k] = out;
 }
-async function ensureDem(w, s, e, n, z) {
+async function ensureDem(w, s, e, n, z, onTile) {
   DEM.z = z; DEM.buf = z >= 10 ? 150 : 300;
   var x0 = Math.floor(tileX(w, z)), x1 = Math.floor(tileX(e, z)), y0 = Math.floor(tileY(n, z)), y1 = Math.floor(tileY(s, z));
   var jobs = [];
   for (var x = x0; x <= x1; x++) for (var y = y0; y <= y1; y++) jobs.push([x, y]);
   if (jobs.length > 160) throw new Error("Gebiet zu gro\u00df f\u00fcr Gel\u00e4ndedaten");
   var k = 0;
-  async function worker() { while (k < jobs.length) { var j = jobs[k++]; await loadTile(z, j[0], j[1]); } }
+  var done = 0;
+  async function worker() { while (k < jobs.length) { var j = jobs[k++]; await loadTile(z, j[0], j[1]); done++; if (onTile) onTile(done, jobs.length); } }
   await Promise.all([worker(), worker(), worker(), worker(), worker(), worker()]);
 }
 function elevFt(lat, lon) {

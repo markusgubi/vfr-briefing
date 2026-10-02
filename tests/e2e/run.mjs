@@ -18,7 +18,9 @@ page.on("pageerror", e => errors.push("pageerror: " + e.message));
 page.on("console", m => { if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push("console: " + m.text()); });
 const json = (r, o) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(o) });
 await page.route("https://api.core.openaip.net/**", r => json(r, openaip(r.request().url())));
-await page.route("https://api.open-meteo.com/**", r => json(r, openmeteo(r.request().url(), scenario)));
+const DELAY = +(process.env.DELAY || 0);   // ms Verzoegerung je Wetterabfrage (zum Pruefen der Fortschrittsanzeige)
+let wxN = 0;
+await page.route("https://api.open-meteo.com/**", async r => { if (DELAY) await new Promise(ok => setTimeout(ok, DELAY * ++wxN)); return json(r, openmeteo(r.request().url(), scenario)); });
 await page.route("**/awx?**", r => json(r, { metar: [], taf: [] }));
 const LEAF = process.env.LEAFLET_DIR;  // optional: lokales leaflet/dist, falls das CDN nicht erreichbar ist
 if (LEAF) await page.route("https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/**", r => {
@@ -38,7 +40,9 @@ await page.evaluate(async ([f, t, climb]) => {
   if (climb) document.getElementById("climb").value = climb;
 }, [from, to, process.env.CLIMB || ""]);
 const t0 = Date.now();
-await page.evaluate(() => plan());
+const run = page.evaluate(() => plan());
+if (DELAY) { await page.waitForTimeout(DELAY * 2.5); await page.locator("#side").screenshot({ path: OUT + "/e2e-fortschritt.png" }); }
+await run;
 await page.waitForFunction(() => !document.getElementById("go").disabled, null, { timeout: 120000 });
 const ms = Date.now() - t0;
 const sum = await page.evaluate(() => {
