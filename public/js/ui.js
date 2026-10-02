@@ -2,12 +2,28 @@
 /* ==================== 3. Karte & Luftraum ==================== */
 var map = L.map("map", { zoomControl: false }).setView([47.6, 13.8], 8);
 L.control.zoom({ position: "topright" }).addTo(map);
+var EditCtl = L.Control.extend({
+  options: { position: "topright" },
+  onAdd: function () {
+    var d = L.DomUtil.create("div", "leaflet-bar editctl");
+    d.innerHTML = "<a href='#' role='button' title='Route bearbeiten'>\u270e</a>";
+    L.DomEvent.disableClickPropagation(d);
+    L.DomEvent.on(d, "click", function (e) {
+      L.DomEvent.preventDefault(e);
+      if (!RES) return;
+      if (EDIT.on) stopEdit(); else startEdit();
+    });
+    return d;
+  }
+});
+var editCtl = new EditCtl().addTo(map);
 L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
   maxZoom: 15, subdomains: "abc",
   attribution: "Karte: &copy; OpenStreetMap, SRTM | Stil: &copy; OpenTopoMap (CC-BY-SA) | Luftraum: openAIP"
 }).addTo(map);
 var cvs = L.canvas({ padding: 0.3 });
-var airLayer = L.layerGroup().addTo(map), routeLayer = L.layerGroup().addTo(map), hlLayer = L.layerGroup().addTo(map);
+var airLayer = L.layerGroup().addTo(map), routeLayer = L.layerGroup().addTo(map), lineLayer = L.layerGroup().addTo(map);
+var hlLayer = L.layerGroup().addTo(map), editLayer = L.layerGroup().addTo(map);
 
 var VIEW_AIR = [], airTimer = null;
 async function loadAirView() {
@@ -199,7 +215,7 @@ async function plan() {
     G.destElev = B.elevFt != null ? B.elevFt : (elevFt(B.lat, B.lon) || 0);
     G.demBox = [w - 0.07, s - 0.05, e + 0.07, n + 0.05]; G.demZ = d <= 160 ? 10 : 9;
     var got = await Promise.all([pAsp, pApt, pAwx]);
-    G.airFailed = got[0].failed; G.AIR = got[0].list; G.airBox = [bw, bs, be, bn];
+    G.airFailed = got[0].failed; G.AIR = got[0].list; G.airBoxes = [[bw, bs, be, bn]];
     if (!got[0].list.length && got[0].failed.length) throw new Error("Luftraumdaten nicht verfügbar (" + got[0].failed.join(", ") + ") – ohne Luftraumprüfung wird nicht geplant. Später erneut versuchen.");
     STN = buildStations(got[2]);
     var qs = STN.map(function (x) { return x.metar && x.metar.qnh; }).filter(Boolean);
@@ -219,11 +235,16 @@ async function plan() {
     RES = { G: G, P: P, apts: got[1].list || [], routes: [], hl: null };
     RES.routes = computeRoutes(G, P);
     await adjustRoutes(RES.routes, G, P);
+    /* Eigene Route bleibt bei Neuberechnung (z. B. andere Abflugzeit) erhalten, wenn Start/Ziel gleich sind */
+    var keepSel = 0;
+    if (EDIT.pts && EDIT.A && EDIT.B && EDIT.A.lat === A.lat && EDIT.A.lon === A.lon && EDIT.B.lat === B.lat && EDIT.B.lon === B.lon) {
+      try { await ensureArea(EDIT.pts); var ku = evalUser(); if (EDIT.on) keepSel = ku; } catch (e) { EDIT.on = false; }
+    } else { EDIT.on = false; EDIT.pts = null; EDIT.ua = {}; }
     progSet("route", 1, "ok", RES.routes.length + " Varianten");
     RES.opt = await optimizer(G, P, function (k, t, h) { progSet("opt", k / t, null, p2(h) + ":00"); });
     progSet("opt", 1, "ok", RES.opt.length + " Stunden");
     RES.fitted = false;
-    render(0);
+    render(keepSel);
     if (MOB.on) showPane("main");
     progEnd();
     setSts("Fertig · Modelle: " + G.modelsOk.join(", ") + (G.modelsFail.length ? " · ohne Daten: " + G.modelsFail.join(", ") : ""));
@@ -268,8 +289,7 @@ function render(sel) {
   var G = RES.G, P = RES.P, R = RES.routes[sel];
   RES.sel = sel; RES.hl = null; hlLayer.clearLayers();
   RES.routes.forEach(function (x) { finalize(x, G, P); });
-  var h = "<div class='verdict " + CAT_CLS[R.cat] + "'><div class='big'>" + verdictText(R.cat) + "</div><div class='meta'>" +
-    esc(R.name) + " \u00b7 Sicherheitswert " + R.score + "/100 \u00b7 Vertrauen " + R.conf.v + " %</div></div>";
+  var h = verdictHtml(R);
   h += whyHtml();
   h += "<div class='card'><h3>Routen-Varianten</h3>";
   RES.routes.forEach(function (x, k) {
@@ -278,6 +298,13 @@ function render(sel) {
       "<small>" + x.D.toFixed(0) + " NM" + (det > 0 ? " (+" + det + " %)" : "") + " \u00b7 " + Math.round(x.ete) + " min \u00b7 Reiseh\u00f6he bis " + x.cruiseMax + " ft \u00b7 " +
       (x.clr ? x.clr + " Freigabe" + (x.clr > 1 ? "n" : "") : "keine Freigabe") + " \u00b7 Wert " + x.score + "</small></div>";
   });
+  var hasUser = userIdx() >= 0, uaN = Object.keys(EDIT.ua || {}).length;
+  h += "<div class='btnrow noprint' style='margin-top:8px'>" + (EDIT.on && R.custom
+    ? "<button class='btn2 on' id='bEditEnd'>\u2713 Bearbeiten beenden</button>" + (uaN ? "<button class='btn2' id='bAltAuto'>H\u00f6hen automatisch</button>" : "")
+    : "<button class='btn2' id='bEdit'>\u270e Route &amp; H\u00f6hen bearbeiten</button>") +
+    (hasUser ? "<button class='btn2' id='bUserDel'>Eigene Route verwerfen</button>" : "") + "</div>";
+  if (EDIT.on && R.custom) h += "<div class='note' style='margin-top:6px'><b>Karte:</b> Wegpunkt ziehen \u00b7 Linie anklicken = Punkt einf\u00fcgen \u00b7 Punkt anklicken/Rechtsklick = l\u00f6schen. " +
+    "<b>Profil:</b> Griff \u2195 ziehen = Reiseh\u00f6he der Teilstrecke, Doppelklick = wieder automatisch. Bewertung rechnet live mit.</div>";
   h += "</div>";
   h += "<div class='card'><h3>Hinweise &amp; Freigaben <span style='text-transform:none;letter-spacing:0;font-weight:400'>(anklicken = auf Karte zeigen)</span></h3>" +
     R.hints.map(function (x, k) { return "<div class='hint " + x.l + (x.x0 != null ? " clk" : "") + "'" + (x.x0 != null ? " data-hi='" + k + "'" : "") + ">" + x.t + "</div>"; }).join("") + "</div>";
@@ -342,13 +369,21 @@ function render(sel) {
   $("out").innerHTML = h;
   drawMap(sel);
   drawProfile(R);
+  updateChip(R);
   if (MOB.on) {
-    var ch = $("mchip");
-    ch.textContent = CAT_TXT[R.cat] + " \u00b7 " + R.name + " \u00b7 " + Math.round(R.D) + " NM \u00b7 " + Math.round(R.ete) + " min";
-    ch.style.background = CAT_COL[R.cat];
     $("profSum").innerHTML = "<b>" + esc(R.name) + "</b> \u00b7 " + CAT_TXT[R.cat] + " \u00b7 " + Math.round(R.D) + " NM \u00b7 Reiseh\u00f6he bis " + R.cruiseMax + " ft<br>Profil seitlich wischen \u2192";
     Array.prototype.forEach.call(document.querySelectorAll("#mnav button"), function (b) { b.disabled = false; });
   }
+}
+function verdictHtml(R) {
+  return "<div class='verdict " + CAT_CLS[R.cat] + "'><div class='big'>" + verdictText(R.cat) + "</div><div class='meta'>" +
+    esc(R.name) + " \u00b7 Sicherheitswert " + R.score + "/100 \u00b7 Vertrauen " + (R.conf ? R.conf.v : "\u2013") + " %" +
+    (R.custom && R.conflicts.length ? " \u00b7 " + esc(issueOf(R) || "") : "") + "</div></div>";
+}
+function updateChip(R) {
+  var ch = $("mchip"); if (!MOB.on) { ch.textContent = ""; return; }
+  ch.textContent = CAT_TXT[R.cat] + " \u00b7 " + R.name + " \u00b7 " + Math.round(R.D) + " NM \u00b7 " + Math.round(R.ete) + " min";
+  ch.style.background = CAT_COL[R.cat];
 }
 function highlight(k) {
   var R = RES.routes[RES.sel], G = RES.G, hi = R.hints[k];
@@ -384,6 +419,10 @@ function onOutClick(e) {
   }
   if (!RES) return;
   var R = RES.routes[RES.sel];
+  if (e.target.id === "bEdit") { startEdit(); if (MOB.on) showPane("main"); return; }
+  if (e.target.id === "bEditEnd") { stopEdit(); return; }
+  if (e.target.id === "bAltAuto") { EDIT.ua = {}; render(evalUser()); return; }
+  if (e.target.id === "bUserDel") { discardUser(); return; }
   if (e.target.id === "bGpx") exportGpx(R);
   if (e.target.id === "bSky") exportSkyDemon(R);
   if (e.target.id === "bPrint") window.print();
@@ -402,15 +441,8 @@ function drawMap(sel) {
     L.polyline(x.coords, { color: "#4A5A68", weight: 3, opacity: 0.75, dashArray: "6 7", bubblingMouseEvents: false })
       .bindTooltip(esc(x.name) + " \u2013 " + CAT_TXT[x.cat] + " (anklicken)").on("click", function () { render(k); }).addTo(routeLayer);
   });
-  R.rs.forEach(function (r) {
-    var a = R.G.nodes[r.e.a], b = R.G.nodes[r.e.b];
-    L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color: "#fff", weight: 9, opacity: 0.85, interactive: false }).addTo(routeLayer);
-    L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color: CAT_COL[r.cat], weight: 5.5, bubblingMouseEvents: false })
-      .on("mousemove", function (ev) { showCursor(nearestX(R, ev.latlng), "map"); })
-      .on("mouseout", function () { hideCursor(); })
-      .on("click", function (ev) { routeLineClick(R, ev); })
-      .addTo(routeLayer);
-  });
+  drawRouteLines(R);
+  drawEditMarkers(R);
   R.wps.forEach(function (w, k) {
     if (k === 0 || k === R.wps.length - 1) return;
     var q = sampleAt(R, w.x), r = R.rs[q.ri];
@@ -437,6 +469,18 @@ function drawMap(sel) {
     if (MOB.on && !$("main").classList.contains("on")) RES.needFit = true; else map.fitBounds(RES.fitBox);
     RES.fitted = true;
   }
+}
+function drawRouteLines(R) {
+  lineLayer.clearLayers();
+  R.rs.forEach(function (r) {
+    var a = R.G.nodes[r.e.a], b = R.G.nodes[r.e.b];
+    L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color: "#fff", weight: 9, opacity: 0.85, interactive: false }).addTo(lineLayer);
+    L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color: CAT_COL[r.cat], weight: EDIT.on && R.custom ? 7 : 5.5, bubblingMouseEvents: false })
+      .on("mousemove", function (ev) { if (!EDIT.dragging) showCursor(nearestX(R, ev.latlng), "map"); })
+      .on("mouseout", function () { hideCursor(); })
+      .on("click", function (ev) { routeLineClick(R, ev); })
+      .addTo(lineLayer);
+  });
 }
 function drawProfile(R) {
   $("profBody").innerHTML = profSvg(R); $("prof").style.display = "block";
@@ -475,9 +519,10 @@ function profSvg(R) {
   var f1 = mob ? 17 : 11, f2 = mob ? 15 : 10;
   var top = 0, i, g;
   sm.forEach(function (q) { top = Math.max(top, q.tm, q.p); });
-  var yMax = Math.max(4000, Math.ceil((top + 2500) / 1000) * 1000);
+  var yMax = RES.pvFreeze || Math.max(4000, Math.ceil((top + 2500) / 1000) * 1000);
   function X(x) { return +(Lp + x / D * (W - Lp - Rp)).toFixed(1); }
   function Y(f) { return +(Tp + (1 - Math.max(0, Math.min(yMax, f)) / yMax) * (H - Tp - Bp)).toFixed(1); }
+  RES.pv = { W: W, H: H, Lp: Lp, Rp: Rp, Tp: Tp, Bp: Bp, yMax: yMax, D: D, X: X, Y: Y, f2: f2 };
   var boxes = [];
   function lbl(x, y, txt, size, color, anchor, bold, offs) {
     var w = String(txt).length * size * 0.57, h = size * 1.15;
@@ -542,7 +587,7 @@ function profSvg(R) {
   });
   txts += lbl(Lp + 4, Tp + f1 * 0.2, G.A.icao || G.A.name, f1, "#0F1D2A", "start", true, [0, f1 * 1.2]);
   txts += lbl(W - Rp - 4, Tp + f1 * 0.2, G.B.icao || G.B.name, f1, "#0F1D2A", "end", true, [0, f1 * 1.2]);
-  R.legs.forEach(function (l, k) {
+  if (!(EDIT.on && R.custom)) R.legs.forEach(function (l, k) {   /* im Bearbeiten-Modus zeigen die Griffe die Hoehen */
     var xm = (R.wps[k].x + R.wps[k + 1].x) / 2;
     if (X(R.wps[k + 1].x) - X(R.wps[k].x) < (mob ? 40 : 30)) return;
     txts += lbl(X(xm), Y(sampleAt(R, xm).p) - 7, String(l.alt), f2, "#B02E7A", "middle", true, [0, -f2 * 1.2, f2 * 1.6, -f2 * 2.4]);
@@ -554,12 +599,163 @@ function profSvg(R) {
   var leg = mob ? ["\u25ac Flugprofil (" + P.climb + "/" + P.desc + " ft/min) \u00b7 grau: Wolken \u00b7 blau: 0 \u00b0C", "Rahmen: Lufträume \u00b7 rot: kein Korridor \u00b7 gelb: Hinweis"]
     : ["\u25ac Flugprofil mit " + P.climb + "/" + P.desc + " ft/min \u00b7 grau: Wolken ab Basis \u00b7 blau gepunktet: 0 \u00b0C \u00b7 Rahmen: Lufträume \u00b7 rot: kein sicherer Korridor \u00b7 gelb: gew\u00e4hlter Hinweis"];
   leg.forEach(function (t, k) { txts += "<text x='" + Lp + "' y='" + (H - 4 - (leg.length - 1 - k) * (f2 + 4)) + "' font-size='" + (f2 - 1) + "' fill='#61717F'>" + esc(t) + "</text>"; });
-  RES.pv = { W: W, H: H, Lp: Lp, Rp: Rp, Tp: Tp, Bp: Bp, yMax: yMax, D: D, X: X, Y: Y, f2: f2 };
-  return s + txts + "<g id='pedit'></g><g id='pcur'></g></svg>";
+  return s + txts + "<g id='pedit'>" + (EDIT.on && R.custom ? editSvg(R, X, Y, f2) : "") + "</g><g id='pcur'></g></svg>";
 }
 
-var EDIT = { on: false, drag: null };
-function routeLineClick(R, ev) { }
+/* ==================== 14a. Route und Hoehen bearbeiten ==================== */
+/* Bearbeiten macht aus der gewaehlten Route eine "Eigene Route": Wegpunkte auf der Karte ziehen,
+   per Klick auf die Linie einfuegen, per Popup/Rechtsklick loeschen; Reiseflughoehe je Teilstrecke im
+   Profil ziehen (Doppelklick = wieder automatisch). Alles wird live neu bewertet. */
+var EDIT = { on: false, drag: null, dragging: false, pts: null, ua: {}, raf: 0, A: null, B: null };
+function userIdx() { for (var k = 0; k < RES.routes.length; k++) if (RES.routes[k].id === "user") return k; return -1; }
+function evalUser() {
+  var R = routeFromPoints(RES.G, RES.P, EDIT.pts, EDIT.ua, "user", "Eigene Route"), k = userIdx();
+  if (k < 0) { RES.routes.push(R); k = RES.routes.length - 1; } else RES.routes[k] = R;
+  return k;
+}
+function startEdit() {
+  if (!RES) return;
+  var base = RES.routes[RES.sel];
+  finalize(base, RES.G, RES.P);
+  if (base.custom) { EDIT.pts = base.pts.map(function (p) { return Object.assign({}, p); }); EDIT.ua = Object.assign({}, base.userAlt || {}); }
+  else {
+    EDIT.pts = base.wps.map(function (w, k) {
+      var last = k === base.wps.length - 1;
+      return { lat: w.lat, lon: w.lon, name: (k === 0 || last || w.rp || w.border) ? w.name : null, rp: w.rp || null, border: w.border || null };
+    });
+    EDIT.ua = {};
+  }
+  EDIT.on = true; EDIT.A = RES.G.A; EDIT.B = RES.G.B;
+  render(evalUser());
+  setSts("Bearbeiten: Wegpunkte ziehen, Linie anklicken = Punkt einfügen, Punkt antippen = löschen. Höhen im Profil ziehen.");
+}
+function stopEdit() { EDIT.on = false; editLayer.clearLayers(); render(RES.sel); setSts(""); }
+function discardUser() {
+  var k = userIdx(); EDIT.on = false; EDIT.pts = null; EDIT.ua = {};
+  if (k >= 0) RES.routes.splice(k, 1);
+  editLayer.clearLayers(); render(0); setSts("");
+}
+/* Waehrend des Ziehens: nur Linien, Profil und Urteil neu zeichnen (die Marker bleiben stehen) */
+function quickUser() {
+  EDIT.raf = 0;
+  var k = evalUser(), R = RES.routes[k];
+  RES.sel = k; finalize(R, RES.G, RES.P);
+  drawRouteLines(R); drawProfile(R);
+  var v = document.querySelector("#out .verdict");
+  if (v) v.outerHTML = verdictHtml(R);
+  updateChip(R);
+}
+function scheduleQuick() { if (!EDIT.raf) EDIT.raf = requestAnimationFrame(quickUser); }
+async function commitEdit() {
+  setSts("Neu bewerten …");
+  try { await ensureArea(EDIT.pts); }
+  catch (e) { setSts("Daten für den neuen Bereich nicht vollständig: " + esc(e.message), "err"); }
+  render(evalUser());
+  if (!$("sts").classList.contains("err")) setSts("");
+}
+function drawEditMarkers(R) {
+  editLayer.clearLayers();
+  if (!EDIT.on || !R.custom) return;
+  EDIT.pts.forEach(function (pt, k) {
+    if (k === 0 || k === EDIT.pts.length - 1) return;
+    var lbl = pt.name ? esc(pt.name) : String(k);
+    var mk = L.marker([pt.lat, pt.lon], { draggable: true, autoPan: true,
+      icon: L.divIcon({ className: "wpk" + (pt.rp ? " rp" : ""), html: "<b>" + lbl + "</b>", iconSize: null, iconAnchor: [12, 12] }) });
+    mk.on("dragstart", function () { EDIT.dragging = true; hideCursor(); });
+    mk.on("drag", function (ev) {
+      var ll = ev.target.getLatLng();
+      EDIT.pts[k] = { lat: ll.lat, lon: ll.lng, name: null };   /* verschoben = kein Meldepunkt mehr */
+      scheduleQuick();
+    });
+    mk.on("dragend", function () { EDIT.dragging = false; commitEdit(); });
+    mk.on("contextmenu", function () { deleteWp(k); });
+    mk.bindPopup("<div class='pop'><b class='h'>Wegpunkt " + lbl + "</b><br><button class='btn2' data-delwp='" + k + "' style='margin-top:6px'>Wegpunkt löschen</button></div>");
+    mk.addTo(editLayer);
+  });
+}
+function deleteWp(k) {
+  if (k <= 0 || k >= EDIT.pts.length - 1) return;
+  map.closePopup(); EDIT.pts.splice(k, 1);
+  var ua = {}; Object.keys(EDIT.ua).forEach(function (l) { l = +l; if (l < k - 1) ua[l] = EDIT.ua[l]; else if (l > k - 1) ua[l - 1] = EDIT.ua[l]; });
+  EDIT.ua = ua;
+  commitEdit();
+}
+function routeLineClick(R, ev) {
+  if (!EDIT.on || !R.custom) { showCursor(nearestX(R, ev.latlng), "map"); return; }
+  var p = { lat: ev.latlng.lat, lon: ev.latlng.lng }, best = null;
+  for (var k = 0; k < EDIT.pts.length - 1; k++) { var d = segDist(p, EDIT.pts[k], EDIT.pts[k + 1]).d; if (!best || d < best.d) best = { d: d, k: k }; }
+  EDIT.pts.splice(best.k + 1, 0, { lat: p.lat, lon: p.lon, name: null });
+  var ua = {}; Object.keys(EDIT.ua).forEach(function (l) { l = +l; ua[l > best.k ? l + 1 : l] = EDIT.ua[l]; if (l === best.k) ua[l + 1] = EDIT.ua[l]; });
+  EDIT.ua = ua;
+  commitEdit();
+}
+map.getContainer().addEventListener("click", function (e) {
+  var b = e.target.closest("[data-delwp]"); if (b) deleteWp(+b.getAttribute("data-delwp"));
+});
+/* Daten fuer einen gezogenen Bereich nachladen: Gelaende je Teilstrecke, Luftraum, fehlende Wetterpunkte */
+async function ensureArea(pts) {
+  var G = RES.G, jobs = [];
+  for (var k = 1; k < pts.length; k++) {
+    var a = pts[k - 1], b = pts[k];
+    jobs.push(ensureDem(Math.min(a.lon, b.lon) - 0.07, Math.min(a.lat, b.lat) - 0.05, Math.max(a.lon, b.lon) + 0.07, Math.max(a.lat, b.lat) + 0.05, G.demZ));
+  }
+  await Promise.all(jobs);
+  var w = 180, s = 90, e = -180, n = -90;
+  pts.forEach(function (q) { w = Math.min(w, q.lon); e = Math.max(e, q.lon); s = Math.min(s, q.lat); n = Math.max(n, q.lat); });
+  if (!pts.every(function (q) { return inAirBoxes(G, q); })) {
+    var box = [w - 0.2, s - 0.2, e + 0.2, n + 0.2], r = await dataIn("asp", box[0], box[1], box[2], box[3]);
+    var ids = {}; G.AIR.forEach(function (x) { ids[x.id] = 1; });
+    r.list.forEach(function (x) { if (!ids[x.id]) G.AIR.push(x); });
+    if (r.failed.length) throw new Error("Luftraumdaten für " + r.failed.join(", ") + " fehlen");
+    G.airBoxes.push(box);
+  }
+  var R = routeFromPoints(G, RES.P, pts, EDIT.ua);
+  if (R.wxFar.length) await addWxPoints(G, R.wxFar);
+}
+async function addWxPoints(G, far) {
+  var add = [];
+  far.forEach(function (q) { if (add.length < 20 && !add.some(function (a) { return distNm(a, q) < 8; })) add.push({ lat: q.lat, lon: q.lon }); });
+  if (!add.length) return;
+  var res = await Promise.all(MODELS.map(function (m, mi) {
+    if (!G.wx[mi]) return Promise.resolve(null);
+    return fetchModel(mi, add, RES.P.date).catch(function () { return add.map(function () { return null; }); });
+  }));
+  add.forEach(function (q) { G.wpts.push(q); });
+  res.forEach(function (d, mi) { if (G.wx[mi]) G.wx[mi] = G.wx[mi].concat(d || add.map(function () { return null; })); });
+}
+/* Hoehen-Griffe im Profil */
+function editSvg(R, X, Y, f2) {
+  var legs = {}, out = "";
+  R.rs.forEach(function (r) {
+    var l = legs[r.e.leg] || (legs[r.e.leg] = { leg: r.e.leg, x0: r.x0, x1: r.x1, alt: r.alt, user: r.user });
+    l.x1 = r.x1;
+  });
+  R.legX = Object.keys(legs).map(function (k) { return legs[k]; });
+  R.legX.forEach(function (l) {
+    var x0 = X(l.x0) + 3, x1 = X(l.x1) - 3, y = Y(l.alt), xm = (x0 + x1) / 2;
+    if (x1 - x0 < 6) return;
+    out += "<line x1='" + x0 + "' x2='" + x1 + "' y1='" + y + "' y2='" + y + "' stroke='#B02E7A' stroke-width='9' stroke-opacity='0.18' stroke-linecap='round'/>" +
+      "<circle cx='" + xm.toFixed(1) + "' cy='" + y + "' r='8' fill='#fff' stroke='#B02E7A' stroke-width='2.5' style='cursor:ns-resize'/>" +
+      "<path d='M " + (xm - 3).toFixed(1) + " " + (y - 2) + " l 3 -3 l 3 3 M " + (xm - 3).toFixed(1) + " " + (y + 2) + " l 3 3 l 3 -3' stroke='#B02E7A' stroke-width='1.5' fill='none'/>" +
+      "<text x='" + (xm + (xm > RES.pv.W - 140 ? -12 : 12)).toFixed(1) + "' y='" + (y - 6) + "'" + (xm > RES.pv.W - 140 ? " text-anchor='end'" : "") +
+      " font-size='" + f2 + "' font-weight='700' fill='#B02E7A' style='paint-order:stroke;stroke:#fff;stroke-width:3px'>" +
+      l.alt + " ft" + (l.user ? " \u270e" : " auto") + "</text>";
+  });
+  return out;
+}
+function legAt(c) {
+  var R = RES.routes[RES.sel], pv = RES.pv; if (!R || !R.legX) return null;
+  for (var k = 0; k < R.legX.length; k++) {
+    var l = R.legX[k];
+    if (c.x >= l.x0 - 0.3 && c.x <= l.x1 + 0.3 && Math.abs(pv.Y(l.alt) - c.y) <= 16) return l;
+  }
+  return null;
+}
+function altFromY(y) {
+  var pv = RES.pv, f = 1 - (y - pv.Tp) / (pv.H - pv.Tp - pv.Bp);
+  return Math.max(500, Math.min(15000, Math.round(f * pv.yMax / 100) * 100));
+}
+
 /* ==================== 14b. Kopplung Profil <-> Karte ==================== */
 /* Maus/Finger im Hoehenprofil zeigt die Position als Marker auf der Karte, Maus ueber der Route auf der
    Karte zeigt die Stelle im Profil (Linie + Werte) */
@@ -617,14 +813,43 @@ function nearestX(R, ll) {
 }
 function setupCursor() {
   var pb = $("profBody");
+  pb.addEventListener("pointerdown", function (ev) {
+    if (!EDIT.on || !RES || !RES.routes[RES.sel] || !RES.routes[RES.sel].custom) return;
+    var c = svgX(ev), l = c && legAt(c); if (!l) return;
+    ev.preventDefault(); ev.stopPropagation();
+    /* Doppeltipp/-klick auf den Griff = Hoehe wieder automatisch (eigene Erkennung, da das Profil
+       zwischen den Klicks neu gezeichnet wird und der Browser dann kein dblclick meldet) */
+    var now = Date.now();
+    if (EDIT.lastTap && EDIT.lastTap.leg === l.leg && now - EDIT.lastTap.t < 450) {
+      EDIT.lastTap = null; delete EDIT.ua[l.leg]; render(evalUser()); return;
+    }
+    EDIT.lastTap = { leg: l.leg, t: now };
+    EDIT.drag = { leg: l.leg, moved: false }; RES.pvFreeze = RES.pv.yMax;
+    try { pb.setPointerCapture(ev.pointerId); } catch (e) {}
+    hideCursor();
+  }, true);
   pb.addEventListener("pointermove", function (ev) {
-    if (EDIT.drag) return;
+    if (EDIT.drag) {
+      var cd = svgX(ev); if (!cd) return;
+      var a = altFromY(cd.y);
+      var curA = EDIT.ua[EDIT.drag.leg];
+      if (!EDIT.drag.moved && curA == null) { var lg = legAt({ x: cd.x, y: RES.pv.Y(a) }) || {}; curA = lg.alt; }
+      if (curA !== a && (EDIT.drag.moved || Math.abs(a - curA) >= 200)) { EDIT.drag.moved = true; EDIT.lastTap = null; EDIT.ua[EDIT.drag.leg] = a; scheduleQuick(); }
+      ev.preventDefault(); return;
+    }
     var c = svgX(ev); if (!c) return;
     if (c.x < -0.5 || c.x > RES.pv.D + 0.5) { hideCursor(); return; }
     showCursor(c.x, "prof");
   });
   pb.addEventListener("pointerdown", function (ev) { var c = svgX(ev); if (c && c.x >= 0 && c.x <= RES.pv.D) showCursor(c.x, "prof"); });
   pb.addEventListener("pointerleave", function (ev) { if (ev.pointerType === "mouse" && !EDIT.drag) hideCursor(); });
+  function endDrag() {
+    if (!EDIT.drag) return;
+    var moved = EDIT.drag.moved; EDIT.drag = null; RES.pvFreeze = null;
+    if (moved) render(evalUser());
+  }
+  pb.addEventListener("pointerup", endDrag);
+  pb.addEventListener("pointercancel", endDrag);
 }
 
 /* ==================== 15. Start ==================== */

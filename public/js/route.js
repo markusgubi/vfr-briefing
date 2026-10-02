@@ -396,7 +396,7 @@ function evalRoute(G, P, depH, path, id, name, opt) {
     r.tEnd = s.t;
     var cause = null;
     if (s.nod) cause = "nodata";
-    else if (r.terrainHigh && s.p < s.req - 1) cause = "terr";
+    else if (r.terrainHigh && (s.p < s.req - 1 || s.p > P.maxAlt + 1)) cause = "terr";
     else if (s.p < s.hard - 1) {
       var climbing = false;
       for (var b = i; b > 0 && b > i - 60; b--) { if (atMax[b]) { climbing = true; break; } if (p[b] <= p[b - 1] + 1) break; }
@@ -479,6 +479,51 @@ function sampleAt(R, x) {
   return sm[sm.length - 1];
 }
 function densAlt(elev, T, qnh) { var pa = elev + (1013.25 - qnh) * 27, isa = 15 - 1.98 * elev / 1000; return pa + 120 * (T - isa); }
+
+/* ==================== 10b. Beliebige Routen (Polylinie aus Wegpunkten) ==================== */
+/* Macht aus einer Wegpunktfolge ein lineares Netz: jede Teilstrecke (leg) wird in Stuecke von hoechstens
+   5 NM geteilt. Gelaende, Luftraum und Wetter kommen aus dem Hauptnetz Gb (Wetter vom naechsten
+   Wetterpunkt). Damit bewertet evalRoute jede gezogene oder ueber Meldepunkte gelegte Route. */
+var WX_FAR_NM = 15;
+function polyGraph(Gb, pts) {
+  var G = Object.create(Gb), nodes = [], edges = [], along = 0;
+  pts.forEach(function (p, k) {
+    if (k === 0) { nodes.push({ i: 0, j: 0, lat: p.lat, lon: p.lon, along: 0, uw: 0 }); return; }
+    var a = pts[k - 1], len = distNm(a, p), n = Math.max(1, Math.ceil(len / 5));
+    for (var m = 1; m <= n; m++) {
+      var q = lerp(a, p, m / n);
+      nodes.push({ i: nodes.length, j: 0, lat: q.lat, lon: q.lon, along: along + len * m / n, uw: m === n ? k : null });
+      edges.push({ a: nodes.length - 2, b: nodes.length - 1, leg: k - 1 });
+    }
+    along += len;
+  });
+  nodes.forEach(function (nd) {
+    var ds = Gb.wpts.map(function (w, k) { return { k: k, d: distNm(nd, w) }; }).sort(function (a, b) { return a.d - b.d; });
+    var lim = Math.max(ds[0].d * 1.25, ds[0].d + 1);
+    nd.wps = ds.filter(function (x) { return x.d <= lim; }).slice(0, 2).map(function (x) { return x.k; });
+    nd.wxFar = ds[0].d > WX_FAR_NM ? ds[0].d : 0;
+  });
+  G.nodes = nodes; G.edges = edges; G.N = nodes.length - 1; G.start = 0; G.end = nodes.length - 1;
+  G.order = edges.map(function (e, k) { return k; }); G.emap = {}; G.idx = {};
+  G.nw = {}; G.dyn = {}; G.poly = true;
+  edges.forEach(function (e) { edgeStatic(G, e, Gb.AIR || []); });
+  return G;
+}
+/* Abdeckung der geladenen Daten fuer eine Wegpunktfolge pruefen */
+function inBox(p, bb) { return p.lon >= bb[0] && p.lon <= bb[2] && p.lat >= bb[1] && p.lat <= bb[3]; }
+function inAirBoxes(G, p) { return !G.airBoxes || G.airBoxes.some(function (bb) { return inBox(p, bb); }); }
+function routeFromPoints(Gb, P, pts, userAlt, id, name) {
+  var G = polyGraph(Gb, pts), path = G.edges.map(function (e, k) { return k; });
+  var R = evalRoute(G, P, P.depH, path, id || "user", name || "Eigene Route", { userAlt: userAlt || null });
+  R.pts = pts.map(function (p) { var o = {}; for (var k in p) o[k] = p[k]; return o; });
+  R.custom = true;
+  R.wxFar = G.nodes.filter(function (nd) { return nd.wxFar; }).map(function (nd) { return { lat: nd.lat, lon: nd.lon, d: nd.wxFar, x: nd.along }; });
+  var outside = [];
+  G.nodes.forEach(function (nd) { if (!inAirBoxes(Gb, nd)) outside.push(nd.along); });
+  R.airMissing = outside;
+  if (outside.length) { R.cat = 2; R.score = Math.min(R.score, 30); }
+  return R;
+}
 
 /* ==================== 11. Kandidaten, Rangfolge, Begruendung ==================== */
 function laneMap(path, G) { var m = {}; path.forEach(function (ei) { var n = G.nodes[G.edges[ei].b]; m[n.i] = n.j; }); return m; }

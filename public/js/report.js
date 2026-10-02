@@ -10,7 +10,11 @@ function finalize(R, G, P) {
   var wps = [{ lat: G.A.lat, lon: G.A.lon, name: G.A.icao || "START", x: 0, t: R.depMin }];
   for (var k = 1; k < R.rs.length; k++) {
     var a = R.rs[k - 1], b = R.rs[k], turn = Math.abs(((b.e.crs - a.e.crs + 540) % 360) - 180);
-    if (turn >= 4 || a.alt !== b.alt) { var nn = G.nodes[b.e.a]; wps.push({ lat: nn.lat, lon: nn.lon, name: "WP" + wps.length, x: b.x0, t: b.tStart }); }
+    var nn = G.nodes[b.e.a];
+    if (nn.uw != null || turn >= 4 || a.alt !== b.alt) {
+      var up = nn.uw != null && R.pts ? R.pts[nn.uw] : null;
+      wps.push({ lat: nn.lat, lon: nn.lon, name: up && up.name ? up.name : "WP" + wps.length, x: b.x0, t: b.tStart, uw: nn.uw, rp: up ? up.rp : null, border: up ? up.border : null });
+    }
   }
   wps.push({ lat: G.B.lat, lon: G.B.lon, name: G.B.icao || "ZIEL", x: D, t: R.arrMin });
   R.wps = wps;
@@ -107,6 +111,9 @@ function finalize(R, G, P) {
     if (f.da != null && f.da - f.elev > 2000) add("warn", "Dichteh\u00f6he " + esc(f.apt.icao || f.apt.name) + " ~" + fmtFt(f.da) + " ft \u2013 Start-/Landestrecke und Steigleistung pr\u00fcfen.");
     return f;
   });
+  if (R.airMissing && R.airMissing.length) add("bad", "Lufträume f\u00fcr Teile dieser Route noch nicht geladen \u2013 werden nachgeladen, bis dahin gilt die Route als KRITISCH.", R.airMissing[0]);
+  if (R.wxFar && R.wxFar.length) add("warn", "Wetterdaten f\u00fcr Teile dieser Route nur von bis zu " + Math.round(Math.max.apply(null, R.wxFar.map(function (w) { return w.d; }))) +
+    " NM entfernten Punkten \u2013 werden nachgeladen.", R.wxFar[0].x);
   if (G.airFailed && G.airFailed.length) add("bad", "Luftraumdaten f\u00fcr " + G.airFailed.join(", ") + " fehlen \u2013 Lufträume dort NICHT gepr\u00fcft!");
   add("info", "Tempor\u00e4re Luftraumbeschr\u00e4nkungen und Aktivierungen per NOTAM sind nicht enthalten \u2013 NOTAM vor dem Flug pr\u00fcfen.");
   var ord = { bad: 0, warn: 1, info: 2, ok: 3 };

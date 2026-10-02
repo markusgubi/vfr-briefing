@@ -25,6 +25,7 @@ export function setup(app, terrain, opt = {}) {
   const P = { date: "2026-10-02", depH: 10, tas: 100, maxAlt: 12500, terrClr: 1000, cloudClr: 1000, prefAgl: 2000, climb: opt.climb || 500, desc: 500, avoidClr: false };
   const G = app.buildGraph(A, B, d);
   G.depElev = A.elevFt; G.destElev = B.elevFt; G.qnh = 1013.25; G.qnhKnown = true; G.sun = null; G.t0 = 0;
+  G.modelsOk = ["Test"]; G.modelsFail = [];
   G.edges.forEach(e => app.edgeStatic(G, e, []));
   return { A, B, d, P, G };
 }
