@@ -187,3 +187,9 @@ body.editmode .editctl a{background:#B02E7A!important;color:#fff!important}
   body.editmode #pProf::before{content:"\270E  Bearbeiten \00b7  H\00f6hen ziehen, Tipp ins Profil = Wegpunkt";display:block;background:#B02E7A;color:#fff;font-weight:700;
     font-size:12px;padding:6px 10px;border-radius:8px;margin:6px}
 }
+
+/* Rueckflug-Empfehlung */
+.retbox{margin:10px 0;padding:9px 11px;border-radius:8px;font-size:13px;line-height:1.45;border-left:4px solid #1F7A4C;background:#EEF7F1}
+.retbox.warn{border-color:#C1810B;background:#FFF6E5}
+.retbox.bad{border-color:#C0392B;background:#FDEDEC}
+.retbox small{display:block;margin-top:4px;color:#61717F;font-size:11px}

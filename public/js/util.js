@@ -71,3 +71,29 @@ function segDist(p, a, b) {
   var x = ax + t * dx, y = ay + t * dy;
   return { d: Math.sqrt(x * x + y * y), t: t };
 }
+
+/* ==================== Sonnenstand: Auf-/Untergang, BCMT/ECET (buergerliche Daemmerung) ====================
+   NOAA-Naeherung (Genauigkeit ca. 1-2 min). Ergebnis in Stunden Ortszeit Europe/Vienna (inkl. Sommerzeit).
+   BCMT = Beginn, ECET = Ende der buergerlichen Daemmerung (Sonne 6 Grad unter dem Horizont); SERA: Nacht =
+   ECET bis BCMT. Liefert null, falls die Sonne das Niveau an diesem Tag nicht erreicht (Polargebiete). */
+function viennaHours(utcMs) {
+  var f = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Vienna", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" });
+  var p = {}; f.formatToParts(new Date(utcMs)).forEach(function (x) { p[x.type] = x.value; });
+  return (+p.hour) + (+p.minute) / 60 + (+p.second) / 3600;
+}
+function sunTimes(lat, lon, dateStr) {
+  var d0 = Date.UTC(+dateStr.slice(0, 4), +dateStr.slice(5, 7) - 1, +dateStr.slice(8, 10));
+  var doy = Math.round((d0 - Date.UTC(+dateStr.slice(0, 4), 0, 1)) / 86400000) + 1;
+  var g = 2 * Math.PI / 365 * (doy - 1 + 0.5);   /* Mittag */
+  var eqt = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g) - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));
+  var dec = 0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g) - 0.006758 * Math.cos(2 * g) + 0.000907 * Math.sin(2 * g)
+    - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
+  var la = lat * Math.PI / 180;
+  function at(zenDeg, rising) {
+    var c = Math.cos(zenDeg * Math.PI / 180) / (Math.cos(la) * Math.cos(dec)) - Math.tan(la) * Math.tan(dec);
+    if (c < -1 || c > 1) return null;
+    var ha = Math.acos(c) * 180 / Math.PI, min = 720 - 4 * (lon + (rising ? ha : -ha)) - eqt;
+    return viennaHours(d0 + min * 60000);
+  }
+  return { rise: at(90.833, true), set: at(90.833, false), bcmt: at(96, true), ecet: at(96, false) };
+}

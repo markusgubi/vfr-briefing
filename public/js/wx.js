@@ -160,6 +160,11 @@ function assess(w) {
   var bAgl = isFinite(w.base) ? w.base - w.elevFt : null;
   w.cat = (nogo || (bAgl != null && bAgl < 1000)) ? 2 : (w.risk >= 0.35 || (bAgl != null && bAgl < 2000)) ? 1 : 0;
 }
+/* Sonnenzeiten fuer Start und Ziel (lokal berechnet, ohne Netz): Auf-/Untergang und BCMT/ECET */
+function sunFor(A, B, date) {
+  var a = sunTimes(A.lat, A.lon, date), b = sunTimes(B.lat, B.lon, date);
+  return { depRise: a.rise, depSet: a.set, depBcmt: a.bcmt, depEcet: a.ecet, destRise: b.rise, destSet: b.set, destBcmt: b.bcmt, destEcet: b.ecet };
+}
 async function fetchSun(A, B, date) {
   var j = await fetchJSON("https://api.open-meteo.com/v1/forecast?latitude=" + A.lat.toFixed(3) + "," + B.lat.toFixed(3) +
     "&longitude=" + A.lon.toFixed(3) + "," + B.lon.toFixed(3) + "&daily=sunrise,sunset&timezone=Europe%2FVienna&start_date=" + date + "&end_date=" + date, 2);

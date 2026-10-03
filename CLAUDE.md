@@ -102,6 +102,17 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
 - GAFOR (seit 8.2): nur mit Haken "GAFOR-Strecken bevorzugen" (P.preferGafor/GAFOR_ON). Dann zusätzliche
   GAFOR-Variante in der Suche; in der Rangfolge zählt GAFOR-Nähe NUR bei gleicher Sicherheit (Einstufung,
   Konfliktlänge, Sicherheitswert). Die normale Suche bleibt ohne GAFOR-Einfluss. Sicherheit geht immer vor.
+- Tageslicht (seit 9.0): Sonnenzeiten werden lokal berechnet (sunTimes in util.js, NOAA-Näherung, ±2 min,
+  Ortszeit Europe/Vienna), kein Netzabruf mehr. Tag = BCMT bis ECET (SERA). Ankunft nach ECET bzw. Abflug vor
+  BCMT = Nacht → KRITISCH (nur NVFR). Ankunft ab 30 min vor Sonnenuntergang bis ECET bzw. Abflug zwischen BCMT
+  und Sonnenaufgang → EINGESCHR. mit Hinweis (vorher war jede Ankunft nach Sonnenuntergang KRITISCH; geändert,
+  weil VFR bei Tag bis ECET zulässig ist – die Dämmerung bleibt als Einschränkung sichtbar). Optimierer: BCMT..ECET.
+- Rückflug (seit 9.0, Haken "Rückflug am selben Tag prüfen" + Aufenthalt in min): returnPlan baut ein eigenes Netz
+  Ziel → Start (reverseNet, dieselben Wetterpunkte/Luftraum/Gelände, keine neuen Abrufe) und sucht ab Ankunft +
+  Aufenthalt alle 30 min die sicherste Route (bestRouteAt), Grenze auf 10 min verfeinert. Empfehlung "spätestens
+  HH:MM": letzter Abflug, der nicht KRITISCH ist und vor ECET am Startplatz landet; Grund (ECET oder Wetter ab ...),
+  "mit Tageslichtreserve bis ...", "durchgehend/ab ... nur EINGESCHR.". Kommt der Hinflug nach ECET an: Warnung
+  "Kein Rückflug am selben Tag". Test: tests/unit/tageslicht.test.mjs, `node tests/e2e/rueckflug.mjs`.
 - Eigene Routen: routeFromPoints/polyGraph bewerten beliebige Wegpunktfolgen; eigene Höhen je Teilstrecke
   (opt.userAlt) werden wie geplante Höhen geprüft. Fehlen Luftraumdaten für einen Teil, ist die Route KRITISCH.
 
@@ -146,7 +157,7 @@ Offen:
   `node tests/e2e/run.mjs LOLW LOWZ gut`, `node tests/e2e/edit.mjs` und `node tests/e2e/lang.mjs` (> 250 NM). Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 8.9, nächste 9.0).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.0, nächste 9.1).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.

@@ -537,12 +537,16 @@ function evalRoute(G, P, depH, path, id, name, opt) {
     rs.forEach(function (r) { if (r.x1 >= x.x0 && r.x0 <= x.x1) { r.cat = 2; r.conf = true; } });
   });
   conflicts.sort(function (a, b) { return a.x0 - b.x0; });
-  var night = false, dusk = false, dawn = false;
+  /* Tag = BCMT bis ECET (buergerliche Daemmerung, SERA). Nach ECET bzw. vor BCMT = Nacht -> KRITISCH (nur NVFR).
+     Ankunft ab 30 min vor Sonnenuntergang bis ECET (bzw. Abflug zwischen BCMT und Sonnenaufgang) -> EINGESCHRAENKT. */
+  var night = false, dusk = false, dawn = false, early = false;
   if (G.sun) {
-    if (arrMin / 60 > G.sun.destSet) night = true; else if (arrMin / 60 > G.sun.destSet - 0.5) dusk = true;
-    if (depH < G.sun.depRise) dawn = true;
+    var ecet = G.sun.destEcet != null ? G.sun.destEcet : G.sun.destSet, bcmt = G.sun.depBcmt != null ? G.sun.depBcmt : G.sun.depRise;
+    if (arrMin / 60 > ecet) night = true;
+    else if (arrMin / 60 > Math.min(ecet, G.sun.destSet != null ? G.sun.destSet : ecet) - 0.5) dusk = true;   /* wie bisher ab 30 min vor Sonnenuntergang */
+    if (depH < bcmt) dawn = true; else if (G.sun.depRise != null && depH < G.sun.depRise) early = true;
   }
-  if (night || dawn || arrMin > 1440) cat = 2; else if (dusk) cat = Math.max(cat, 1);
+  if (night || dawn || arrMin > 1440) cat = 2; else if (dusk || early) cat = Math.max(cat, 1);
   var avgRisk = D ? rsum / D : 0, score = 100 - 45 * maxRisk - 15 * avgRisk;
   if (isFinite(minCloud) && minCloud < 2500) score -= Math.min(25, Math.max(0, (2500 - minCloud) / 2500 * 25));
   if (minTerr < 1500) score -= Math.min(15, Math.max(0, (1500 - minTerr) / 1500 * 15));
@@ -554,7 +558,7 @@ function evalRoute(G, P, depH, path, id, name, opt) {
     G: G, userAlt: opt.userAlt || null, D: D, samples: sm, circMin: circMin, spiralMin: 0, steep: steep, descRate: P.desc, tod: sm[tod] ? { x: sm[tod].x, p: p[tod], t: sm[tod].t } : null,
     depMin: depH * 60, arrMin: arrMin, ete: arrMin - depH * 60, maxAlt: Math.max.apply(null, p), cruiseMax: Math.max.apply(null, rs.map(function (r) { return r.alt; })),
     minTerr: minTerr, minTerrX: minTerrX, terrReserve: P.terrClr + 300, minCloud: minCloud, maxRisk: maxRisk, avgRisk: avgRisk, worstReason: worstReason, conflicts: conflicts,
-    entries: entries, clr: clr, cat: cat, score: Math.max(0, Math.round(score)), night: night, dusk: dusk, dawn: dawn };
+    entries: entries, clr: clr, cat: cat, score: Math.max(0, Math.round(score)), night: night, dusk: dusk, dawn: dawn, early: early };
 }
 function sampleAt(R, x) {
   var sm = R.samples;
@@ -680,7 +684,8 @@ function computeRoutes(G, P) {
   return routes;
 }
 async function optimizer(G, P, onHour) {
-  var span = G.d / P.tas, lo = G.sun ? Math.ceil(G.sun.depRise) : 6, hi = G.sun ? Math.floor(G.sun.destSet - span - 0.25) : 19;
+  var span = G.d / P.tas, lo = G.sun ? Math.ceil(G.sun.depBcmt != null ? G.sun.depBcmt : G.sun.depRise) : 6,
+    hi = G.sun ? Math.floor((G.sun.destEcet != null ? G.sun.destEcet : G.sun.destSet) - span - 0.25) : 19;
   var now = new Date(), isToday = P.date === now.getFullYear() + "-" + p2(now.getMonth() + 1) + "-" + p2(now.getDate());
   if (isToday) lo = Math.max(lo, now.getHours() + 1);
   var out = [];
@@ -705,7 +710,8 @@ function issueOf(R) {
   }
   var f = R.entries.filter(function (x) { return x.inside && x.as.kind === "forbidden"; })[0];
   if (f) return "Ber\u00fchrung von " + f.as.name + " (verboten)";
-  if (R.night) return "Ankunft nach Sonnenuntergang";
+  if (R.night) return "Ankunft nach ECET (Nacht)";
+  if (R.dawn) return "Abflug vor BCMT (Nacht)";
   if (R.maxRisk >= 0.35 && R.worstReason) return R.worstReason.t + " bei NM " + Math.round(R.worstReason.x);
   if (isFinite(R.minCloud) && R.minCloud < 1500) return "Wolkenabstand nur ~" + fmtFt(R.minCloud) + " ft";
   if (R.tight && R.tight.length) {
@@ -734,4 +740,75 @@ function whyHtml() {
       (r.D > best.D + 2 ? ", " + Math.round(r.D - best.D) + " NM l\u00e4nger" : "") + ".</p>");
   });
   return "<div class='why'>" + out.join("") + "</div>";
+}
+
+/* ==================== 11b. Rueckflug am selben Tag ====================
+   Eigene Routensuche Ziel -> Start (nicht einfach die Hinroute umgedreht: z. B. der Talausgang beim Abflug
+   kann eine andere Route verlangen). Dasselbe Netz-Verfahren, dieselben Daten (Wetterpunkte, Luftraum,
+   Gelaende) wie der Hinflug. Fuer jede Abflugzeit ab Ankunft + Aufenthalt (30-min-Raster, an der Grenze auf
+   10 min verfeinert) wird die sicherste Route gesucht. Ergebnis: spaetester Rueckflug, der nicht KRITISCH ist
+   (Wetter, Gelaende, Luftraum) UND vor ECET am Startplatz landet. */
+function reverseSun(sun) {
+  return sun ? { depRise: sun.destRise, depSet: sun.destSet, depBcmt: sun.destBcmt, depEcet: sun.destEcet,
+    destRise: sun.depRise, destSet: sun.depSet, destBcmt: sun.depBcmt, destEcet: sun.depEcet } : null;
+}
+async function reverseNet(G) {
+  var Gr = buildGraph(G.B, G.A, G.d);
+  ["wx", "t0", "AIR", "FIRS", "airBoxes", "airFailed", "qnh", "qnhKnown", "demZ", "demBox", "modelsOk", "modelsFail", "ww", "RPS"].forEach(function (k) { Gr[k] = G[k]; });
+  Gr.depElev = G.destElev; Gr.destElev = G.depElev; Gr.sun = reverseSun(G.sun);
+  /* dieselben Wetterpunkte wie der Hinflug (Daten liegen schon vor) */
+  Gr.wpts = G.wpts;
+  Gr.nodes.forEach(function (n) {
+    var ds = Gr.wpts.map(function (w, k) { return { k: k, d: distNm(n, w) }; }).sort(function (a, b) { return a.d - b.d; });
+    var lim = Math.max(ds[0].d * 1.25, ds[0].d + 1);
+    n.wps = ds.filter(function (x) { return x.d <= lim; }).slice(0, 2).map(function (x) { return x.k; });
+  });
+  for (var k = 0; k < Gr.edges.length; k++) {
+    edgeStatic(Gr, Gr.edges[k], Gr.AIR || []);
+    if (k % 300 === 299) await new Promise(function (r) { setTimeout(r, 0); });
+  }
+  return Gr;
+}
+function bestRouteAt(G, P, h) {
+  var ps = candidatePaths(G, P, h, true), dp = directPath(G), best = null;
+  if (dp) ps.push(dp);
+  ps.forEach(function (p) { var R = evalPath(G, P, h, p, "return", "R\u00fcckflug"); if (!best || rankCmp(R, best) < 0) best = R; });
+  return best;
+}
+async function returnPlan(G, P, R, stayMin, onStep) {
+  var Gr = await reverseNet(G);
+  var t0 = Math.ceil((R.arrMin + (stayMin || 0)) / 10) * 10, steps = [];
+  var ecetMin = Gr.sun && Gr.sun.destEcet != null ? Gr.sun.destEcet * 60 : 24 * 60;
+  function step(t, Rr) { return { t: t, arr: Rr.arrMin, cat: Rr.cat, night: Rr.night, dusk: Rr.dusk, issue: issueOf(Rr), R: Rr }; }
+  for (var t = t0; t <= 23 * 60; t += 30) {
+    var Rr = bestRouteAt(Gr, P, t / 60);
+    steps.push(step(t, Rr));
+    if (onStep) { onStep(t); await new Promise(function (r) { setTimeout(r, 0); }); }
+    if (Rr.night) break;   /* spaeter wird es nur noch dunkler */
+  }
+  var out = { t0: t0, stay: stayMin, ecet: ecetMin, steps: steps, latest: null, reason: null, firstOk: null, worseFrom: null, R: null, G: Gr };
+  var i = 0;
+  while (i < steps.length && steps[i].cat === 2) i++;
+  if (i === steps.length) {
+    out.reason = steps.length && steps.some(function (s) { return !s.night; }) ? "wx" : "late";
+    out.issue = (steps.filter(function (s) { return !s.night; })[0] || steps[0] || {}).issue;
+    return out;
+  }
+  out.firstOk = steps[i].t;
+  var j = i;
+  while (j + 1 < steps.length && steps[j + 1].cat < 2) j++;
+  var last = steps[j], nx = steps[j + 1];
+  /* Grenze auf 10 min verfeinern: dieselbe Route etwas spaeter */
+  if (nx) for (var tt = last.t + 10; tt < nx.t; tt += 10) {
+    var Rf = evalPath(Gr, P, tt / 60, last.R.path, "return", "R\u00fcckflug");
+    if (Rf.cat === 2) { nx = step(tt, Rf); break; }
+    last = step(tt, Rf);
+  }
+  out.latest = last.t; out.R = last.R; out.latestArr = last.arr;
+  out.reason = !nx || nx.night ? "ecet" : "wx";
+  if (nx && !nx.night) { out.wxFrom = nx.t; out.issue = nx.issue; }
+  for (var k = i; k <= j; k++) if (steps[k].cat === 1 && !steps[k].dusk) { out.worseFrom = steps[k].t; out.worseIssue = steps[k].issue; break; }
+  /* spaetester Abflug mit Tageslichtreserve (Landung mind. 30 min vor Sonnenuntergang) */
+  for (k = j; k >= i; k--) if (!steps[k].dusk) { out.latestDay = steps[k].t; out.latestDayArr = steps[k].arr; break; }
+  return out;
 }

@@ -71,9 +71,12 @@ function finalize(R, G, P) {
       " <small>\u2013 NM " + Math.round(t.x0) + (Math.round(t.x1) > Math.round(t.x0) ? "\u2013" + Math.round(t.x1) : "") + "</small>", t.x0, t.x1);
   });
   if (G.sun) {
-    if (R.dawn) add("bad", "Abflug " + fmtH(R.depMin) + " vor Sonnenaufgang (" + fmtH(G.sun.depRise * 60) + ") \u2013 nur mit NVFR-Berechtigung.");
-    if (R.night) add("bad", "Ankunft " + fmtH(R.arrMin) + " nach Sonnenuntergang (" + fmtH(G.sun.destSet * 60) + ") \u2013 nur mit NVFR-Berechtigung.", D);
-    else if (R.dusk) add("warn", "Weniger als 30 min Tageslichtreserve (Sonnenuntergang Ziel " + fmtH(G.sun.destSet * 60) + ").", D);
+    var ecetT = fmtH(G.sun.destEcet * 60), setT = fmtH(G.sun.destSet * 60);
+    if (R.dawn) add("bad", "<b>Abflug " + fmtH(R.depMin) + " vor BCMT</b> (" + fmtH(G.sun.depBcmt * 60) + ", Beginn b\u00fcrgerliche D\u00e4mmerung) \u2013 Nacht, nur mit NVFR-Berechtigung.");
+    else if (R.early) add("warn", "Abflug " + fmtH(R.depMin) + " vor Sonnenaufgang (" + fmtH(G.sun.depRise * 60) + ") \u2013 D\u00e4mmerung, Sicht/Gel\u00e4nde besonders beachten.");
+    if (R.night) add("bad", "<b>Ankunft " + fmtH(R.arrMin) + " nach ECET</b> (" + ecetT + " am Ziel, Ende b\u00fcrgerliche D\u00e4mmerung) \u2013 Nacht, nur mit NVFR-Berechtigung. Fr\u00fcher starten.", D);
+    else if (R.dusk) add("warn", "<b>Ankunft " + fmtH(R.arrMin) + "</b> " + (R.arrMin / 60 > G.sun.destSet ? "nach Sonnenuntergang (" + setT + ")" : "weniger als 30 min vor Sonnenuntergang (" + setT + ")") +
+      " \u2013 ECET am Ziel " + ecetT + ". D\u00e4mmerung, wenig Reserve.", D);
   }
   R.circles.forEach(function (c) {
     add("warn", "<b>Kreisend steigen</b> bei NM " + Math.round(c.x) + " (~" + fmtH(sampleAt(R, c.x).t) + ") von ~" + fmtFt(c.from) + " auf ~" + (Math.ceil(c.to / 100) * 100) +

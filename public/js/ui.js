@@ -169,10 +169,10 @@ function setupAc(inpId, boxId, key) {
   inp.addEventListener("blur", function () { setTimeout(function () { box.style.display = "none"; }, 150); });
   inp.addEventListener("keydown", function (e) { if (e.key === "Enter" && S.from && S.to) plan(); });
 }
-var KEEP = ["tas", "maxAlt", "terrClr", "cloudClr", "prefAgl", "climb", "desc"];
+var KEEP = ["tas", "maxAlt", "terrClr", "cloudClr", "prefAgl", "climb", "desc", "retStay"];
 function saveSettings() {
   try {
-    var o = { v74: true, from: S.from, to: S.to, avoidClr: $("avoidClr").checked, prefGafor: $("prefGafor").checked, asFilter: $("asFilter").value };
+    var o = { v74: true, from: S.from, to: S.to, avoidClr: $("avoidClr").checked, prefGafor: $("prefGafor").checked, retOn: $("retOn").checked, asFilter: $("asFilter").value };
     KEEP.forEach(function (f) { o[f] = $(f).value; });
     localStorage.setItem("vfr72", JSON.stringify(o));
   } catch (e) {}
@@ -184,6 +184,7 @@ function loadSettings() {
     if (!o.v74 && o.maxAlt === "10000") $("maxAlt").value = 12500;
     $("avoidClr").checked = !!o.avoidClr;
     $("prefGafor").checked = !!o.prefGafor;
+    $("retOn").checked = !!o.retOn; $("retRow").style.display = o.retOn ? "" : "none";
     if (o.asFilter != null) $("asFilter").value = o.asFilter;
     if (o.from) { S.from = o.from; showSel("fIn", o.from); }
     if (o.to) { S.to = o.to; showSel("tIn", o.to); }
@@ -203,7 +204,8 @@ function readP() {
     terrClr: clampNum($("terrClr").value, 500, 3000, 1000), cloudClr: clampNum($("cloudClr").value, 500, 3000, 1000),
     prefAgl: clampNum($("prefAgl").value, 1000, 5000, 2000), climb: clampNum($("climb").value, 200, 2000, 500),
     desc: clampNum($("desc").value, 200, 2000, 500), avoidClr: $("avoidClr").checked,
-    preferGafor: !!GAFOR && $("prefGafor").checked
+    preferGafor: !!GAFOR && $("prefGafor").checked,
+    ret: $("retOn").checked, stay: clampNum($("retStay").value, 0, 600, 60)
   };
   P.prefAgl = Math.max(P.prefAgl, P.terrClr);
   return P;
@@ -257,7 +259,8 @@ async function plan() {
   $("go").disabled = true; hlLayer.clearLayers(); setSts("");
   progStart([["dem", "Gelände", 14], ["asp", "Luftraum", 9], ["apt", "Flugplätze", 3], ["awx", "METAR/TAF", 3]]
     .concat(MODELS.map(function (m, mi) { return ["wx" + mi, m.l.replace(/ \(.*\)/, ""), 6]; }))
-    .concat([["net", "Streckennetz", 10], ["route", "Routensuche", 12], ["opt", "Abflugzeit-Optimierer", 19]]));
+    .concat([["net", "Streckennetz", 10], ["route", "Routensuche", 12], ["opt", "Abflugzeit-Optimierer", 19]])
+    .concat(P.ret ? [["ret", "R\u00fcckflug", 8]] : []));
   try {
     var G = buildGraph(A, B, d);
     var w = 180, s = 90, e = -180, n = -90;
@@ -280,7 +283,7 @@ async function plan() {
       progSet("wx" + mi, 0.1);
       return fetchModel(mi, G.wpts, P.date).then(function (x) { progSet("wx" + mi, 1, "ok"); return x; }, function (er) { progSet("wx" + mi, 1, "err", er.message); return null; });
     }));
-    var pSun = fetchSun(A, B, P.date).catch(function () { return null; });
+    var pSun = Promise.resolve(sunFor(A, B, P.date));
     await pDem;
     G.depElev = A.elevFt != null ? A.elevFt : (elevFt(A.lat, A.lon) || 0);
     G.destElev = B.elevFt != null ? B.elevFt : (elevFt(B.lat, B.lon) || 0);
@@ -314,6 +317,12 @@ async function plan() {
     progSet("route", 1, "ok", RES.routes.length + " Varianten");
     RES.opt = await optimizer(G, P, function (k, t, h) { progSet("opt", k / t, null, p2(h) + ":00"); });
     progSet("opt", 1, "ok", RES.opt.length + " Stunden");
+    if (P.ret) {   /* Rueckflug: dieselbe Strecke umgekehrt, ab Ankunft + Aufenthalt */
+      progSet("ret", 0.05);
+      var r0 = RES.routes[0], ecR = G.sun && G.sun.depEcet != null ? G.sun.depEcet * 60 : 22 * 60;
+      RES.ret = await returnPlan(G, P, r0, P.stay, function (t) { progSet("ret", Math.min(0.95, 0.1 + (t - r0.arrMin) / Math.max(60, ecR - r0.arrMin)), null, fmtH(t)); });
+      progSet("ret", 1, "ok", RES.ret.latest != null ? "bis " + fmtH(RES.ret.latest) : "nicht empfohlen");
+    } else RES.ret = null;
     RES.fitted = false;
     render(keepSel);
     if (MOB.on) showPane("main");
@@ -359,6 +368,7 @@ function render(sel) {
   RES.sel = sel; RES.hl = null; hlLayer.clearLayers();
   RES.routes.forEach(function (x) { finalize(x, G, P); });
   var h = verdictHtml(R);
+  h += retHtml();
   h += whyHtml();
   h += "<div class='card'><h3>Routen-Varianten</h3>";
   RES.routes.forEach(function (x, k) {
@@ -402,7 +412,8 @@ function render(sel) {
     "<span>Steig-/Sinkrate</span><b>" + P.climb + " / " + P.desc + " ft/min</b>" +
     "<span>QNH (Umrechnung FL)</span><b>" + Math.round(G.qnh) + " hPa" + (G.qnhKnown ? "" : " (Standard \u2013 keine METARs)") + "</b>" +
     (R.gaforPct != null ? "<span>Entlang GAFOR-Strecken</span><b>" + R.gaforPct + " %</b>" : "") +
-    (G.sun ? "<span>Sonne Start / Ziel</span><b>\u2191 " + fmtH(G.sun.depRise * 60) + " \u00b7 \u2193 " + fmtH(G.sun.destSet * 60) + "</b>" : "") +
+    (G.sun ? "<span>Sonne Start / Ziel</span><b>\u2191 " + fmtH(G.sun.depRise * 60) + " \u00b7 \u2193 " + fmtH(G.sun.destSet * 60) + "</b>" +
+      "<span>BCMT Start / ECET Ziel</span><b>" + fmtH(G.sun.depBcmt * 60) + " \u00b7 " + fmtH(G.sun.destEcet * 60) + "</b>" : "") +
     "</div></details>";
   h += "<details class='card'><summary><h3>Start- &amp; Zielplatz (METAR/TAF)</h3></summary>";
   R.fields.forEach(function (f, k) {
@@ -476,6 +487,30 @@ function onExpClick(e) {
     window.open("https://www.windy.com/distance/vfr/" + R.wps.map(function (w) { return w.lat.toFixed(4) + "," + w.lon.toFixed(4); }).join(";") +
       "?clouds," + c.lat.toFixed(3) + "," + c.lon.toFixed(3) + ",8", "_blank");
   }
+}
+/* Rueckflug-Empfehlung (nur wenn bei der Suche aktiviert) */
+function retHtml() {
+  var X = RES.ret; if (!X) return "";
+  var G = RES.G, base = RES.routes[0], A = G.A.icao || "Start", B = G.B.icao || "Ziel", ecet = G.sun ? fmtH(G.sun.depEcet * 60) : "?";
+  var h, cls;
+  if (base.night) { cls = "bad"; h = "<b>Kein R\u00fcckflug am selben Tag:</b> Schon der Hinflug landet nach ECET in " + esc(B) + "."; }
+  else if (X.latest == null) {
+    cls = "bad";
+    h = X.reason === "late"
+      ? "<b>R\u00fcckflug heute nicht mehr m\u00f6glich:</b> Ab " + fmtH(X.t0) + " (Ankunft + " + X.stay + " min Aufenthalt) w\u00e4re die Landung in " + esc(A) + " erst nach ECET (" + ecet + ")."
+      : "<b>R\u00fcckflug heute nicht empfohlen:</b> ab " + fmtH(X.t0) + " durchgehend KRITISCH" + (X.issue ? " \u2013 " + esc(X.issue) : "") + ".";
+  } else {
+    cls = X.worseFrom != null ? "warn" : "ok";
+    h = "<b>R\u00fcckflug " + esc(B) + " \u2192 " + esc(A) + " sp\u00e4testens " + fmtH(X.latest) + "</b> (Landung ~" + fmtH(X.latestArr) + ")";
+    h += X.reason === "ecet" ? " \u2013 danach Landung nach ECET in " + esc(A) + " (" + ecet + ")."
+      : " \u2013 ab " + fmtH(X.wxFrom) + " KRITISCH" + (X.issue ? ": " + esc(X.issue) : "") + ".";
+    if (X.latestDay != null && X.latestDay < X.latest) h += " Mit Tageslichtreserve (Landung 30 min vor Sonnenuntergang): bis " + fmtH(X.latestDay) + ".";
+    if (X.firstOk > X.t0) h += " Fr\u00fchestens " + fmtH(X.firstOk) + " (vorher KRITISCH).";
+    if (X.worseFrom != null) h += (X.worseFrom === X.firstOk ? " Durchgehend nur EINGESCHR." : " Ab " + fmtH(X.worseFrom) + " nur EINGESCHR.") +
+      (X.worseIssue ? " (" + esc(X.worseIssue) + ")" : "") + ".";
+  }
+  return "<div class='retbox " + cls + "'>" + h + "<small>Eigene Routensuche " + esc(B) + " \u2192 " + esc(A) + " mit denselben Wetter-, Gel\u00e4nde- und Luftraumdaten, ab Ankunft + " + X.stay +
+    " min Aufenthalt alle 30 min (Grenze auf 10 min genau). ECET " + esc(A) + " " + ecet + ". Zum Ansehen der R\u00fcckroute Start/Ziel tauschen und neu suchen.</small></div>";
 }
 function verdictHtml(R) {
   return "<div class='verdict " + CAT_CLS[R.cat] + "'><div class='big'>" + verdictText(R.cat) + "</div><div class='meta'>" +
@@ -1246,6 +1281,7 @@ function setupCursor() {
   try { var wl = localStorage.getItem("vfrWxLayer"); if (wl) { $("wxLayer").value = wl; setWxLayer(wl); } } catch (e) {}
   $("avoidClr").addEventListener("change", saveSettings);
   $("prefGafor").addEventListener("change", saveSettings);
+  $("retOn").addEventListener("change", function () { $("retRow").style.display = this.checked ? "" : "none"; saveSettings(); });
   if (isMob()) setupMobile();
   $("lgT").addEventListener("click", function () { var l = $("legend"); l.classList.toggle("col"); $("lgA").innerHTML = l.classList.contains("col") ? "&#9656;" : "&#9662;"; });
   setupCursor();
