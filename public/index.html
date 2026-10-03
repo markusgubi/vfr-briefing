@@ -10,18 +10,18 @@
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <link rel="icon" type="image/svg+xml" href="img/icon.svg">
 <link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
-<title>VFR Briefing 9.5</title>
+<title>VFR Briefing 9.6</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
 <div id="side">
   <h1>VFR <em>&#9656;</em> Route &amp; Wetter</h1>
-  <div class="sub">Version 9.5 &middot; sicherste Route aus 5 Wettermodellen, Gel&auml;nde, Luftraum und METAR/TAF</div>
+  <div class="sub">Version 9.6 &middot; sicherste Route aus 5 Wettermodellen, Gel&auml;nde, Luftraum und METAR/TAF</div>
   <div class="noprint">
     <label>Von</label>
     <div class="acw"><input id="fIn" placeholder="ICAO oder Name, z.B. LOLW" autocomplete="off"><div class="ac" id="fAc"></div></div>
-    <label>Nach</label>
+    <div class="nachRow"><label>Nach</label><button type="button" id="swapBtn" class="swapBtn" title="Von und Nach tauschen" aria-label="Von und Nach tauschen">&#8645; tauschen</button></div>
     <div class="acw"><input id="tIn" placeholder="ICAO oder Name, z.B. LOWZ" autocomplete="off"><div class="ac" id="tAc"></div></div>
     <div class="row">
       <div><label>Datum</label><input id="dDate" type="date"></div>

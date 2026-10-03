@@ -171,6 +171,15 @@ function setupAc(inpId, boxId, key) {
   inp.addEventListener("blur", function () { setTimeout(function () { box.style.display = "none"; }, 150); });
   inp.addEventListener("keydown", function (e) { if (e.key === "Enter" && S.from && S.to) plan(); });
 }
+/* Von und Nach mit einem Klick tauschen (auch halb ausgefuellte Eingaben) */
+function swapFromTo() {
+  var f = S.from, t = S.to, fv = $("fIn").value, tv = $("tIn").value;
+  S.from = t; S.to = f;
+  if (S.from) showSel("fIn", S.from); else { $("fIn").value = tv; $("fIn").classList.remove("ok"); }
+  if (S.to) showSel("tIn", S.to); else { $("tIn").value = fv; $("tIn").classList.remove("ok"); }
+  saveSettings();
+  if (S.from && S.to && RES) setSts("Von und Nach getauscht \u2013 \u201eSicherste Route berechnen\u201c f\u00fcr den R\u00fcckweg.");
+}
 var KEEP = ["tas", "maxAlt", "terrClr", "cloudClr", "prefAgl", "climb", "desc", "retStay", "xwMax"];
 function saveSettings() {
   try {
@@ -1380,6 +1389,7 @@ function setupCursor() {
     $("dTime").value = "10:00";
   } else $("dTime").value = p2(Math.max(8, t.getHours() + 1)) + ":00";
   setupAc("fIn", "fAc", "from");
+  $("swapBtn").addEventListener("click", swapFromTo);
   setupAc("tIn", "tAc", "to");
   loadSettings();
   $("go").addEventListener("click", plan);
