@@ -26,7 +26,7 @@ function routeFileName(R) { var G = RES.G; return (G.A.icao || "START") + "-" + 
 /* GPX: Hoehe als <ele> (Meter) UND im Wegpunktnamen, da SkyDemon <ele> beim Import ignoriert */
 function exportGpx(R, share) {
   var G = RES.G, nm = (G.A.icao || "START") + "-" + (G.B.icao || "ZIEL"), alts = wpAlts(R);
-  var s = '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="VFR-Briefing 9.15" xmlns="http://www.topografix.com/GPX/1/1">\n<rte><name>' + esc(nm + " " + R.name) + "</name>\n";
+  var s = '<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="VFR-Briefing 9.16" xmlns="http://www.topografix.com/GPX/1/1">\n<rte><name>' + esc(nm + " " + R.name) + "</name>\n";
   R.wps.forEach(function (w, k) {
     var last = k === R.wps.length - 1, label = last ? w.name : w.name + " " + alts[k] + "FT";
     s += '<rtept lat="' + w.lat.toFixed(5) + '" lon="' + w.lon.toFixed(5) + '"><ele>' + (alts[k] / M2FT).toFixed(0) + "</ele><name>" + esc(label) +

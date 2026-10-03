@@ -832,7 +832,7 @@ function drawRouteLines(R) {
 function profLegend() {
   var f = RES.pvLeg || {}, it = [];
   function sw(svg, t) { it.push("<span><svg width='26' height='12' viewBox='0 0 26 12'>" + svg + "</svg>" + t + "</span>"); }
-  sw("<path d='M1 10 L9 3 L25 3' fill='none' stroke='#B02E7A' stroke-width='2.6'/>", "Geplante Flugh\u00f6he (Steig-/Sinkflug)");
+  sw("<path d='M1 10 L9 3 L16 3' fill='none' stroke='" + CAT_COL[0] + "' stroke-width='2.6'/><path d='M16 3 L25 3' fill='none' stroke='" + CAT_COL[1] + "' stroke-width='2.6'/>", "Geplante Flugh\u00f6he (Farbe = Einstufung des Abschnitts)");
   sw("<path d='M0 12 L6 5 L12 8 L19 2 L26 6 L26 12 Z' fill='#CDBB9E'/><path d='M0 12 L6 7 L12 10 L19 5 L26 9 L26 12 Z' fill='#8C7A5B'/>", "Gel\u00e4nde: dunkel auf der Linie, hell bis 1 NM seitlich");
   if (f.cloud) sw("<rect x='0' y='0' width='26' height='7' fill='#9AAAB8' fill-opacity='0.5'/><path d='M0 7 H26' stroke='#5E7386' stroke-width='1.5'/>", "Wolken ab Basis (Modelle/METAR)");
   if (f.fz) sw("<path d='M0 6 H26' stroke='#2E86C9' stroke-width='1.5' stroke-dasharray='2 3'/>", "0-\u00b0C-Grenze (Vereisung)");
@@ -843,7 +843,7 @@ function profLegend() {
   if (f.conf) sw("<rect x='0' y='0' width='26' height='12' fill='#C0392B' fill-opacity='0.25'/>", "Kein sicherer H\u00f6henkorridor");
   if (f.circ) sw("<path d='M13 1 C 6 1 6 4 13 4 C 6 4 6 7 13 7 C 6 7 6 10 13 10' fill='none' stroke='#B02E7A' stroke-width='1.8'/>", "Vollkreise: unterwegs im Tal kreisend steigen");
   if (f.wp) sw("<path d='M13 0 V12' stroke='#1F5FA8' stroke-width='1.2' stroke-dasharray='3 3'/>", "Wegpunkt (Nummer wie in der Karte)");
-  sw("<rect x='1' y='1' width='24' height='10' fill='#2E7DD7' fill-opacity='0.09' stroke='#2E7DD7' stroke-opacity='0.55' stroke-dasharray='4 2'/>", "In der Karte sichtbarer Abschnitt (beim Hineinzoomen)");
+  if (!MOB.on) sw("<rect x='2' y='1' width='22' height='10' fill='#0F1D2A' fill-opacity='0.08'/><line x1='2' x2='2' y1='1' y2='11' stroke='#0F1D2A' stroke-opacity='0.5'/><line x1='24' x2='24' y1='1' y2='11' stroke='#0F1D2A' stroke-opacity='0.5'/><rect x='2' y='9' width='22' height='3' fill='#0F1D2A' fill-opacity='0.75'/>", "In der Karte sichtbarer Abschnitt (beim Hineinzoomen)");
   if (f.hl) sw("<rect x='0' y='0' width='26' height='12' fill='#FFD400' fill-opacity='0.4'/>", "Gew\u00e4hlter Hinweis");
   if (f.edit) sw("<circle cx='13' cy='6' r='4.5' fill='#fff' stroke='#B02E7A' stroke-width='2'/>", "Griff ziehen = Reiseh\u00f6he \u00e4ndern, Tipp ins Profil = Wegpunkt einf\u00fcgen");
   return it.join("");
@@ -851,6 +851,7 @@ function profLegend() {
 /* Kartenausschnitt im Profil: der in der Karte sichtbare Teil der Route wird hinterlegt (nur wenn hineingezoomt) */
 function drawViewBand() {
   var g = document.getElementById("pview"); if (!g || !RES || !RES.pv) return;
+  if (MOB.on) { g.innerHTML = ""; return; }   /* Handy: Karte und Profil nie gleichzeitig sichtbar */
   var me = document.getElementById("map"); if (!me || !me.offsetWidth) return;   /* Karte verborgen: letzten Stand lassen */
   /* nur der wirklich sichtbare Teil der Karte: ohne den Bereich unter dem Profilfenster */
   var mr = me.getBoundingClientRect(), pe = $("prof"), yMaxPx = mr.height;
@@ -864,8 +865,12 @@ function drawViewBand() {
   if (!nIn || nIn >= R.samples.length * 0.97) { g.innerHTML = ""; return; }
   g.innerHTML = runs.map(function (r) {
     var x0 = pv.X(Math.max(0, r.a - 0.3)), x1 = pv.X(Math.min(pv.D, r.b + 0.3));
-    return "<rect x='" + x0.toFixed(1) + "' y='" + pv.Tp + "' width='" + Math.max(3, x1 - x0).toFixed(1) + "' height='" + (pv.H - pv.Tp - pv.Bp) +
-      "' fill='#2E7DD7' fill-opacity='0.09' stroke='#2E7DD7' stroke-opacity='0.55' stroke-width='1.2' stroke-dasharray='5 3'/>";
+    /* bewusst anders als Luftraeume (blau gestrichelt): grauer Schleier, durchgezogene Raender, Balken an der Achse */
+    var wd = Math.max(3, x1 - x0).toFixed(1), yb = pv.H - pv.Bp;
+    return "<rect x='" + x0.toFixed(1) + "' y='" + pv.Tp + "' width='" + wd + "' height='" + (yb - pv.Tp) + "' fill='#0F1D2A' fill-opacity='0.07'/>" +
+      "<line x1='" + x0.toFixed(1) + "' x2='" + x0.toFixed(1) + "' y1='" + pv.Tp + "' y2='" + yb + "' stroke='#0F1D2A' stroke-opacity='0.5' stroke-width='1.2'/>" +
+      "<line x1='" + x1.toFixed(1) + "' x2='" + x1.toFixed(1) + "' y1='" + pv.Tp + "' y2='" + yb + "' stroke='#0F1D2A' stroke-opacity='0.5' stroke-width='1.2'/>" +
+      "<rect x='" + x0.toFixed(1) + "' y='" + (yb - 3) + "' width='" + wd + "' height='6' rx='2' fill='#0F1D2A' fill-opacity='0.75'/>";
   }).join("");
 }
 map.on("moveend", drawViewBand);
@@ -1019,7 +1024,17 @@ function profSvg(R) {
     else pl += " L " + X(q.x) + " " + Y(q.p);
   });
   pl += " L " + X(D) + " " + Y(G.destElev);
-  s += "<path d='" + pl + "' fill='none' stroke='#B02E7A' stroke-width='" + (mob ? 3.2 : 2.6) + "' stroke-linejoin='round'/>";
+  /* Flughoehe in der Ampelfarbe des Abschnitts (wie die Linie auf der Karte), weisser Rand fuer Kontrast */
+  var lw = mob ? 3.4 : 2.8;
+  s += "<path d='" + pl + "' fill='none' stroke='#fff' stroke-width='" + (lw + 2.4) + "' stroke-linejoin='round' stroke-opacity='0.9'/>";
+  var segs = [], curS = null;
+  sm.forEach(function (q, k) {
+    var c = (R.rs[q.ri] || R.rs[0]).cat, py = q.circ ? Y(q.p - q.circ) : Y(q.p);
+    if (!curS || curS.c !== c) { var prev = k ? sm[k - 1] : null; curS = { c: c, d: "M " + (prev ? X(prev.x) + " " + Y(prev.p) : X(0) + " " + Y(G.depElev) + " L " + X(0) + " " + Y(sm[0].p)) }; segs.push(curS); }
+    curS.d += q.circ ? " L " + X(q.x) + " " + py + coil(X(q.x), py, Y(q.p)) : " L " + X(q.x) + " " + py;
+  });
+  if (curS) curS.d += " L " + X(D) + " " + Y(G.destElev);
+  segs.forEach(function (g) { s += "<path d='" + g.d + "' fill='none' stroke='" + CAT_COL[g.c] + "' stroke-width='" + lw + "' stroke-linejoin='round' stroke-linecap='round'/>"; });
   /* Beschriftungen nach Prioritaet: Achsen, Plaetze, Hoehen, Kreisen, Max-Hoehe, Luftraumnamen */
   [0, 0.25, 0.5, 0.75, 1].forEach(function (f) {
     txts += lbl(X(D * f), H - Bp + f2 + 6, Math.round(D * f) + " NM", f2, "#61717F", f === 0 ? "start" : f === 1 ? "end" : "middle", false, [0]);
@@ -1048,7 +1063,7 @@ function profSvg(R) {
     var xm = (R.wps[k].x + R.wps[k + 1].x) / 2;
     if (X(R.wps[k + 1].x) - X(R.wps[k].x) < (mob ? 40 : 30)) return;
     if (Math.abs(sampleAt(R, xm).p - l.alt) > 150) return;   /* nur beschriften, wo die Hoehe auch geflogen wird */
-    txts += lbl(X(xm), Y(sampleAt(R, xm).p) - 7, String(l.alt), f2, "#B02E7A", "middle", true, [0, -f2 * 1.2, f2 * 1.6, -f2 * 2.4]);
+    txts += lbl(X(xm), Y(sampleAt(R, xm).p) - 7, String(l.alt), f2, "#0F1D2A", "middle", true, [0, -f2 * 1.2, f2 * 1.6, -f2 * 2.4]);
   });
   R.circles.forEach(function (c) { txts += lbl(X(c.x) + 6, Y(c.to) + f2 + 4, "\u21bb " + fmtFt(c.to), f2, "#B02E7A", "start", true); });
   if (P.maxAlt < yMax) txts += lbl(W - Rp - 4, Y(P.maxAlt) - 4, "max. " + P.maxAlt + " ft", f2, "#61717F", "end", false, [0, f2 * 1.4]);
@@ -1166,13 +1181,29 @@ function showSnap(pt) {   /* Ring um den Einrastpunkt mit Namen */
 function drawEditMarkers(R) {
   editLayer.clearLayers();
   if (!EDIT.on || !R.custom) return;
-  var num = 0;
+  /* Namen nur, wenn das Schild nichts ueberdeckt (weder andere Nummern noch Namen noch Start/Ziel); sonst nur die
+     Nummer – beim Hineinzoomen erscheint der Name, im Tooltip steht er immer */
+  var num = 0, idx = [];
+  EDIT.pts.forEach(function (pt, k) { if (k > 0 && k < EDIT.pts.length - 1 && !pt.shape) idx.push(k); });
+  function box(p, w) { return [p.x - 12, p.y - 13, p.x - 12 + w, p.y + 13]; }
+  function hit(a, b) { return a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]; }
+  var cps = {}, numB = {}, fixed = [];
+  idx.forEach(function (k) { cps[k] = map.latLngToContainerPoint([EDIT.pts[k].lat, EDIT.pts[k].lon]); numB[k] = box(cps[k], 28); });
+  [RES.G.A, RES.G.B].forEach(function (a) { var p = map.latLngToContainerPoint([a.lat, a.lon]); fixed.push([p.x - 30, p.y - 14, p.x + 30, p.y + 14]); });
+  var named = {};
+  idx.forEach(function (k) {
+    var pt = EDIT.pts[k]; if (!pt.name) return;
+    var b = box(cps[k], pt.name.length * 7.2 + 20);
+    var free = !fixed.some(function (o) { return hit(b, o); }) &&
+      !idx.some(function (j) { return j !== k && hit(b, named[j] || numB[j]); });
+    if (free) named[k] = b;
+  });
   EDIT.pts.forEach(function (pt, k) {
     if (k === 0 || k === EDIT.pts.length - 1 || pt.shape) return;
     num++;
-    var lbl = pt.name ? esc(pt.name) : String(num);
+    var lbl = named[k] ? esc(pt.name) : String(num);
     var mk = L.marker([pt.lat, pt.lon], { draggable: true, autoPan: true,
-      icon: L.divIcon({ className: "wpk" + (pt.rp ? " rp" : ""), html: "<b>" + lbl + "</b>", iconSize: null, iconAnchor: [12, 12] }) });
+      title: pt.name || "", icon: L.divIcon({ className: "wpk" + (pt.rp ? " rp" : ""), html: "<b>" + lbl + "</b>", iconSize: null, iconAnchor: [12, 12] }) });
     mk.on("dragstart", function () { EDIT.dragging = true; EDIT.dirty = true; hideCursor(); k = straighten(k); });
     mk.on("drag", function (ev) {
       var ll = ev.target.getLatLng(), sp = editSnap(ll);
@@ -1529,6 +1560,9 @@ function setupCursor() {
       profInsert(R, x); return;
     }
     if (!MOB.on) return;
+    /* nur ein Tipp auf (bzw. knapp neben) die Hoehenlinie springt zur Karte – sonst bleibt man im Profil */
+    var qq = sampleAt(R, x), ly = RES.pv.Y(qq.p - (qq.circ || 0) / 2);
+    if (Math.abs(y - ly) > (touch ? 34 : 18)) { showCursor(x, "prof"); return; }
     ev.preventDefault(); MAP_CLICK_OFF = Date.now() + 700;
     showCursor(x, "prof"); showPane("main");
     setTimeout(function () { if (CUR.mk) map.setView(CUR.mk.getLatLng(), Math.max(map.getZoom(), 10)); }, 150);

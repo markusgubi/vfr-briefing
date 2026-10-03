@@ -17,6 +17,32 @@ for (const mob of [false, true]) {
   await planRoute(page, "LOLW", "LOWZ", "10:00");
   const st = await page.evaluate(() => ({ stay: RES.P.stay, txt: (document.querySelector(".retbox") || {}).textContent || "" }));
   ok(st.stay === 120 && /2 Std\. Aufenthalt/.test(st.txt), `${tag} Rueckflug mit 2 Std. Aufenthalt: ${st.txt.slice(0, 120)}`);
+  // Hoehenlinie im Profil in Ampelfarben (wie die Karte)
+  const cols = await page.evaluate(() => [...document.querySelectorAll("#profSvg path")].map(p => p.getAttribute("stroke")).filter(c => CAT_COL.includes(c)));
+  ok(cols.length >= 1, `${tag} Hoehenlinie in Ampelfarbe: ${[...new Set(cols)].join(",")}`);
+  ok(await page.evaluate(() => { const R = RES.routes[RES.sel]; return [...new Set(R.rs.map(r => r.cat))].every(c => [...document.querySelectorAll("#profSvg path")].some(p => p.getAttribute("stroke") === CAT_COL[c])); }), `${tag} jede Einstufung der Route im Profil vertreten`);
+  if (mob) {
+    // Handy: kein Kartenausschnitt im Profil; Tipp abseits der Linie bleibt im Profil, Tipp auf die Linie springt zur Karte
+    await page.click("#mnav button[data-p='main']"); await page.waitForTimeout(300);
+    await page.evaluate(() => map.setZoom(11)); await page.waitForTimeout(400);
+    await page.click("#mnav button[data-p='pProf']"); await page.waitForTimeout(400);
+    ok(await page.evaluate(() => !document.querySelector("#pview rect")), "iPhone: kein Kartenausschnitt im Profil");
+    const pts = await page.evaluate(() => { const R = RES.routes[RES.sel], pv = RES.pv, x = R.D * 0.4, q = sampleAt(R, x), svg = $("profSvg").querySelector("svg");
+      const m = svg.getScreenCTM(), P = svg.createSVGPoint(); P.x = pv.X(x); P.y = pv.Y(q.p); const on = P.matrixTransform(m);
+      P.y = pv.Y(q.p) + 120 > pv.H - pv.Bp ? pv.Y(q.p) - 120 : pv.Y(q.p) + 120; const off = P.matrixTransform(m);
+      const pb = $("profBody"); pb.scrollLeft = Math.max(0, on.x - pb.getBoundingClientRect().x - 150);
+      const m2 = svg.getScreenCTM(); P.y = pv.Y(q.p); const on2 = P.matrixTransform(m2); P.y = off.y === undefined ? 0 : (pv.Y(q.p) + 120 > pv.H - pv.Bp ? pv.Y(q.p) - 120 : pv.Y(q.p) + 120); const off2 = P.matrixTransform(m2);
+      return { on: [on2.x, on2.y], off: [off2.x, off2.y] }; });
+    await page.touchscreen.tap(pts.off[0], pts.off[1]); await page.waitForTimeout(500);
+    ok(await page.evaluate(() => $("pProf").classList.contains("on")), "iPhone: Tipp neben die Hoehenlinie bleibt im Profil");
+    await page.touchscreen.tap(pts.on[0], pts.on[1]); await page.waitForTimeout(600);
+    ok(await page.evaluate(() => $("main").classList.contains("on")), "iPhone: Tipp auf die Hoehenlinie springt zur Karte");
+  } else {
+    await page.evaluate(() => map.setZoom(11)); await page.waitForTimeout(500);
+    const vb = await page.evaluate(() => [...document.querySelectorAll("#pview rect")].map(r => r.getAttribute("fill")));
+    ok(vb.length && vb.every(f => f === "#0F1D2A"), `Desktop: Kartenausschnitt grau (nicht wie Luftraum blau): ${vb.join(",")}`);
+    await page.evaluate(() => map.fitBounds(L.latLngBounds(RES.routes[RES.sel].coords), { animate: false })); await page.waitForTimeout(400);
+  }
   // Klick auf die Strecke
   if (mob) { await page.click("#mnav button[data-p='main']"); await page.waitForTimeout(500); }
   const R = await page.evaluate(() => { const R = RES.routes[RES.sel]; const h = R.hints.find(h => h.x0 != null && h.x0 > 2 && h.x0 < R.D - 2); const x = h ? h.x0 : R.D / 2; const q = sampleAt(R, x);
@@ -36,6 +62,22 @@ for (const mob of [false, true]) {
   ok(/Hinweise zu diesem Abschnitt|Keine besonderen Hinweise/.test(pop), `${tag} Klick auf Strecke zeigt Abschnitt-Hinweise: ${pop.slice(0, 120)}`);
   ok(!R.hint || pop.includes(R.hint.slice(0, 20)), `${tag} enthaelt den Hinweis an dieser Stelle (${R.hint})`);
   await page.screenshot({ path: `${OUT}/strecke-${tag}.png` });
+  // Bearbeiten: bei Platzmangel Nummer statt Name, beim Hineinzoomen der Name
+  if (mob) { await page.click("#mnav button[data-p='main']"); await page.waitForTimeout(300); }
+  await page.evaluate(() => { map.closePopup(); startEdit(); EDIT.pts.forEach((p, i) => { if (i > 0 && i < EDIT.pts.length - 1 && !p.shape && !p.name) p.name = "Langer Ortsname " + i; }); drawEditMarkers(RES.routes[RES.sel]); });
+  /* Namensschilder duerfen nichts ueberdecken (reine Nummern bei sehr nahen Punkten schon) */
+  const lab = async () => page.evaluate(() => { const all = [...document.querySelectorAll(".wpk")], els = all.map(e => e.getBoundingClientRect()); let ov = 0;
+    for (let i = 0; i < els.length; i++) for (let j = i + 1; j < els.length; j++) { const a = els[i], b = els[j];
+      if (!/Langer/.test(all[i].textContent) && !/Langer/.test(all[j].textContent)) continue;
+      if (a.x < b.x + b.width - 2 && b.x < a.x + a.width - 2 && a.y < b.y + b.height - 2 && b.y < a.y + a.height - 2) ov++; }
+    return { ov, named: [...document.querySelectorAll(".wpk")].filter(e => /Langer/.test(e.textContent)).length, n: els.length }; });
+  await page.evaluate(() => map.setZoom(7)); await page.waitForTimeout(500);
+  const l7 = await lab();
+  await page.evaluate(() => map.setZoom(11)); await page.waitForTimeout(500);
+  const l11 = await lab();
+  ok(l7.ov === 0 && l7.named < l7.n, `${tag} Zoom 7: kein Name ueberdeckt etwas, ${l7.named}/${l7.n} mit Namen`);
+  ok(l11.named >= l7.named, `${tag} Zoom 11: ${l11.named}/${l11.n} mit Namen`);
+  await page.evaluate(() => stopEdit());
   // Windy-Link
   if (mob) { await page.click("#mnav button[data-p='pExp']"); await page.waitForTimeout(400); }
   const wl = await page.evaluate(() => { const a = document.getElementById("bWindy"); return a ? { href: a.href, vis: a.getBoundingClientRect().width > 0, t: a.target } : null; });

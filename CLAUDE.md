@@ -184,7 +184,13 @@ Offen:
 - Einrasten beim Bearbeiten (seit 9.5, editSnap): gezogener Wegpunkt rastet an Meldepunkt/Ort in Reichweite ein
   (Maus 18 px / Finger 28 px, max. 3 NM), Ring mit Namen während des Ziehens (showSnap).
 - Kartenausschnitt im Profil (seit 9.5, drawViewBand): beim Hineinzoomen wird der in der Karte sichtbare Teil der
-  Route (ohne Fläche unter dem Profilfenster) im Profil blau hinterlegt (#pview).
+  Route (ohne Fläche unter dem Profilfenster) im Profil hinterlegt (#pview) – seit 9.16 grau mit durchgezogenen
+  Rändern und Balken an der Achse (blau sah wie ein Luftraum aus), nur Desktop (Handy: Karte/Profil nie gleichzeitig).
+- Profil seit 9.16: Flughöhenlinie in der Ampelfarbe des Abschnitts (CAT_COL, weißer Rand), Höhenzahlen dunkel
+  (Magenta nur für eigene Höhen beim Bearbeiten). Handy: nur ein Tipp auf/nahe der Höhenlinie (34 Einheiten)
+  springt zur Karte, sonst bleibt man im Profil (Cursor wird gesetzt).
+- Bearbeiten seit 9.16: Wegpunkt-Schilder zeigen den Namen nur, wenn er weder andere Nummern/Namen noch Start/Ziel
+  überdeckt (zwei Durchgänge), sonst nur die Nummer (Name im Tooltip, beim Hineinzoomen neu berechnet).
 - Luftraum-Karte (seit 9.9): Natur-/Nationalparks und Tiefflugbeschränkungen (Typ 19/29 oder Name mit
   NATIONALPARK/NATURSCHUTZ …, isNature) grün und gut sichtbar gezeichnet – nur Darstellung, kind bleibt "info",
   Bewertung unverändert. Klick in die Karte: alle Lufträume am Punkt; Antippen eines Eintrags hebt dessen Umriss
@@ -243,7 +249,7 @@ Offen:
   `node tests/e2e/grenze.mjs` (AT→IT ohne Meldepunkt/FIR), `rueckflug.mjs`, `hoehe.mjs`, `gafor.mjs`, `wetterbild.mjs`, `tauschen.mjs`, `luftraum.mjs`, `layout.mjs`, `strecke.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.15, nächste 9.16).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.16, nächste 9.17).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.
