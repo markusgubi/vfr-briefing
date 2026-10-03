@@ -17,6 +17,57 @@ var EditCtl = L.Control.extend({
   }
 });
 var editCtl = new EditCtl().addTo(map);
+/* Karte maximieren (Desktop): Seitenleiste aus-/einblenden, Esc stellt zurueck */
+var MaxCtl = L.Control.extend({
+  options: { position: "topright" },
+  onAdd: function () {
+    var d = L.DomUtil.create("div", "leaflet-bar maxctl");
+    d.innerHTML = "<a href='#' role='button' title='Karte maximieren'>\u2922</a>";
+    L.DomEvent.disableClickPropagation(d);
+    L.DomEvent.on(d, "click", function (e) { L.DomEvent.preventDefault(e); setMapMax(!document.body.classList.contains("mapmax")); });
+    return d;
+  }
+});
+new MaxCtl().addTo(map);
+function setMapMax(on) {
+  document.body.classList.toggle("mapmax", on);
+  var a = document.querySelector(".maxctl a");
+  if (a) { a.innerHTML = on ? "\u2921" : "\u2922"; a.title = on ? "Seitenleiste wieder zeigen (Esc)" : "Karte maximieren"; }
+  layoutChanged();
+}
+document.addEventListener("keydown", function (e) { if (e.key === "Escape" && document.body.classList.contains("mapmax")) setMapMax(false); });
+/* Nach Groessenaenderung: Karte neu vermessen, Profil mit fester Pixelhoehe neu zeichnen */
+var layoutRaf = 0;
+function layoutChanged() {
+  cancelAnimationFrame(layoutRaf);
+  layoutRaf = requestAnimationFrame(function () {
+    map.invalidateSize({ pan: false });
+    if (RES && RES.routes && RES.routes[RES.sel] && $("prof").style.display === "block" && !MOB.on) drawProfile(RES.routes[RES.sel]);
+  });
+}
+window.addEventListener("resize", function () { if (PROF_PX) layoutChanged(); });
+/* Ziehen von Seitenleiste (Breite) und Profil (Hoehe); Werte bleiben gespeichert, Doppelklick = Standard */
+var PROF_PX = null, SIDE_W = null;
+try { PROF_PX = +localStorage.getItem("vfrProfPx") || null; SIDE_W = +localStorage.getItem("vfrSideW") || null; } catch (e) {}
+function applySideW() { if (!MOB.on) $("side").style.width = SIDE_W ? SIDE_W + "px" : ""; }
+function startResize(kind, ev) {
+  if (MOB.on || ev.button > 0) return;
+  ev.preventDefault();
+  var el = kind === "x" ? $("split") : $("profGrip"), x0 = ev.clientX, y0 = ev.clientY;
+  var w0 = $("side").getBoundingClientRect().width, h0 = $("profSvg").getBoundingClientRect().height;
+  document.body.classList.add("resizing", kind === "x" ? "rx" : "ry"); el.classList.add("on");
+  function mv(e) {
+    if (kind === "x") { SIDE_W = Math.round(Math.max(300, Math.min(window.innerWidth * 0.6, w0 + e.clientX - x0))); applySideW(); }
+    else { var mh = $("main").getBoundingClientRect().height; PROF_PX = Math.round(Math.max(130, Math.min(mh - 170, h0 - (e.clientY - y0)))); }
+    layoutChanged();
+  }
+  function up() {
+    document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up);
+    document.body.classList.remove("resizing", "rx", "ry"); el.classList.remove("on");
+    try { if (kind === "x") localStorage.setItem("vfrSideW", SIDE_W || ""); else localStorage.setItem("vfrProfPx", PROF_PX || ""); } catch (e) {}
+  }
+  document.addEventListener("mousemove", mv); document.addEventListener("mouseup", up);
+}
 L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
   maxZoom: 15, subdomains: "abc",
   attribution: "Karte: &copy; OpenStreetMap, SRTM | Stil: &copy; OpenTopoMap (CC-BY-SA) | Luftraum: openAIP | Orte: GeoNames"
@@ -852,7 +903,16 @@ function showPane(id) {
 function profSvg(R) {
   var P = RES.P, G = RES.G, sm = R.samples, D = R.D, mob = MOB.on;
   /* Handy: 880 px breites Bild (seitlich wischen), hoeher und mit groesserer Schrift */
-  var W = mob ? 880 : 1100, H = mob ? 470 : 250, Lp = mob ? 50 : 54, Rp = 12, Tp = mob ? 24 : 18, Bp = mob ? 30 : 22;
+  var W = mob ? 880 : 1100, H = mob ? 470 : 250;
+  /* Desktop: vom Nutzer gezogene Profilhoehe in Pixeln -> Bildhoehe passend zur aktuellen Breite */
+  /* Desktop: Bild in tatsaechlicher Pixelbreite zeichnen (Schrift bleibt bei jeder Groesse gleich gross);
+     Hoehe wie bisher im Seitenverhaeltnis oder wie vom Nutzer gezogen */
+  var pw = !mob && ($("profSvg").getBoundingClientRect().width || $("main").getBoundingClientRect().width - 36);
+  if (pw > 300) {
+    W = Math.round(Math.max(600, Math.min(2600, pw)));
+    H = PROF_PX ? Math.round(Math.max(130, Math.min(900, PROF_PX))) : Math.round(W * 250 / 1100);
+  }
+  var Lp = mob ? 50 : 54, Rp = 12, Tp = mob ? 24 : 18, Bp = mob ? 30 : 22;
   var f1 = mob ? 14 : 11, f2 = mob ? 12.5 : 10;
   var top = 0, i, g;
   sm.forEach(function (q) { top = Math.max(top, q.tm, q.p); });
@@ -1483,6 +1543,13 @@ function setupCursor() {
   $("prefGafor").addEventListener("change", saveSettings);
   $("retOn").addEventListener("change", function () { $("retRow").style.display = this.checked ? "" : "none"; saveSettings(); });
   if (isMob()) setupMobile();
+  else {   /* Desktop: Seitenleiste und Profil per Ziehen anpassen, Doppelklick = Standardgroesse */
+    applySideW(); if (SIDE_W) setTimeout(function () { map.invalidateSize(); }, 0);
+    $("split").addEventListener("mousedown", function (e) { startResize("x", e); });
+    $("profGrip").addEventListener("mousedown", function (e) { startResize("y", e); });
+    $("split").addEventListener("dblclick", function () { SIDE_W = null; applySideW(); try { localStorage.removeItem("vfrSideW"); } catch (e) {} layoutChanged(); });
+    $("profGrip").addEventListener("dblclick", function () { PROF_PX = null; try { localStorage.removeItem("vfrProfPx"); } catch (e) {} layoutChanged(); });
+  }
   $("lgT").addEventListener("click", function () { var l = $("legend"); l.classList.toggle("col"); $("lgA").innerHTML = l.classList.contains("col") ? "&#9656;" : "&#9662;"; });
   setupCursor();
   /* Beim Drucken alle aufklappbaren Bereiche oeffnen */

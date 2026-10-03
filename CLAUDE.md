@@ -208,6 +208,12 @@ Offen:
   Welche FIC-Frequenz zu NORTH/SOUTH gehört, steht nicht in ENR 2.1/2.2 (ENR 6) – beide angezeigt. Wien Radar hat
   keine Frequenz je Luftraum im AIP → "Sektorfrequenz über FIS/ICAO-Karte". Bei neuer AIRAC-Ausgabe neu bauen.
   Test: tests/unit/aip.test.mjs, luftraum.mjs (CTA GLOCKNER).
+- Desktop-Layout (seit 9.13, nur ohne Reiter-Ansicht): Seitenleiste per Leiste #split 300 px bis 60 % breit ziehen,
+  Profilhöhe per Griff #profGrip (130 px bis Kartenhöhe − 170), Doppelklick = Standard, Werte in localStorage
+  (vfrSideW, vfrProfPx). Karte maximieren über Knopf ⤢ (body.mapmax blendet die Seitenleiste aus, Esc zurück).
+  Das Profil wird auf dem Desktop in tatsächlicher Pixelbreite gezeichnet (W = Breite, H = Nutzerhöhe bzw. 250/1100
+  der Breite), damit die Schrift bei jeder Größe gleich bleibt. layoutChanged: map.invalidateSize + Profil neu.
+  Test: `node tests/e2e/layout.mjs`.
 - Knopf "tauschen" (seit 9.6, swapFromTo): Von/Nach mit einem Klick tauschen, wird gespeichert; Test tests/e2e/tauschen.mjs.
 - orte.json: englische Exonyme durch Landesnamen ersetzt (Wien, München, Venezia …), Stadtteile ≤ 5,5 km um
   Großstädte entfernt. GAFOR-Linien seit 9.5 dicker (6 px, weißer Unterstrich).
@@ -226,10 +232,10 @@ Offen:
   Rechenlogik mit künstlichem Gelände, ohne Netz). Lokal mit `npm run dev` testen.
 - Browser-Tests mit simulierten Datenquellen (tests/e2e, brauchen Playwright und laufendes `npm run dev`):
   `node tests/e2e/run.mjs LOLW LOWZ gut`, `node tests/e2e/edit.mjs`, `node tests/e2e/lang.mjs` (> 250 NM),
-  `node tests/e2e/grenze.mjs` (AT→IT ohne Meldepunkt/FIR), `rueckflug.mjs`, `hoehe.mjs`, `gafor.mjs`, `wetterbild.mjs`, `tauschen.mjs`, `luftraum.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
+  `node tests/e2e/grenze.mjs` (AT→IT ohne Meldepunkt/FIR), `rueckflug.mjs`, `hoehe.mjs`, `gafor.mjs`, `wetterbild.mjs`, `tauschen.mjs`, `luftraum.mjs`, `layout.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.12, nächste 9.13).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.13, nächste 9.14).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.

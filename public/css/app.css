@@ -211,3 +211,18 @@ body.editmode .editctl a{background:#B02E7A!important;color:#fff!important}
 .asfoot .asfit{display:block;margin-top:6px;padding:6px 0 2px;border-top:1px solid #EEF2F5;font-size:12.5px;color:#1F5FA8}
 .asfq{font-size:12.5px;color:#0F1D2A;margin-top:2px}
 .asfq.unk{color:#8A5A00}
+
+/* Desktop-Layout: Seitenleiste breiter/schmaler ziehen, Profilhoehe ziehen, Karte maximieren (nur Desktop) */
+#split{flex:none;width:7px;margin:0 -3px 0 -4px;cursor:col-resize;z-index:1003;position:relative;background:transparent}
+#split::after{content:"";position:absolute;top:50%;left:2px;width:3px;height:40px;margin-top:-20px;border-radius:2px;background:#C9D3DC}
+#split:hover::after,#split.on::after{background:#1F5FA8}
+#profGrip{position:absolute;top:-5px;left:0;right:0;height:10px;cursor:ns-resize;z-index:2}
+#profGrip::after{content:"";position:absolute;top:3px;left:50%;width:44px;height:4px;margin-left:-22px;border-radius:2px;background:#C9D3DC}
+#profGrip:hover::after,#profGrip.on::after{background:#1F5FA8}
+body.resizing,body.resizing *{user-select:none!important}
+body.resizing.rx,body.resizing.rx *{cursor:col-resize!important}
+body.resizing.ry,body.resizing.ry *{cursor:ns-resize!important}
+body.mapmax #side,body.mapmax #split{display:none}
+.maxctl a{font-size:17px;line-height:30px}
+@media (max-width:860px),(pointer:coarse) and (max-width:1400px){#split,#profGrip,.maxctl{display:none!important}}
+@media print{#split,#profGrip,.maxctl{display:none!important}}

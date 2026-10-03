@@ -10,14 +10,14 @@
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <link rel="icon" type="image/svg+xml" href="img/icon.svg">
 <link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
-<title>VFR Briefing 9.12</title>
+<title>VFR Briefing 9.13</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
 <div id="side">
   <h1>VFR <em>&#9656;</em> Route &amp; Wetter</h1>
-  <div class="sub">Version 9.12 &middot; sicherste Route aus 5 Wettermodellen, Gel&auml;nde, Luftraum und METAR/TAF</div>
+  <div class="sub">Version 9.13 &middot; sicherste Route aus 5 Wettermodellen, Gel&auml;nde, Luftraum und METAR/TAF</div>
   <div class="noprint">
     <label>Von</label>
     <div class="acw"><input id="fIn" placeholder="ICAO oder Name, z.B. LOLW" autocomplete="off"><div class="ac" id="fAc"></div></div>
@@ -59,6 +59,7 @@
   <details class="src"><summary>Datenquellen &amp; Annahmen</summary>Wetter: Open-Meteo (ICON, AROME, ECMWF, UKMO, GFS); Wolkenbasis aus Feuchteprofil (950&ndash;700&thinsp;hPa), R&uuml;ckfall Taupunktdifferenz. METAR/TAF: NOAA AviationWeather. Gel&auml;nde: AWS Terrain Tiles (+150&thinsp;ft Puffer). Luftraum, Flugpl&auml;tze, Frequenzen &amp; Meldepunkte, Pisten: openAIP (Community-Daten, nicht amtlich). Orte: GeoNames (CC BY 4.0). Zuständige Stellen, APP-/FIS-Sektoren und ATS-Frequenzen Österreich: Auszug aus AIP Austria ENR 2.1/2.2 (Austro Control, nicht amtlich verwendbar). Staatsgrenzen: Natural Earth (gemeinfrei, ca. 1 km genau). Wind bei Start/Landung: METAR/TAF, sonst Modelle (10 m). Abstand zu Lufträumen 1&thinsp;NM seitlich, 300&thinsp;ft vertikal. Kurse magnetisch, Missweisung 5&deg;&thinsp;O.</details>
   <div style="margin-top:8px"><a href="/logout" style="color:#1F5FA8">Abmelden</a></div></div>
 </div>
+<div id="split" title="Breite ziehen (Doppelklick = Standard)"></div>
 <div id="main">
   <div id="map"></div>
   <div id="editBar"><b>&#9998; Bearbeiten</b><span>Punkte ziehen &middot; <b>+</b> einf&uuml;gen &middot; H&ouml;hen im Profil ziehen &middot; Tipp ins Profil = Wegpunkt</span><button id="editDone" type="button">&#10003; Fertig</button></div>
@@ -93,7 +94,7 @@
     <div><b style="display:inline-block;width:17px">&#9873;</b>Grenz&uuml;bertritt</div>
     <div style="font-size:10.5px;color:#61717F;margin-top:4px">Klick in die Karte: alle Lufträume an diesem Punkt</div></div>
   </div>
-  <div id="prof"><div id="profHead"><span>Vertikalprofil</span><span id="profTgl">&#9660;</span></div><div id="profBody"><div id="profInner"><div id="profSvg"></div><div id="profTouch"></div></div></div><div id="altBar"></div><div id="profLeg"></div></div>
+  <div id="prof"><div id="profGrip" title="H&ouml;he des Profils ziehen (Doppelklick = Standard)"></div><div id="profHead"><span>Vertikalprofil</span><span id="profTgl">&#9660;</span></div><div id="profBody"><div id="profInner"><div id="profSvg"></div><div id="profTouch"></div></div></div><div id="altBar"></div><div id="profLeg"></div></div>
 </div>
 <nav id="mnav"><button data-p="side" class="on"><b>&#9998;</b>Planen</button><button data-p="main"><b>&#128506;</b>Karte</button><button data-p="pProf" disabled><b>&#9968;</b>Profil</button><button data-p="pRes" disabled><b>&#9776;</b>Ergebnis</button><button data-p="pExp" disabled><b>&#8681;</b>Export</button></nav>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
