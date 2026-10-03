@@ -3,7 +3,7 @@
 /* Feines Routennetz (~5 NM laengs, 13 Spuren quer) fuer Talrouten,
    groeberes Wetterraster (~12 NM, 5 Spuren) zur Schonung des Open-Meteo-Kontingents */
 function buildGraph(A, B, d) {
-  var crs = courseDeg(A, B), N = Math.max(6, Math.min(40, Math.round(d / 5))), K = 6;
+  var crs = courseDeg(A, B), N = Math.max(6, Math.min(70, Math.round(d / 5))), K = 6;
   var hw = Math.max(10, Math.min(30, d * 0.3)), s = hw / K, step = d / N;
   var nodes = [], idx = {}, i, j;
   for (i = 0; i <= N; i++) {
@@ -59,7 +59,7 @@ function buildGraph(A, B, d) {
     });
   }
   var order = edges.map(function (e, k) { return k; }).sort(function (x, y) { return nodes[edges[x].a].i - nodes[edges[y].a].i; });
-  var Nw = Math.max(3, Math.min(12, Math.round(d / 12))), sw = d / Nw, wpts = [];
+  var Nw = Math.max(3, Math.min(20, Math.round(d / 12))), sw = d / Nw, wpts = [];
   for (i = 0; i <= Nw; i++) {
     var cw = lerp(A, B, i / Nw), ii = i;
     [-hw, -hw / 2, 0, hw / 2, hw].forEach(function (o) {
@@ -196,6 +196,12 @@ function edgeDyn(G, ei, depH, P) {
   var need = xb < ramp ? e.tmaxC + full * xb / ramp : e.tmax + full;
   r.climbDef = Math.max(0, need - (G.depElev + climbGrad(P) * xb));
   r.noCirc = na.along < NO_CIRC_NM;
+  /* Sinkfaehigkeit: Hoehe, die mit normalem Sinkflug bis zur Platzhoehe am Ziel noch erlaubt ist
+     (kein Sinken im Vollkreis ueber dem Platz) */
+  var rampA = rampArrNm(P), xa = Math.max(0, (G.poly ? G.polyLen : G.d) - na.along);
+  var needA = xa < rampA ? e.tmaxC + full * xa / rampA : e.tmax + full;
+  r.descDef = Math.max(0, needA - (G.destElev + descGrad(P) * xa));
+  r.descDefS = Math.max(0, needA - (G.destElev + STEEP_F * descGrad(P) * xa));
   G.dyn[key] = r;
   return r;
 }
@@ -216,6 +222,9 @@ function edgeCost(r, mode) {
   /* Gelaende nicht mit normalem Steigflug erreichbar: im Abflugbereich stark (dort wird nie gekreist),
      unterwegs schwaecher bestraft (Kreisen moeglich, aber Nachteil) */
   if (r.climbDef > 0) c += (r.noCirc ? 4 : 1) * r.e.len * Math.min(3, r.climbDef / 500) + (r.noCirc && r.climbDef > 500 ? 300 : 0);
+  /* Gelaende vor dem Ziel laesst normalen Sinkflug zur Platzhoehe nicht zu: stark bestraft (nie Spirale) */
+  if (r.descDef > 0) c += r.e.len * Math.min(3, r.descDef / 500);
+  if (r.descDefS > 0) c += 4 * r.e.len * Math.min(3, r.descDefS / 500) + (r.descDefS > 500 ? 300 : 0);
   /* GAFOR-Bonus nur in der eigenen GAFOR-Suche (zusaetzlicher Kandidat), nie in der normalen Suche */
   if (mode.gafor && r.e.gafor) c -= r.e.len * 0.15;
   return c;
@@ -250,8 +259,12 @@ function directPath(G) {
 var NO_CIRC_NM = 8;   /* im Abflugbereich wird nie kreisend gestiegen (Start in Platzhoehe, normaler Steigflug) */
 function climbGrad(P) { return P.climb * 60 / (P.tas * 0.8); }   /* ft je NM im Steigflug (Steig-Fahrt ~80 % TAS) */
 function descGrad(P) { return P.desc * 60 / P.tas; }
+/* Steiler Sinkflug (doppelte Sinkrate) nur, wo das Gelaende vor dem Ziel es verlangt - mit Hinweis */
+var STEEP_F = 2;
 /* Abflug-/Anflugbereich: so lang, wie ein normaler Steigflug fuer den vollen Gelaendeabstand braucht (+1 NM) */
 function rampNm(P) { return Math.max(3, (P.terrClr + DEM.buf) / climbGrad(P) + 1); }
+/* Anflugbereich: so lang, wie ein normaler Sinkflug fuer den vollen Gelaendeabstand braucht (+1 NM) */
+function rampArrNm(P) { return Math.max(3, (P.terrClr + DEM.buf) / descGrad(P) + 1); }
 function semiOk(alt, mc) { var b = mc < 180 ? 3500 : 4500; return alt >= b && (alt - b) % 2000 === 0; }
 function pickAlt(set, tmax, P, mc) {
   var target = Math.min(tmax + DEM.buf + P.prefAgl, 10000), best = null;
@@ -278,6 +291,7 @@ function gsCalc(tas, tc, w) {
 }
 var CAUSE = { wx: "Wolkenbasis zu nah am Gelände", air: "Luftraum lässt keine sichere Höhe zu",
   climb: "Gelände steigt schneller an, als es die eingestellte Steigrate erlaubt",
+  desc: "Gelände vor dem Ziel lässt normalen Sinkflug mit der eingestellten Sinkrate nicht zu",
   low: "geplante Höhe zu nah am Gelände", cloud: "geplante Höhe in oder an den Wolken",
   forb: "Flugbeschränkungs-/Sperrgebiet wird berührt", terr: "Gelände über Maximalhöhe",
   nodata: "keine Geländedaten (werden nachgeladen)" };
@@ -333,7 +347,7 @@ function evalRoute(G, P, depH, path, id, name, opt) {
     var g = gsCalc(P.tas, r.e.crs, r.wind); r.gs = g.gs; r.wca = g.wca;
   });
   var D = cum, depElev = G.depElev, destElev = G.destElev;
-  var gC = climbGrad(P), gD = descGrad(P), full = P.terrClr + DEM.buf, ramp = rampNm(P);
+  var gC = climbGrad(P), gD = descGrad(P), gS = STEEP_F * gD, full = P.terrClr + DEM.buf, ramp = rampNm(P), rampA = rampArrNm(P);
   /* Automatische Sinkflugplanung zum Ziel erst nach der letzten selbst gesetzten Hoehe */
   var lastUserX = rs.reduce(function (m, r) { return r.user ? Math.max(m, r.x1) : m; }, -1);
   /* Stichproben alle 0,5 NM */
@@ -349,28 +363,37 @@ function evalRoute(G, P, depH, path, id, name, opt) {
       var base = (isFinite(bA) && isFinite(bB)) ? bA + (bB - bA) * f : Math.min(bA, bB);
       var fA = r.wa ? r.wa.fz : null, fB = r.wb ? r.wb.fz : null;
       var fz = (fA != null && fB != null) ? fA + (fB - fA) * f : (fA != null ? fA : fB);
-      var dF = Math.min(xx, D - xx), near = dF < ramp;
+      /* fr: Anteil des vollen Gelaendeabstands im Abflug-/Anflugbereich (0 am Platz, 1 ausserhalb) */
+      var dF = Math.min(xx, D - xx), fr = Math.min(1, xx / ramp, (D - xx) / rampA), near = fr < 1;
       /* Gelaendeanforderung: im Abflug-/Anflugbereich von der Platzhoehe ansteigend (Mittellinie),
          sonst voller Abstand ueber dem hoechsten Punkt +-1 NM. "hard" = mind. 500 ft (+DEM-Puffer). */
+      /* am Platz selbst zaehlt die Platzhoehe (DEM-Kachel kann neben der Piste hoeher liegen) */
+      if (xx < 1) tc = Math.min(tc, Math.max(depElev, tc - DEM.buf));
+      if (D - xx < 1) tc = Math.min(tc, Math.max(destElev, tc - DEM.buf));
       var ter = near ? tc : tm;
-      var req = near ? tc + full * dF / ramp : tm + full;
-      var hard = Math.min(req, near ? tc + (DEM.buf + 500) * dF / ramp : tm + DEM.buf + 500);
+      var req = near ? tc + full * fr : tm + full;
+      var hard = Math.min(req, near ? tc + (DEM.buf + 500) * fr : tm + DEM.buf + 500);
       var hi = Math.min(r.iv[1], P.maxAlt);
       if (r.wxFail) hi = Math.min(hi, Math.max(r.ceilWx, r.floor));
       /* Geplant wird mit 300 ft Reserve ueber dem Mindestabstand, soweit Wolken/Luftraum Platz lassen */
-      var aim = Math.max(req, Math.min(req + 300 * Math.min(1, dF / ramp), hi));
+      var aim = Math.max(req, Math.min(req + 300 * fr, hi));
       var lo = (r.iv[0] > r.floor + 1 && dF >= 5) ? Math.max(aim, r.iv[0]) : aim;
-      /* Eigene Hoehe wird so geflogen, wie eingestellt; nur automatische Hoehen planen den Sinkflug zum Ziel ein */
-      var T = r.user || xx < lastUserX ? r.alt : Math.min(r.alt, destElev + 1000 + gD * Math.max(0, D - xx - 2));
-      sm.push({ x: xx, ri: ri, f: f, lat: c.lat, lon: c.lon, tc: tc, tm: tm, ter: ter, base: base, fz: fz, dF: dF,
+      /* Sinkflug wie Steigflug: Hoechstens so hoch, dass mit der eingestellten Sinkrate gleichmaessig bis zur
+         Platzhoehe am Ziel gesunken werden kann (gilt auch fuer eigene Hoehen - sie werden bis zum
+         Sinkflugbeginn gehalten). Kein Sinken im Vollkreis ueber dem Platz. */
+      var cap = destElev + gD * (D - xx), capS = destElev + gS * (D - xx);
+      var T = r.user || xx < lastUserX ? r.alt : Math.min(r.alt, cap);
+      sm.push({ x: xx, ri: ri, f: f, lat: c.lat, lon: c.lon, tc: tc, tm: tm, ter: ter, base: base, fz: fz, dF: dF, fr: fr, cap: cap, capS: capS,
         req: req, hard: hard, lo: lo, hi: hi, T: T, user: r.user, nod: nod });
     }
   });
   var n = sm.length;
   for (i = 0; i < n; i++) sm[i].dx = i ? sm[i].x - sm[i - 1].x : 0;
+  /* tiefste Hoehe nach Sinken ab v: normal mit gD, ueber dem normalen Anflugweg zum Ziel bis gS */
+  function desc(v, b) { var dx = sm[b].dx; return Math.max(v - gS * dx, Math.min(v - gD * dx, sm[b].cap)); }
   function hull(v) {   /* vorausschauend steigen (rueckwaerts), begrenzt sinken (vorwaerts) */
     for (var a = n - 2; a >= 0; a--) v[a] = Math.max(v[a], v[a + 1] - gC * sm[a + 1].dx);
-    for (var b = 1; b < n; b++) v[b] = Math.max(v[b], v[b - 1] - gD * sm[b].dx);
+    for (var b = 1; b < n; b++) v[b] = Math.max(v[b], desc(v[b - 1], b));
     return v;
   }
   /* Eigene Hoehen gehen in die Vorausschau ein: Eine hoehere eigene Hoehe wird schon VOR Beginn ihrer
@@ -379,14 +402,22 @@ function evalRoute(G, P, depH, path, id, name, opt) {
   var LT = hull(sm.map(function (q) { return q.user ? -Infinity : q.req; }));   /* nur Gelaende */
   var Ur = sm.map(function (q) { return q.hi; });
   for (i = n - 2; i >= 0; i--) Ur[i] = Math.min(Ur[i], Ur[i + 1] + gD * sm[i + 1].dx);
-  var p = new Array(n), circ = new Array(n).fill(0), atMax = new Array(n).fill(false);
+  /* Obergrenze durch den Sinkflug zum Ziel: normaler Anflugweg (cap); hoeher nur, soweit Gelaende davor es
+     verlangt (hoechste Anforderung bis zum Ziel), nie ueber dem steilen Anflugweg (capS). Zum Ziel hin
+     nie steigend, damit das Profil im Anflug keine Wellen schlaegt. */
+  var capT = new Array(n), ltRun = -Infinity;
+  for (i = n - 1; i >= 0; i--) { ltRun = Math.max(ltRun, LT[i]); capT[i] = Math.max(sm[i].cap, Math.min(ltRun, sm[i].capS)); }
+  var Uc = Ur.map(function (u, k) { return Math.min(u, capT[k]); });
+  var p = new Array(n), circ = new Array(n).fill(0), atMax = new Array(n).fill(false), atCap = new Array(n).fill(false);
   p[0] = depElev;   /* Start immer in Platzhoehe */
   for (i = 1; i < n; i++) {
     var q = sm[i], reach = p[i - 1] + gC * q.dx;
     var t = q.user ? Math.max(q.T, Lr[i]) : Math.max(Lr[i], Math.min(Math.max(Ur[i], Lr[i]), q.T));
-    t = Math.max(t, p[i - 1] - gD * q.dx);
+    t = Math.max(t, desc(p[i - 1], i));
+    /* Hoehe ueber dem normalen Anflugweg nur, soweit das Gelaende es verlangt, und nie ueber dem steilen */
+    if (t > capT[i]) { if (t > capT[i] + 1 && capT[i] >= q.capS - 1) atCap[i] = true; t = capT[i]; }
     if (t > reach + 1) {
-      if (!q.user && q.x >= NO_CIRC_NM && LT[i] > reach + 1 && reach >= q.hard - 1 && q.hi >= LT[i] - 1) { circ[i] = LT[i] - reach; t = LT[i]; }
+      if (!q.user && q.x >= NO_CIRC_NM && LT[i] > reach + 1 && reach >= q.hard - 1 && q.hi >= LT[i] - 1 && LT[i] <= q.capS) { circ[i] = LT[i] - reach; t = LT[i]; }
       else { t = reach; atMax[i] = true; }
     }
     p[i] = t;
@@ -400,7 +431,7 @@ function evalRoute(G, P, depH, path, id, name, opt) {
     for (a = 0; a < n; a++) { rmx[a] = p[a]; for (b = a + 1; b < n && sm[b].x - sm[a].x <= WIN; b++) rmx[a] = Math.max(rmx[a], p[b]); }
     for (a = 1; a < n - 1; a++) {
       if (sm[a].user || circ[a]) continue;
-      var fill = Math.min(lm[a], rmx[a], Ur[a]);
+      var fill = Math.min(lm[a], rmx[a], Uc[a]);
       if (fill > p[a] + 1) p[a] = fill;
     }
   })();
@@ -417,8 +448,21 @@ function evalRoute(G, P, depH, path, id, name, opt) {
     sm[i].t = tm0; sm[i].circ = circ[i] > 150 ? circ[i] : 0;
   }
   var circMin = circles.reduce(function (s, c) { return s + c.min; }, 0);
-  var excess = p[n - 1] - (destElev + 1000), spiralMin = excess > 300 ? excess / P.desc : 0;
-  var arrMin = tm0 + spiralMin;
+  var arrMin = tm0;
+  /* Steiler Sinkflug: Abschnitte, in denen schneller als mit der eingestellten Sinkrate gesunken wird */
+  var steep = [], curS = null;
+  for (i = 1; i < n; i++) {
+    var gr = sm[i].dx > 0 ? (p[i - 1] - p[i]) / sm[i].dx : 0;
+    if (gr > gD * 1.05) {
+      var fpm = gr * rs[sm[i].ri].gs / 60;
+      if (curS && sm[i].x - curS.x1 < 3.01) { curS.x1 = sm[i].x; curS.fpm = Math.max(curS.fpm, fpm); }
+      else { curS = { x0: sm[i - 1].x, x1: sm[i].x, fpm: fpm }; steep.push(curS); }
+    }
+  }
+  /* Sinkflugbeginn (Top of Descent): ab hier geht es ohne erneutes Steigen bis zum Ziel abwaerts */
+  var tod = n - 1;
+  while (tod > 0 && p[tod - 1] >= p[tod] - 1) tod--;
+  while (tod < n - 1 && p[tod + 1] >= p[tod] - 1) tod++;
   rs.forEach(function (r) { r.tStart = null; r.tEnd = null; r.cat = 0; r.minCloud = Infinity; r.minTerr = Infinity; r.conf = false; r.soft = false; r.circ = false; });
   circles.forEach(function (c) { rs[sampleAt({ samples: sm }, c.x).ri].circ = true; });
   /* Bewertung der Stichproben */
@@ -434,7 +478,8 @@ function evalRoute(G, P, depH, path, id, name, opt) {
     else if (s.p < s.hard - 1) {
       var climbing = false;
       for (var b = i; b > 0 && b > i - 60; b--) { if (atMax[b]) { climbing = true; break; } if (p[b] <= p[b - 1] + 1) break; }
-      cause = climbing ? "climb" : s.user ? "low" : (isFinite(s.base) && s.base - P.cloudClr < s.req) ? "wx" : "air";
+      var capped = atCap[i] || s.p >= s.capS - 1;   /* Sinkflug zum Ziel begrenzt die Hoehe hier */
+      cause = climbing ? "climb" : capped ? "desc" : s.user ? "low" : (isFinite(s.base) && s.base - P.cloudClr < s.req) ? "wx" : "air";
     } else if (!s.user && s.lo > Ur[i] + 1) cause = (r.wxFail || s.base - P.cloudClr < s.lo) ? "wx" : "air";
     else if (s.dF >= 1 && isFinite(s.base) && s.p > s.base - 100) cause = (!s.user && r.wxFail) ? "wx" : "cloud";
     s.conf = !!cause; s.cause = cause;
@@ -447,13 +492,14 @@ function evalRoute(G, P, depH, path, id, name, opt) {
     if (!cause && i && s.p < s.req - 50) {
       var clr = s.p - s.ter;
       if (curT && s.x - curT.x1 < 1.01) { curT.x1 = s.x; if (clr < curT.clr) curT.clr = clr; }
-      else { curT = { x0: s.x, x1: s.x, clr: clr, climb: atMax[i] || (p[i] > p[i - 1] + 1) }; tight.push(curT); }
+      else { curT = { x0: s.x, x1: s.x, clr: clr, climb: atMax[i] || (p[i] > p[i - 1] + 1), desc: s.p >= s.capS - 1 && p[i] < p[i - 1] - 1 }; tight.push(curT); }
       r.soft = true;
     } else curT = null;
-    if (s.dF >= ramp) { if (s.p - s.tm < minTerr) { minTerr = s.p - s.tm; minTerrX = s.x; } r.minTerr = Math.min(r.minTerr, s.p - s.tm); }
+    if (s.fr >= 1) { if (s.p - s.tm < minTerr) { minTerr = s.p - s.tm; minTerrX = s.x; } r.minTerr = Math.min(r.minTerr, s.p - s.tm); }
     if (isFinite(s.base)) { minCloud = Math.min(minCloud, s.base - s.p); r.minCloud = Math.min(r.minCloud, s.base - s.p); }
   }
   var cat = 0, maxRisk = 0, rsum = 0, worstReason = null;
+  steep.forEach(function (st) { if (st.fpm > P.desc * 1.5) rs.forEach(function (r) { if (r.x1 > st.x0 && r.x0 < st.x1) r.soft = true; }); });
   rs.forEach(function (r) {
     r.cat = (r.conf || r.blocked || r.terrainHigh || r.nogo || r.minCloud < 0) ? 2
       : (r.risk >= 0.35 || r.minCloud < 1000 || r.minTerr < P.terrClr + 300 || r.soft || r.circ) ? 1 : 0;
@@ -498,11 +544,11 @@ function evalRoute(G, P, depH, path, id, name, opt) {
   if (isFinite(minCloud) && minCloud < 2500) score -= Math.min(25, Math.max(0, (2500 - minCloud) / 2500 * 25));
   if (minTerr < 1500) score -= Math.min(15, Math.max(0, (1500 - minTerr) / 1500 * 15));
   tight.forEach(function (t) { score -= Math.min(15, 3 + Math.max(0, P.terrClr - t.clr) / 100); });
-  score -= Math.min(20, circMin * 2) + Math.min(6, spiralMin * 0.5);
+  score -= Math.min(20, circMin * 2);
   var rawScore = score, confLen = conflicts.reduce(function (s, c) { return s + c.x1 - c.x0 + 0.5; }, 0);
   if (cat === 2) score = Math.min(score, 30); else if (cat === 1) score = Math.min(score, 70);
   return { rawScore: rawScore, confLen: Math.round(confLen * 2) / 2, circles: circles, tight: tight, id: id, name: name, rs: rs, path: path, key: path.join(","),
-    G: G, userAlt: opt.userAlt || null, D: D, samples: sm, circMin: circMin, spiralMin: spiralMin,
+    G: G, userAlt: opt.userAlt || null, D: D, samples: sm, circMin: circMin, spiralMin: 0, steep: steep, descRate: P.desc, tod: sm[tod] ? { x: sm[tod].x, p: p[tod], t: sm[tod].t } : null,
     depMin: depH * 60, arrMin: arrMin, ete: arrMin - depH * 60, maxAlt: Math.max.apply(null, p), cruiseMax: Math.max.apply(null, rs.map(function (r) { return r.alt; })),
     minTerr: minTerr, minTerrX: minTerrX, terrReserve: P.terrClr + 300, minCloud: minCloud, maxRisk: maxRisk, avgRisk: avgRisk, worstReason: worstReason, conflicts: conflicts,
     entries: entries, clr: clr, cat: cat, score: Math.max(0, Math.round(score)), night: night, dusk: dusk, dawn: dawn };
@@ -541,6 +587,7 @@ function polyGraph(Gb, pts) {
     nd.wps = ds.filter(function (x) { return x.d <= lim; }).slice(0, 2).map(function (x) { return x.k; });
     nd.wxFar = ds[0].d > WX_FAR_NM ? ds[0].d : 0;
   });
+  G.polyLen = along;
   G.nodes = nodes; G.edges = edges; G.N = nodes.length - 1; G.start = 0; G.end = nodes.length - 1;
   G.order = edges.map(function (e, k) { return k; }); G.emap = {}; G.idx = {};
   G.nw = {}; G.dyn = {}; G.poly = true;
@@ -660,11 +707,12 @@ function issueOf(R) {
   if (isFinite(R.minCloud) && R.minCloud < 1500) return "Wolkenabstand nur ~" + fmtFt(R.minCloud) + " ft";
   if (R.tight && R.tight.length) {
     var tt = R.tight.slice().sort(function (a, b) { return a.clr - b.clr; })[0];
-    return (tt.climb ? "im Steigflug " : "") + "Gel\u00e4ndeabstand nur ~" + fmtFt(Math.max(0, tt.clr)) + " ft bei NM " + Math.round(tt.x0);
+    return (tt.climb ? "im Steigflug " : tt.desc ? "im Sinkflug " : "") + "Gel\u00e4ndeabstand nur ~" + fmtFt(Math.max(0, tt.clr)) + " ft bei NM " + Math.round(tt.x0);
   }
   if (R.minTerr < R.terrReserve) return "Gel\u00e4ndeabstand nur ~" + Math.floor(R.minTerr / 50) * 50 + " ft bei NM " + Math.round(R.minTerrX) + " (weniger als 300 ft Reserve)";
+  var stp = (R.steep || []).filter(function (st) { return st.fpm > 0; }).sort(function (a, b) { return b.fpm - a.fpm; })[0];
+  if (stp && stp.fpm > R.descRate * 1.5) return "steiler Sinkflug zum Ziel (~" + Math.round(stp.fpm / 50) * 50 + " ft/min) bei NM " + Math.round(stp.x0);
   if (R.circMin > 1) return "unterwegs kreisend steigen n\u00f6tig (~" + Math.round(R.circMin) + " min)";
-  if (R.spiralMin > 3) return "Sinkflug \u00fcber dem Ziel n\u00f6tig (~" + Math.round(R.spiralMin) + " min)";
   return null;
 }
 function whyHtml() {

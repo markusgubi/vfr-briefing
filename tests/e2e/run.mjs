@@ -30,6 +30,10 @@ if (LEAF) await page.route("https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4
 await page.route("https://*.tile.opentopomap.org/**", r => r.fulfill({ status: 404, body: "" }));
 
 await page.goto("http://127.0.0.1:8787/");
+if (await page.locator("input[name=password]").count()) {
+  await page.fill("input[name=password]", process.env.TEST_PASSWORD || "test-passwort");
+  await Promise.all([page.waitForNavigation(), page.click("button[type=submit]")]);
+}
 await page.waitForFunction(() => window.APTDB && APTDB.AT && APTDB.AT.length);
 await page.evaluate(async ([f, t, climb]) => {
   await loadCountry("SI", "apt").catch(() => {});

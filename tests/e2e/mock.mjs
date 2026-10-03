@@ -15,6 +15,9 @@ const AIRPORTS = {
   SI: [
     { icaoCode: "LJPZ", name: "Portoroz", lat: 45.4734, lon: 13.6150, elev: 7, type: 3 },
     { icaoCode: "LJLJ", name: "Ljubljana", lat: 46.2237, lon: 14.4576, elev: 1273, type: 3 }
+  ],
+  HR: [
+    { icaoCode: "LDSP", name: "Split", lat: 43.5389, lon: 16.2980, elev: 79, type: 3 }
   ]
 };
 const FREQ = {

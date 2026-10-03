@@ -51,14 +51,30 @@ test("Eine passende selbst gesetzte Höhe ergibt eine gute Route.", () => {
   assert.equal(R.cat, 0);
 });
 
-test("Eine selbst gesetzte Höhe auf der letzten Teilstrecke wird geflogen, nicht vom Sinkflug überstimmt.", () => {
+test("Eine selbst gesetzte Höhe auf der letzten Teilstrecke wird bis zum Sinkflugbeginn gehalten, dann flach bis zum Platz gesunken.", () => {
   const app = loadApp();
   const { G, P, A, B } = setup(app, () => 1000);
   const M = { lat: 47.0, lon: 13.7, name: "MITTE" };
-  const R = app.routeFromPoints(G, P, [A, M, B], { 1: 7500 });
-  const kurzVorZiel = R.samples.filter(q => q.x > R.D - 4 && q.x < R.D - 1);
-  assert.ok(kurzVorZiel.every(q => Math.abs(q.p - 7500) < 1), kurzVorZiel.map(q => Math.round(q.p)).join(","));
-  assert.ok(R.spiralMin > 0, "Sinken im Vollkreis über dem Platz");
+  const R = app.routeFromPoints(G, P, [A, M, B], { 1: 4500 });
+  const gD = app.descGrad(P), tod = R.D - (4500 - G.destElev) / gD;
+  const leg1 = R.samples.filter(q => R.rs[q.ri].e.leg === 1 && q.x > R.rs.find(r => r.e.leg === 1).x0 + 1 && q.x < tod - 0.5);
+  assert.ok(leg1.length > 3 && leg1.every(q => Math.abs(q.p - 4500) < 1), leg1.map(q => Math.round(q.p)).join(","));
+  assert.equal(Math.round(R.samples[R.samples.length - 1].p), Math.round(G.destElev), "Ankunft in Platzhöhe");
+  for (let i = 1; i < R.samples.length; i++) {
+    const a = R.samples[i - 1], b = R.samples[i];
+    assert.ok(a.p - b.p <= gD * (b.x - a.x) + 1, "nie steiler als die Sinkrate bei NM " + b.x.toFixed(1));
+  }
+  assert.equal(R.spiralMin, 0, "kein Sinken im Vollkreis");
+  assert.equal(R.conflicts.length, 0, JSON.stringify(R.conflicts));
+});
+
+test("Ein Berg kurz vor dem Ziel, über den kein normaler Sinkflug möglich ist, wird als Konflikt begründet.", () => {
+  const app = loadApp();
+  const { G, P, A, B } = setup(app, x => (x > 50 && x < 53 ? 6000 : 1000));
+  const R = app.routeFromPoints(G, P, [A, B], null);
+  assert.ok(R.conflicts.some(c => c.cause === "desc"), JSON.stringify(R.conflicts));
+  assert.equal(R.cat, 2);
+  assert.equal(R.spiralMin, 0);
 });
 
 test("Eine selbst gesetzte Höhe wird nach dem Steigflug erreicht und gehalten.", () => {
@@ -68,6 +84,8 @@ test("Eine selbst gesetzte Höhe wird nach dem Steigflug erreicht und gehalten."
   const R = app.routeFromPoints(G, P, [A, M, B], { 0: 4500, 1: 6500 });
   const mitteLeg0 = R.samples.find(q => q.x > 15 && q.x < 16);
   assert.equal(Math.round(mitteLeg0.p), 4500);
-  const leg1 = R.samples.filter(q => R.rs[q.ri].e.leg === 1 && q.x > R.rs.find(r => r.e.leg === 1).x0 + 8 && q.x < R.D - 2);
+  const tod = R.D - (6500 - G.destElev) / app.descGrad(P);
+  const leg1 = R.samples.filter(q => R.rs[q.ri].e.leg === 1 && q.x > R.rs.find(r => r.e.leg === 1).x0 + 8 && q.x < tod - 0.5);
+  assert.ok(leg1.length > 3);
   assert.ok(leg1.every(q => Math.abs(q.p - 6500) < 1), leg1.map(q => Math.round(q.p)).join(","));
 });

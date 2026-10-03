@@ -34,11 +34,16 @@ function finalize(R, G, P) {
   function add(l, txt, x0, x1) { H.push({ l: l, t: txt, x0: x0 == null ? null : x0, x1: x1 == null ? x0 : x1 }); }
   var now = new Date(), isToday = P.date === now.getFullYear() + "-" + p2(now.getMonth() + 1) + "-" + p2(now.getDate());
   if (isToday && R.depMin < now.getHours() * 60 + now.getMinutes() - 10) add("warn", "Abflugzeit liegt in der Vergangenheit.");
+  if (D > 250 || R.ete > 180) add("warn", "<b>Lange Strecke:</b> " + Math.round(D) + " NM, ~" + Math.floor(R.ete / 60) + " h " + p2(Math.round(R.ete % 60)) +
+    " min Flugzeit. Kraftstoff inkl. Reserve und eine m\u00f6gliche Zwischenlandung selbst pr\u00fcfen." +
+    (G.demZ && G.demZ < 10 ? " Gel\u00e4nde wird hier gr\u00f6ber gerechnet (gr\u00f6\u00dferer Sicherheitspuffer)." : ""));
   R.conflicts.forEach(function (c) {
     if (c.cause === "forb") return;   /* steht als eigener Luftraum-Hinweis */
     var rng = " <small>\u2013 NM " + Math.round(c.x0) + (Math.round(c.x1) > Math.round(c.x0) ? "\u2013" + Math.round(c.x1) : "") + " (~" + fmtH(sampleAt(R, c.x0).t) + ")</small>";
     if (c.cause === "climb") add("bad", "<b>Steigflug reicht nicht:</b> Mit " + P.climb + " ft/min ist das Gel\u00e4nde nicht sicher zu \u00fcbersteigen (Abstand nur ~" +
       fmtFt(Math.max(0, c.clr)) + " ft). Kein Kreisen \u00fcber dem Startplatz eingeplant \u2013 andere Route/Talweg w\u00e4hlen oder Steigleistung pr\u00fcfen." + rng, c.x0, c.x1);
+    else if (c.cause === "desc") add("bad", "<b>Sinkflug reicht nicht:</b> Mit " + P.desc + " ft/min ist vom Gel\u00e4nde vor dem Ziel aus kein gleichm\u00e4\u00dfiger Sinkflug bis zum Platz m\u00f6glich (Abstand nur ~" +
+      fmtFt(Math.max(0, c.clr)) + " ft). Kein Sinken im Vollkreis \u00fcber dem Platz eingeplant \u2013 Anflug \u00fcber das Tal w\u00e4hlen oder Sinkrate pr\u00fcfen." + rng, c.x0, c.x1);
     else if (c.cause === "low") add("bad", "<b>Eigene H\u00f6he zu tief:</b> Gel\u00e4ndeabstand nur ~" + fmtFt(Math.max(0, c.clr)) + " ft." + rng, c.x0, c.x1);
     else if (c.cause === "cloud") add("bad", "<b>In/an den Wolken:</b> geplante H\u00f6he liegt an oder \u00fcber der Wolkenbasis." + rng, c.x0, c.x1);
     else add("bad", "<b>Kein sicherer H\u00f6henkorridor:</b> " + CAUSE[c.cause] + rng, c.x0, c.x1);
@@ -56,8 +61,8 @@ function finalize(R, G, P) {
     else if (hit.x > x0 + 1) add("info", "Eigene H\u00f6he " + a + " ft (Teilstrecke " + n + ") wird erst bei NM " + Math.round(hit.x) + " erreicht (Steigrate " + P.climb + " ft/min).", x0, hit.x);
   });
   (R.tight || []).forEach(function (t) {
-    add("warn", "<b>" + (t.climb ? "Steigflug knapp" : "Gel\u00e4ndeabstand knapp") + ":</b> nur ~" + fmtFt(Math.max(0, t.clr)) + " ft \u00fcber Gel\u00e4nde (Soll " + P.terrClr +
-      " ft)" + (t.climb ? " bei " + P.climb + " ft/min \u2013 fr\u00fch und z\u00fcgig steigen, Talmitte fliegen" : "") +
+    add("warn", "<b>" + (t.climb ? "Steigflug knapp" : t.desc ? "Sinkflug knapp" : "Gel\u00e4ndeabstand knapp") + ":</b> nur ~" + fmtFt(Math.max(0, t.clr)) + " ft \u00fcber Gel\u00e4nde (Soll " + P.terrClr +
+      " ft)" + (t.climb ? " bei " + P.climb + " ft/min \u2013 fr\u00fch und z\u00fcgig steigen, Talmitte fliegen" : t.desc ? " \u2013 erst nach dem Gel\u00e4nde sinken, Talmitte fliegen" : "") +
       " <small>\u2013 NM " + Math.round(t.x0) + (Math.round(t.x1) > Math.round(t.x0) ? "\u2013" + Math.round(t.x1) : "") + "</small>", t.x0, t.x1);
   });
   if (G.sun) {
@@ -74,8 +79,13 @@ function finalize(R, G, P) {
   if (hiAlt > 13000) add("bad", "<b>Sauerstoff:</b> Route f\u00fchrt \u00fcber 13.000 ft \u2013 dort ist Sauerstoff Pflicht (EASA NCO.OP.190).");
   else if (o2min > 30) add("warn", "<b>Sauerstoff:</b> ~" + Math.round(o2min) + " min \u00fcber 10.000 ft \u2013 ab 30 min ist Sauerstoff Pflicht (EASA NCO.OP.190). Max. H\u00f6he auf 10.000 ft senken oder Sauerstoff mitf\u00fchren.");
   else if (o2min > 0) add("info", "~" + Math.round(o2min) + " min \u00fcber 10.000 ft (unter 30 min ohne Sauerstoff zul\u00e4ssig) \u2013 auf Hypoxie-Anzeichen achten.");
-  if (R.spiralMin > 0) add(R.spiralMin > 6 ? "warn" : "info", "<b>Sinkflug:</b> Gel\u00e4nde vor dem Ziel erlaubt erst sp\u00e4t zu sinken \u2013 Ankunft \u00fcber dem Platz in ~" +
-    fmtFt(R.samples[R.samples.length - 1].p) + " ft, dann im Tal auf Platzrundenh\u00f6he sinken (~" + Math.round(R.spiralMin) + " min).", D - 1.5, D);
+  if ((R.steep || []).length) {   /* ein Hinweis fuer alle steilen Stuecke */
+    var st0 = R.steep[0].x0, st1 = R.steep[R.steep.length - 1].x1, stF = Math.max.apply(null, R.steep.map(function (q) { return q.fpm; }));
+    add(stF > P.desc * 1.5 ? "warn" : "info", "<b>Steiler Sinkflug</b> zum Ziel: bis ~" + Math.round(stF / 50) * 50 + " ft/min (eingestellt " + P.desc + ") \u2013 das Gel\u00e4nde vor dem Platz erlaubt erst sp\u00e4t zu sinken." +
+      " <small>\u2013 NM " + Math.round(st0) + "\u2013" + Math.round(st1) + "</small>", st0, st1);
+  }
+  if (R.tod && R.tod.x < D - 0.5) add("info", "<b>Sinkflugbeginn</b> bei NM " + Math.round(R.tod.x) + " (~" + fmtH(R.tod.t) + ") aus ~" + fmtFt(R.tod.p) +
+    " ft" + ((R.steep || []).length ? "" : ", gleichm\u00e4\u00dfig mit " + P.desc + " ft/min") + " bis zum Platz (" + fmtFt(G.destElev) + " ft).", R.tod.x, D);
   /* Luftraeume: gleichnamige Teile (z. B. mehrere "TMA LOWL"-Sektoren) werden zu einem Hinweis zusammengefasst */
   var groups = [], gidx = {};
   R.entries.forEach(function (x) {
@@ -153,7 +163,7 @@ function finalize(R, G, P) {
     if (f.da != null && f.da - f.elev > 2000) add("warn", "Dichteh\u00f6he " + esc(f.apt.icao || f.apt.name) + " ~" + fmtFt(f.da) + " ft \u2013 Start-/Landestrecke und Steigleistung pr\u00fcfen.");
     return f;
   });
-  if (R.airMissing && R.airMissing.length) add("bad", "Lufträume f\u00fcr Teile dieser Route noch nicht geladen \u2013 werden nachgeladen, bis dahin gilt die Route als KRITISCH.", R.airMissing[0]);
+  if (R.airMissing && R.airMissing.length) add("bad", "<b>Keine Luftraumdaten</b> f\u00fcr Teile dieser Route (Land nicht abgedeckt oder noch nicht geladen) \u2013 ohne Luftraumpr\u00fcfung gilt die Route als KRITISCH.", R.airMissing[0]);
   if (R.wxFar && R.wxFar.length) add("warn", "Wetterdaten f\u00fcr Teile dieser Route nur von bis zu " + Math.round(Math.max.apply(null, R.wxFar.map(function (w) { return w.d; }))) +
     " NM entfernten Punkten \u2013 werden nachgeladen.", R.wxFar[0].x);
   if (G.airFailed && G.airFailed.length) add("bad", "Luftraumdaten f\u00fcr " + G.airFailed.join(", ") + " fehlen \u2013 Lufträume dort NICHT gepr\u00fcft!");

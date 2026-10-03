@@ -82,8 +82,22 @@ function limitFt(l, terrFt, qnh) {
 var CTRY = {
   AT: [[9.5, 46.3, 17.2, 49.1]], DE: [[5.8, 47.2, 13.0, 55.1], [13.0, 48.2, 13.9, 55.1], [13.9, 50.2, 15.1, 55.1]],
   CH: [[5.9, 45.8, 10.5, 47.9]], LI: [[9.47, 47.04, 9.64, 47.28]], IT: [[6.6, 43.5, 13.9, 47.1]], SI: [[13.3, 45.4, 16.6, 46.9]],
-  CZ: [[12.0, 48.5, 18.9, 51.1]], SK: [[16.8, 47.7, 22.6, 49.6]], HU: [[16.1, 45.7, 22.9, 48.6]]
+  CZ: [[12.0, 48.5, 18.9, 51.1]], SK: [[16.8, 47.7, 22.6, 49.6]], HU: [[16.1, 45.7, 22.9, 48.6]],
+  /* weitere Laender fuer lange Strecken */
+  HR: [[13.4, 42.3, 19.5, 46.6]], BA: [[15.7, 42.5, 19.7, 45.3]], RS: [[18.8, 42.2, 23.1, 46.2]], ME: [[18.4, 41.8, 20.4, 43.6]],
+  PL: [[14.1, 49.0, 24.2, 54.9]], FR: [[-5.2, 41.3, 9.6, 51.1]], BE: [[2.5, 49.5, 6.4, 51.5]], NL: [[3.3, 50.7, 7.3, 53.6]],
+  LU: [[5.7, 49.4, 6.6, 50.2]], DK: [[8.0, 54.5, 15.3, 57.8]], RO: [[20.2, 43.6, 29.8, 48.3]], SM: [[12.4, 43.89, 12.52, 43.99]]
 };
+/* Gebiet, fuer das Luftraumdaten geladen sind: Laenderrechtecke der geladenen Laender, auf box zugeschnitten.
+   Punkte ausserhalb (Land ohne openAIP-Abfrage) gelten als "ohne Luftraumdaten" -> Route KRITISCH. */
+function coverBoxes(box, countries) {
+  var out = [];
+  countries.forEach(function (c) { (CTRY[c] || []).forEach(function (b) {
+    var w = Math.max(box[0], b[0]), s = Math.max(box[1], b[1]), e = Math.min(box[2], b[2]), n = Math.min(box[3], b[3]);
+    if (w < e && s < n) out.push([w, s, e, n]);
+  }); });
+  return out;
+}
 function countriesFor(w, s, e, n) {
   return Object.keys(CTRY).filter(function (c) { return CTRY[c].some(function (b) { return !(e < b[0] || w > b[2] || n < b[1] || s > b[3]); }); });
 }
@@ -205,7 +219,7 @@ async function dataIn(t, w, s, e, n, onCountry) {
       out.push(a);
     });
   });
-  return { list: out, failed: failed, firs: firs };
+  return { list: out, failed: failed, firs: firs, ok: cs.filter(function (c) { return failed.indexOf(c) < 0; }) };
 }
 
 /* ==================== 5. Gelaende (Terrarium-Kacheln) ==================== */
@@ -225,12 +239,16 @@ async function loadTile(z, x, y) {
   for (var i = 0; i < 65536; i++) out[i] = (px[4 * i] * 256 + px[4 * i + 1] + px[4 * i + 2] / 256 - 32768) * M2FT;
   DEM.data[k] = out;
 }
+/* Feinste Zoomstufe, bei der das Gebiet in hoechstens 160 Kacheln passt (lange Strecken: groeber,
+   dafuer groesserer Hoehenpuffer DEM.buf) */
+function demTiles(w, s, e, n, z) { return (Math.floor(tileX(e, z)) - Math.floor(tileX(w, z)) + 1) * (Math.floor(tileY(s, z)) - Math.floor(tileY(n, z)) + 1); }
+function demZoom(w, s, e, n) { return demTiles(w, s, e, n, 10) <= 160 ? 10 : demTiles(w, s, e, n, 9) <= 160 ? 9 : 8; }
 async function ensureDem(w, s, e, n, z, onTile) {
-  DEM.z = z; DEM.buf = z >= 10 ? 150 : 300;
+  DEM.z = z; DEM.buf = z >= 10 ? 150 : z === 9 ? 300 : 450;
   var x0 = Math.floor(tileX(w, z)), x1 = Math.floor(tileX(e, z)), y0 = Math.floor(tileY(n, z)), y1 = Math.floor(tileY(s, z));
   var jobs = [];
   for (var x = x0; x <= x1; x++) for (var y = y0; y <= y1; y++) jobs.push([x, y]);
-  if (jobs.length > 160) throw new Error("Gebiet zu gro\u00df f\u00fcr Gel\u00e4ndedaten");
+  if (jobs.length > (z <= 8 ? 260 : 160)) throw new Error("Gebiet zu gro\u00df f\u00fcr Gel\u00e4ndedaten");
   var k = 0;
   var done = 0;
   async function worker() { while (k < jobs.length) { var j = jobs[k++]; await loadTile(z, j[0], j[1]); done++; if (onTile) onTile(done, jobs.length); } }

@@ -22,6 +22,12 @@ export async function openApp({ mob = false, tablet = false, scenario = "gut", u
     r.fulfill({ path: process.env.LEAFLET_DIR + "/" + r.request().url().split("/").pop().replace(".min", "") }));
   await page.route("https://*.tile.opentopomap.org/**", r => r.fulfill({ status: 404, body: "" }));
   await page.goto(url);
+  /* Passwort-Anmeldung (lokal: APP_PASSWORD aus .dev.vars, Standard "test-passwort") */
+  if (await page.locator("input[name=password]").count()) {
+    if (process.env.SHOT_LOGIN) await page.screenshot({ path: process.env.SHOT_LOGIN });
+    await page.fill("input[name=password]", process.env.TEST_PASSWORD || "test-passwort");
+    await Promise.all([page.waitForNavigation(), page.click("button[type=submit]")]);
+  }
   await page.waitForFunction(() => window.APTDB && APTDB.AT && APTDB.AT.length);
   return { browser, page, errors };
 }
@@ -29,6 +35,7 @@ export async function openApp({ mob = false, tablet = false, scenario = "gut", u
 export async function planRoute(page, from, to, time = "10:00") {
   await page.evaluate(async ([f, t, tm]) => {
     await loadCountry("SI", "apt").catch(() => {});
+    await loadCountry("HR", "apt").catch(() => {});
     const all = Object.values(APTDB).flat();
     S.from = all.find(a => a.icao === f); S.to = all.find(a => a.icao === t);
     showSel("fIn", S.from); showSel("tIn", S.to);

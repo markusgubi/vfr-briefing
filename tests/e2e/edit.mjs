@@ -40,9 +40,9 @@ await page.waitForTimeout(500);
 const r3 = await cur();
 ok(r3.n === r2.n - 1, "Popup-Knopf loescht Punkt (" + r2.n + " -> " + r3.n + ")");
 
-// 4) Hoehe im Profil nach unten ziehen -> Konflikt
+// 4) Hoehe im Profil nach unten ziehen -> Konflikt (laengste mittlere Teilstrecke; die letzte liegt im Anflug)
 const h = await page.evaluate(() => {
-  const R = RES.routes[RES.sel], l = R.legX[R.legX.length - 1], pv = RES.pv, svg = document.querySelector("#profBody svg");
+  const R = RES.routes[RES.sel], l = R.legX.slice(1, -1).sort((a, b) => (b.x1 - b.x0) - (a.x1 - a.x0))[0], pv = RES.pv, svg = document.querySelector("#profBody svg");
   const pt = svg.createSVGPoint(); pt.x = pv.X((l.x0 + l.x1) / 2); pt.y = pv.Y(l.alt);
   const sp = pt.matrixTransform(svg.getScreenCTM());
   const lo = svg.createSVGPoint(); lo.x = pt.x; lo.y = pv.Y(2500); const sl = lo.matrixTransform(svg.getScreenCTM());

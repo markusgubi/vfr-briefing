@@ -219,7 +219,6 @@ async function plan() {
   GAFOR_ON = P.preferGafor;
   var d = distNm(A, B);
   if (d < 3) { setSts("Start und Ziel liegen zu nah beieinander.", "err"); return; }
-  if (d > 250) { setSts("Strecke " + Math.round(d) + " NM – maximal 250 NM. Bitte mit Zwischenlandung planen.", "err"); return; }
   if (!P.date) { setSts("Bitte Datum wählen.", "err"); return; }
   $("go").disabled = true; hlLayer.clearLayers(); setSts("");
   progStart([["dem", "Gelände", 14], ["asp", "Luftraum", 9], ["apt", "Flugplätze", 3], ["awx", "METAR/TAF", 3]]
@@ -233,7 +232,8 @@ async function plan() {
     var awxKey = [Math.floor((bs - 0.1) * 2) / 2, Math.floor((bw - 0.1) * 2) / 2, Math.ceil((bn + 0.1) * 2) / 2, Math.ceil((be + 0.1) * 2) / 2].join(",");
     G.t0 = new Date(P.date + "T00:00:00").getTime() / 1000;
     /* Alle Downloads parallel: Gelaende, Luftraum, Plaetze, METAR/TAF und die 5 Wettermodelle */
-    var pDem = ensureDem(w - 0.07, s - 0.05, e + 0.07, n + 0.05, d <= 160 ? 10 : 9, function (k, t) { progSet("dem", k / t, null, k + "/" + t + " Kacheln"); })
+    var demZ = demZoom(w - 0.07, s - 0.05, e + 0.07, n + 0.05);
+    var pDem = ensureDem(w - 0.07, s - 0.05, e + 0.07, n + 0.05, demZ, function (k, t) { progSet("dem", k / t, null, k + "/" + t + " Kacheln"); })
       .then(function () { progSet("dem", 1, "ok"); }, function (er) { progSet("dem", 1, "err", er.message); throw er; });
     progSet("asp", 0); progSet("apt", 0); progSet("awx", 0);
     var pAsp = dataIn("asp", bw, bs, be, bn, function (k, t) { progSet("asp", k / t, null, k + "/" + t + " Länder"); })
@@ -250,9 +250,9 @@ async function plan() {
     await pDem;
     G.depElev = A.elevFt != null ? A.elevFt : (elevFt(A.lat, A.lon) || 0);
     G.destElev = B.elevFt != null ? B.elevFt : (elevFt(B.lat, B.lon) || 0);
-    G.demBox = [w - 0.07, s - 0.05, e + 0.07, n + 0.05]; G.demZ = d <= 160 ? 10 : 9;
+    G.demBox = [w - 0.07, s - 0.05, e + 0.07, n + 0.05]; G.demZ = demZ;
     var got = await Promise.all([pAsp, pApt, pAwx]);
-    G.airFailed = got[0].failed; G.AIR = got[0].list; G.FIRS = got[0].firs || []; G.airBoxes = [[bw, bs, be, bn]];
+    G.airFailed = got[0].failed; G.AIR = got[0].list; G.FIRS = got[0].firs || []; G.airBoxes = coverBoxes([bw, bs, be, bn], got[0].ok || []);
     if (!got[0].list.length && got[0].failed.length) throw new Error("Luftraumdaten nicht verfügbar (" + got[0].failed.join(", ") + ") – ohne Luftraumprüfung wird nicht geplant. Später erneut versuchen.");
     STN = buildStations(got[2]);
     var qs = STN.map(function (x) { return x.metar && x.metar.qnh; }).filter(Boolean);
@@ -350,7 +350,7 @@ function render(sel) {
       "</td><td>" + Math.round(l.gs) + "</td><td>" + Math.round(l.mins) + "</td><td>" + fmtH(l.eto) + "</td></tr>";
   });
   h += "</table></div><div class='note' style='margin-top:6px'>Reiseh\u00f6he je Abschnitt; Steig-/Sinkfl\u00fcge siehe Profil. MK/MH magnetisch (" + MAGVAR + "\u00b0 O), Wind 850 hPa, Zeiten lokal" +
-    (R.circMin > 0 ? ", inkl. ~" + Math.round(R.circMin) + " min Kreisen unterwegs" : "") + (R.spiralMin > 0 ? ", inkl. ~" + Math.round(R.spiralMin) + " min Sinken am Ziel" : "") + ".</div></div>";
+    (R.circMin > 0 ? ", inkl. ~" + Math.round(R.circMin) + " min Kreisen unterwegs" : "") + ".</div></div>";
   if (RES.opt && RES.opt.length) {
     h += "<div class='card noprint'><h3>Beste Abflugzeit (" + esc(P.date.split("-").reverse().join(".")) + ")</h3><div class='opt'>";
     RES.opt.forEach(function (o) {
@@ -573,7 +573,8 @@ function profLegend() {
   (f.kinds || []).forEach(function (k) { if (seen[k] || !KIND[k]) return; seen[k] = 1;
     sw("<rect x='1' y='1' width='24' height='10' fill='" + KIND[k].c + "' fill-opacity='0.12' stroke='" + KIND[k].c + "' stroke-dasharray='4 3'/>", "Luftraum: " + KIND[k].t); });
   if (f.conf) sw("<rect x='0' y='0' width='26' height='12' fill='#C0392B' fill-opacity='0.25'/>", "Kein sicherer H\u00f6henkorridor");
-  if (f.circ) sw("<path d='M13 1 C 6 1 6 4 13 4 C 6 4 6 7 13 7 C 6 7 6 10 13 10' fill='none' stroke='#B02E7A' stroke-width='1.8'/>", "Vollkreise: H\u00f6he im Kreis \u00e4ndern (Tal/Platz)");
+  if (f.circ) sw("<path d='M13 1 C 6 1 6 4 13 4 C 6 4 6 7 13 7 C 6 7 6 10 13 10' fill='none' stroke='#B02E7A' stroke-width='1.8'/>", "Vollkreise: unterwegs im Tal kreisend steigen");
+  if (f.wp) sw("<path d='M13 0 V12' stroke='#1F5FA8' stroke-width='1.2' stroke-dasharray='3 3'/>", "Wegpunkt (Nummer wie in der Karte)");
   if (f.hl) sw("<rect x='0' y='0' width='26' height='12' fill='#FFD400' fill-opacity='0.4'/>", "Gew\u00e4hlter Hinweis");
   if (f.edit) sw("<circle cx='13' cy='6' r='4.5' fill='#fff' stroke='#B02E7A' stroke-width='2'/>", "Griff ziehen = Reiseh\u00f6he \u00e4ndern");
   return it.join("");
@@ -693,14 +694,15 @@ function profSvg(R) {
     }
     return d;
   }
+  /* Wegpunkte als senkrechte Linien (Nummer/Name wie in Karte und Navlog) */
+  var wpl = R.wps.slice(1, -1).filter(function (w) { return w.x > 0.3 && w.x < D - 0.3; });
+  wpl.forEach(function (w) { s += "<line x1='" + X(w.x).toFixed(1) + "' x2='" + X(w.x).toFixed(1) + "' y1='" + Tp + "' y2='" + (H - Bp) + "' stroke='#1F5FA8' stroke-opacity='0.55' stroke-width='1' stroke-dasharray='3 4'/>"; });
   var pl = "M " + X(0) + " " + Y(G.depElev) + " L " + X(0) + " " + Y(sm[0].p);
   sm.forEach(function (q) {
     if (q.circ) pl += " L " + X(q.x) + " " + Y(q.p - q.circ) + coil(X(q.x), Y(q.p - q.circ), Y(q.p));
     else pl += " L " + X(q.x) + " " + Y(q.p);
   });
-  var pEnd = sm[sm.length - 1].p;
-  if (R.spiralMin > 0 && pEnd - G.destElev > 300) pl += coil(X(D), Y(pEnd), Y(G.destElev));
-  else pl += " L " + X(D) + " " + Y(G.destElev);
+  pl += " L " + X(D) + " " + Y(G.destElev);
   s += "<path d='" + pl + "' fill='none' stroke='#B02E7A' stroke-width='" + (mob ? 3.2 : 2.6) + "' stroke-linejoin='round'/>";
   /* Beschriftungen nach Prioritaet: Achsen, Plaetze, Hoehen, Kreisen, Max-Hoehe, Luftraumnamen */
   [0, 0.25, 0.5, 0.75, 1].forEach(function (f) {
@@ -711,6 +713,10 @@ function profSvg(R) {
   var ed = EDIT.on && R.custom ? editSvg(R, X, Y, f2, lbl, reserve) : { g: "", t: "" };
   txts += ed.t;
   txts += lbl(W - Rp - 4, Tp + f1 * 0.2, G.B.icao || G.B.name, f1, "#0F1D2A", "end", true, [0, f1 * 1.2]);
+  wpl.forEach(function (w) {
+    var nm = /^WP\d+$/.test(w.name) ? w.name.slice(2) : w.name;
+    txts += lbl(X(w.x), Tp + f2 * 1.2, nm, f2, "#1F5FA8", "middle", true, [0, f2 * 1.2, f2 * 2.4, f2 * 3.6, H - Bp - Tp - f2 * 1.6]);
+  });
   if (!(EDIT.on && R.custom)) R.legs.forEach(function (l, k) {   /* im Bearbeiten-Modus zeigen die Griffe die Hoehen */
     var xm = (R.wps[k].x + R.wps[k + 1].x) / 2;
     if (X(R.wps[k + 1].x) - X(R.wps[k].x) < (mob ? 40 : 30)) return;
@@ -718,13 +724,11 @@ function profSvg(R) {
     txts += lbl(X(xm), Y(sampleAt(R, xm).p) - 7, String(l.alt), f2, "#B02E7A", "middle", true, [0, -f2 * 1.2, f2 * 1.6, -f2 * 2.4]);
   });
   R.circles.forEach(function (c) { txts += lbl(X(c.x) + 6, Y(c.to) + f2 + 4, "\u21bb " + fmtFt(c.to), f2, "#B02E7A", "start", true); });
-  if (R.spiralMin > 0) txts += lbl(X(D) - 16, Y(sm[sm.length - 1].p) + f2 + 4, "\u21ba Sinken im Vollkreis \u00fcber dem Platz (~" + Math.max(1, Math.round(R.spiralMin)) + " min)", f2, "#B02E7A", "end", true,
-    [0, f2 * 1.3, f2 * 2.6, -f2 * 1.3]);
   if (P.maxAlt < yMax) txts += lbl(W - Rp - 4, Y(P.maxAlt) - 4, "max. " + P.maxAlt + " ft", f2, "#61717F", "end", false, [0, f2 * 1.4]);
   bandLbl.forEach(function (b) { txts += lbl(b.x, b.y, b.t, f2, b.c, "start", false, [0, f2 * 1.2, f2 * 2.4].filter(function (o) { return o + f2 < b.hgt; })); });
   /* Legende als HTML unter dem Bild: nur was im Profil vorkommt */
   RES.pvLeg = { cloud: !!bl, fz: !!fl, maxAlt: P.maxAlt < yMax, kinds: R.bands.filter(function (b) { return b.lo < yMax; }).map(function (b) { return b.as.kind; }),
-    conf: R.conflicts.length > 0, hl: !!RES.hl, circ: R.circles.length > 0 || R.spiralMin > 0, edit: EDIT.on && R.custom };
+    conf: R.conflicts.length > 0, hl: !!RES.hl, circ: R.circles.length > 0, wp: wpl.length > 0, edit: EDIT.on && R.custom };
   txts += "<text x='" + (Lp - 6) + "' y='" + (Tp - 6) + "' text-anchor='end' font-size='" + (f2 - 1) + "' fill='#61717F'>ft MSL</text>";
   return s + txts + "<g id='pedit'>" + ed.g + "</g><g id='pcur'></g></svg>";
 }
@@ -905,7 +909,7 @@ async function ensureArea(pts) {
     var ids = {}; G.AIR.forEach(function (x) { ids[x.id] = 1; });
     r.list.forEach(function (x) { if (!ids[x.id]) G.AIR.push(x); });
     if (r.failed.length) throw new Error("Luftraumdaten für " + r.failed.join(", ") + " fehlen");
-    G.airBoxes.push(box);
+    coverBoxes(box, r.ok || []).forEach(function (bb) { G.airBoxes.push(bb); });
   }
   var R = routeFromPoints(G, RES.P, pts, EDIT.ua);
   if (R.wxFar.length) await addWxPoints(G, R.wxFar);

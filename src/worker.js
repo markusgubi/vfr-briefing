@@ -1,8 +1,9 @@
-// VFR-Briefing 8.4 - Cloudflare Worker
-// Die Oberflaeche (public/) liefert Cloudflare als Static Assets aus; dieser Worker
-// beantwortet nur die API-Routen: /test | /cfg | GET /awx?bbox= | GET /dem/z/x/y.png
+// VFR-Briefing 8.5 - Cloudflare Worker
+// Jede Anfrage laeuft zuerst durch die Passwort-Anmeldung (src/auth.js, Secret APP_PASSWORD).
+// Danach: API-Routen /test | /cfg | GET /awx?bbox= | GET /dem/z/x/y.png, alles andere aus public/ (Static Assets).
 // openAIP und Open-Meteo fragt der Browser direkt ab (eigene IP -> kein Rate-Limit durch geteilte Cloudflare-IPs)
-// Secret: OPENAIP_KEY
+// Secrets: OPENAIP_KEY, APP_PASSWORD
+import { guard } from "./auth.js";
 
 const AWX = "https://aviationweather.gov/api/data/";
 const DEM_URL = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/";
@@ -18,7 +19,7 @@ async function handleAwx(url, ctx) {
   const bb = (url.searchParams.get("bbox") || "").split(",").map(Number);
   if (bb.length !== 4 || !bb.every(Number.isFinite)) return jr({ error: "bbox=minLat,minLon,maxLat,maxLon" }, 400);
   const [a, b, c, d] = bb.map(v => Math.round(v * 10) / 10);
-  if (c <= a || d <= b || c - a > 6 || d - b > 8) return jr({ error: "bbox zu gross" }, 400);
+  if (c <= a || d <= b || c - a > 12 || d - b > 16) return jr({ error: "bbox zu gross" }, 400);
   const bbox = [a, b, c, d].join(",");
   const cache = caches.default, key = new Request("https://vfr7-cache.internal/awx/" + bbox);
   const hit = await cache.match(key);
@@ -63,9 +64,10 @@ async function handleTest(env) {
   await probe("AviationWeather METAR (Raum Linz)", () => fetch(AWX + "metar?bbox=48.0,13.8,48.5,14.5&format=json"));
   const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
   const allOk = rows.every(r => r.ok) && !!key;
-  let html = "<!DOCTYPE html><html lang=\"de\"><meta charset=\"utf-8\"><title>VFR 8.4 Diagnose</title><body style=\"font-family:monospace;max-width:900px;margin:40px auto;line-height:1.6\">";
-  html += "<h2>VFR 8.1 &middot; Diagnose</h2>";
+  let html = "<!DOCTYPE html><html lang=\"de\"><meta charset=\"utf-8\"><title>VFR 8.5 Diagnose</title><body style=\"font-family:monospace;max-width:900px;margin:40px auto;line-height:1.6\">";
+  html += "<h2>VFR 8.5 &middot; Diagnose</h2>";
   html += "<p>Secret OPENAIP_KEY: <b style=\"color:" + (key ? "green" : "crimson") + "\">" + (key ? "gesetzt (" + key.length + " Zeichen)" : "FEHLT") + "</b></p>";
+  html += "<p>Secret APP_PASSWORD (Anmeldung): <b style=\"color:" + (env.APP_PASSWORD ? "green" : "crimson") + "\">" + (env.APP_PASSWORD ? "gesetzt" : "FEHLT") + "</b></p>";
   html += "<p>openAIP und Open-Meteo werden direkt im Browser abgefragt und hier nicht getestet.</p>";
   rows.forEach(r => { html += "<p><b>" + esc(r.name) + "</b>: HTTP <b style=\"color:" + (r.ok ? "green" : "crimson") + "\">" + (r.status || "-") + "</b> &middot; " + r.ms + " ms</p><pre style=\"background:#f4f4f4;padding:10px;white-space:pre-wrap\">" + esc(r.txt) + "</pre>"; });
   html += "<p style=\"color:" + (allOk ? "green" : "crimson") + "\"><b>" + (allOk ? "Alle Quellen OK." : "Mindestens eine Quelle liefert keine Daten.") + "</b></p></body></html>";
@@ -76,12 +78,15 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url), p = url.pathname;
     if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
-    if (request.method !== "GET") return jr({ error: "Not found" }, 404);
+    const blocked = await guard(request, env);   /* nicht angemeldet -> Anmeldeseite bzw. 401 */
+    if (blocked) return blocked;
+    if (p === "/login") return new Response(null, { status: 303, headers: { Location: "/" } });
+    if (request.method !== "GET" && request.method !== "HEAD") return jr({ error: "Not found" }, 404);
     if (p === "/test") return handleTest(env);
     if (p === "/cfg") return new Response(JSON.stringify({ oaipKey: oaipKey(env) }), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
     if (p === "/awx") return handleAwx(url, ctx);
     if (p.indexOf("/dem/") === 0) return handleDem(p, ctx);
-    return jr({ error: "Not found" }, 404);
+    return env.ASSETS.fetch(request);   /* Oberflaeche aus public/ */
   }
 };
 

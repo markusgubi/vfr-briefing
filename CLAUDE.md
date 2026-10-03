@@ -8,16 +8,19 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
 ## Betrieb
 - Cloudflare Worker "vfr", Deploy automatisch per Workers Builds bei Push auf main.
 - Secret OPENAIP_KEY liegt in Cloudflare (niemals ins Repo).
-- Cloudflare Access schützt die ganze Seite (Policy "Cloudflare account members", 7 Tage Session), und zwar
-  je Adresse eine eigene Access-Application: "vfr - Cloudflare Workers" (workers.dev) und "vfr" (vfr.gubi.co.at).
-  Eine neue Adresse NIE ohne eigene Access-Application freischalten: /cfg gibt sonst den openAIP-Key heraus.
+- Passwortschutz (seit 8.5, ersetzt Cloudflare Access): src/auth.js prüft JEDE Anfrage (run_worker_first,
+  Assets über env.ASSETS). Secret APP_PASSWORD in Cloudflare; Anmeldeseite, signiertes Sitzungs-Cookie
+  (HMAC-SHA-256, 30 Tage). Fehlt APP_PASSWORD, bleibt die Seite gesperrt (503) – nie offen. Neues Passwort =
+  alle Sitzungen ungültig. /logout meldet ab. /cfg gibt den openAIP-Key nur angemeldet heraus: den Schutz nie
+  umgehen (keine Ausnahmen für weitere Pfade ohne Rücksprache). Lokal: APP_PASSWORD in .dev.vars
+  (e2e-Tests nutzen TEST_PASSWORD, Standard "test-passwort").
 - Eigene Domain vfr.gubi.co.at als Custom Domain in wrangler.toml (routes, custom_domain = true).
 - Lokal testen: npm run dev (für /cfg wird OPENAIP_KEY in .dev.vars benötigt, nie committen).
 
-## Architektur (Stand 8.4)
+## Architektur (Stand 8.5)
 - Oberfläche als Workers Static Assets in public/ (index.html, css/app.css, js/*.js, data/gafor.geojson,
   img/ und manifest.webmanifest für den iPhone-Startbildschirm; Manifest mit crossorigin="use-credentials"
-  wegen Cloudflare Access).
+  wegen der Anmeldung per Cookie).
   Klassische Skripte ohne Bundler, gemeinsamer globaler Namensraum, Reihenfolge laut index.html:
   util (Helfer, Geometrie) → data (Luftraum, openAIP, Gelände) → wx (Open-Meteo, METAR/TAF) →
   route (Netz, Höhenprofil evalRoute, eigene Routen, Kandidaten) → report (finalize: Navlog, Hinweise,
@@ -55,8 +58,17 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
   ziehbar sind nur Wegpunkte; beim Ziehen werden die beiden Nachbar-Teilstrecken gerade.
 - Eigene Höhen (seit 8.2): werden wie eingestellt geflogen; eine höhere Höhe wird VOR Beginn ihrer Teilstrecke
   erreicht, gesunken wird ab Beginn der Teilstrecke. Die automatische Sinkflugplanung zum Ziel greift erst nach
-  der letzten eigenen Höhe. Ist ein früheres Sinken nicht möglich, wird über dem Platz im Vollkreis gesunken
-  (im Profil als Spirale gezeichnet, nie als senkrechter Strich).
+  der letzten eigenen Höhe.
+- Sinkflug wie Steigflug (seit 8.5): Das Profil endet in Platzhöhe, gesunken wird gleichmäßig mit der
+  eingestellten Sinkrate (Obergrenze cap = Platzhöhe + Sinkgradient × Restdistanz, gilt auch für eigene Höhen).
+  Nur wo das Gelände davor es verlangt, bis zur doppelten Sinkrate (STEEP_F) mit Hinweis "Steiler Sinkflug"
+  (über 1,5-fach = EINGESCHR.). Reicht auch das nicht: Konflikt "desc" (KRITISCH). Kein Kreisen über dem Ziel.
+  Anflugbereich (rampArrNm) analog zum Abflugbereich; die Routensuche bestraft Kanten mit descDef/descDefS.
+- Wegpunkte erscheinen im Höhenprofil als senkrechte Linien mit Nummer/Name (wie Karte/Navlog).
+- Lange Strecken (seit 8.5): keine 250-NM-Grenze mehr, Hinweis "Lange Strecke" (Kraftstoff, Zwischenlandung
+  entscheidet der Pilot). Gelände-Zoom adaptiv (demZoom: 10/9/8, DEM-Puffer 150/300/450 ft), Netz bis 70 Schritte,
+  Wetterraster bis 20 Schritte, /awx bis 12° × 16°. Luftraum gilt nur in den Länderrechtecken (CTRY) geladener
+  Länder als abgedeckt (coverBoxes); außerhalb ist die Route KRITISCH.
 - Keine "Achterbahn" (seit 8.3): Senken im automatischen Profil (sinken und innerhalb 15 NM wieder steigen)
   werden aufgefüllt, soweit Wolken/Luftraum es erlauben. Eigene Höhen bleiben unverändert; ist eine eigene
   Höhe über der Max. Höhe oder mit der Steigrate (rechtzeitig) nicht erreichbar, steht ein Hinweis dabei.
@@ -93,6 +105,10 @@ Offen:
 6. GAFOR-Routen: Funktion fertig (Overlay, Option "bevorzugen" nur bei gleicher Sicherheit, Kennzahl), aber OHNE Daten.
    public/data/gafor.geojson muss aus der aktuellen AIP Austria (GAFOR-Karte) befüllt und mit
    "geprueft": true freigegeben werden. Nicht raten.
+   Recherche 10/2026: offizielle Liste "GAFOR © Austro Control, 25. April 2019" (Routen mit Bezugspunkten und
+   Bezugshöhen, beim DWD als gafor_oesterreich_download.pdf) und die GAFOR-Übersichtskarte der AIP Austria.
+   Aus der Cloud-Umgebung nicht abrufbar (Netz gesperrt); Suchmaschinen-Auszüge enthielten nachweislich falsche
+   (Schweizer) Routen. Nur aus dem Original-PDF bzw. der aktuellen AIP übernehmen.
 9. SkyDemon-Export: nach dem Aufbau einer echten SkyDemon-Datei (Windy-Forum, Beispiel mit
    Level="5000" LevelChange="B"/"F" je RhumbLineRoute) umgesetzt, Datei immer mit Endung .flightplan,
    auf iPhone/iPad über das Teilen-Menü. Noch NICHT mit einer echten SkyDemon-Datei des Nutzers abgeglichen:
@@ -106,10 +122,10 @@ Offen:
 - Vor jedem Commit: `npm run check` (node --check auf Server- und Client-Code) und `npm test` (Unit-Tests der
   Rechenlogik mit künstlichem Gelände, ohne Netz). Lokal mit `npm run dev` testen.
 - Browser-Tests mit simulierten Datenquellen (tests/e2e, brauchen Playwright und laufendes `npm run dev`):
-  `node tests/e2e/run.mjs LOLW LOWZ gut` und `node tests/e2e/edit.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
+  `node tests/e2e/run.mjs LOLW LOWZ gut`, `node tests/e2e/edit.mjs` und `node tests/e2e/lang.mjs` (> 250 NM). Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 8.4, nächste 8.5).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 8.5, nächste 8.6).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.
