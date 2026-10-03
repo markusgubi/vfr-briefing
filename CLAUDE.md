@@ -120,7 +120,8 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
   BCMT = Nacht → KRITISCH (nur NVFR). Ankunft ab 30 min vor Sonnenuntergang bis ECET bzw. Abflug zwischen BCMT
   und Sonnenaufgang → EINGESCHR. mit Hinweis (vorher war jede Ankunft nach Sonnenuntergang KRITISCH; geändert,
   weil VFR bei Tag bis ECET zulässig ist – die Dämmerung bleibt als Einschränkung sichtbar). Optimierer: BCMT..ECET.
-- Rückflug (seit 9.0, Haken "Rückflug am selben Tag prüfen" + Aufenthalt in min): returnPlan baut ein eigenes Netz
+- Rückflug (seit 9.0, Haken "Rückflug am selben Tag prüfen" + Aufenthalt, seit 9.15 in Stunden: Feld retStayH,
+  Schritt 0,5, intern P.stay in min; alter gespeicherter Minutenwert retStay wird umgerechnet): returnPlan baut ein eigenes Netz
   Ziel → Start (reverseNet, dieselben Wetterpunkte/Luftraum/Gelände, keine neuen Abrufe) und sucht ab Ankunft +
   Aufenthalt alle 30 min die sicherste Route (bestRouteAt), Grenze auf 10 min verfeinert. Empfehlung "spätestens
   HH:MM": letzter Abflug, der nicht KRITISCH ist und vor ECET am Startplatz landet; Grund (ECET oder Wetter ab ...),
@@ -215,6 +216,12 @@ Offen:
   Das Profil wird auf dem Desktop in tatsächlicher Pixelbreite gezeichnet (W = Breite, H = Nutzerhöhe bzw. 250/1100
   der Breite), damit die Schrift bei jeder Größe gleich bleibt. layoutChanged: map.invalidateSize + Profil neu.
   Test: `node tests/e2e/layout.mjs`.
+- Klick auf die Strecke (seit 9.15, segPopup): Fenster mit allen Hinweisen, deren Bereich (x0..x1) ±3 NM (SEG_NM)
+  um die Stelle liegt (wie im Ergebnis, sortiert bad/warn/info), Wetter der Stelle zum Aufklappen. Routen-Linien
+  liegen in eigenen Kartenebenen über dem Luftraum-Canvas (Pane routeP z 450, Alternativen altP z 440 – vorher fing
+  das Canvas Klicks ab bzw. lag die Alternative oben), breite unsichtbare Tippfläche (Maus 16 / Finger 26 px).
+  Kartenfenster halten Abstand zu Kopfzeile und Knöpfen (popOpts). Windy-Link (windyUrl) als <a> auch am Handy im
+  Export-Reiter. Test: `node tests/e2e/strecke.mjs`.
 - Knopf "tauschen" (seit 9.6, swapFromTo): Von/Nach mit einem Klick tauschen, wird gespeichert; Test tests/e2e/tauschen.mjs.
 - orte.json: englische Exonyme durch Landesnamen ersetzt (Wien, München, Venezia …), Stadtteile ≤ 5,5 km um
   Großstädte entfernt. GAFOR-Linien seit 9.5 dicker (6 px, weißer Unterstrich).
@@ -233,10 +240,10 @@ Offen:
   Rechenlogik mit künstlichem Gelände, ohne Netz). Lokal mit `npm run dev` testen.
 - Browser-Tests mit simulierten Datenquellen (tests/e2e, brauchen Playwright und laufendes `npm run dev`):
   `node tests/e2e/run.mjs LOLW LOWZ gut`, `node tests/e2e/edit.mjs`, `node tests/e2e/lang.mjs` (> 250 NM),
-  `node tests/e2e/grenze.mjs` (AT→IT ohne Meldepunkt/FIR), `rueckflug.mjs`, `hoehe.mjs`, `gafor.mjs`, `wetterbild.mjs`, `tauschen.mjs`, `luftraum.mjs`, `layout.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
+  `node tests/e2e/grenze.mjs` (AT→IT ohne Meldepunkt/FIR), `rueckflug.mjs`, `hoehe.mjs`, `gafor.mjs`, `wetterbild.mjs`, `tauschen.mjs`, `luftraum.mjs`, `layout.mjs`, `strecke.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.14, nächste 9.15).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.15, nächste 9.16).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.

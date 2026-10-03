@@ -10,14 +10,14 @@
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <link rel="icon" type="image/svg+xml" href="img/icon.svg">
 <link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
-<title>VFR Briefing 9.14</title>
+<title>VFR Briefing 9.15</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
 <div id="side">
   <h1>VFR <em>&#9656;</em> Route &amp; Wetter</h1>
-  <div class="sub">Version 9.14 &middot; sicherste Route aus 5 Wettermodellen, Gel&auml;nde, Luftraum und METAR/TAF</div>
+  <div class="sub">Version 9.15 &middot; sicherste Route aus 5 Wettermodellen, Gel&auml;nde, Luftraum und METAR/TAF</div>
   <div class="noprint">
     <label>Von</label>
     <div class="acw"><input id="fIn" placeholder="ICAO oder Name, z.B. LOLW" autocomplete="off"><div class="ac" id="fAc"></div></div>
@@ -34,7 +34,7 @@
     <label class="chk"><input type="checkbox" id="avoidClr"> Freigabepflichtige Lufträume meiden</label>
     <label class="chk" id="gaforLbl"><input type="checkbox" id="prefGafor" disabled> GAFOR-Strecken bevorzugen <small id="gaforInfo">(keine gepr&uuml;ften GAFOR-Daten hinterlegt)</small></label>
     <label class="chk"><input type="checkbox" id="retOn"> R&uuml;ckflug am selben Tag pr&uuml;fen</label>
-    <div class="row" id="retRow" style="display:none"><div><label>Aufenthalt am Ziel (min)</label><input id="retStay" type="number" value="60" min="0" max="600" step="15"></div><div></div></div>
+    <div class="row" id="retRow" style="display:none"><div><label>Aufenthalt am Ziel (Std.)</label><input id="retStayH" type="number" value="1" min="0" max="10" step="0.5" inputmode="decimal"></div><div></div></div>
     <details class="adv"><summary>Erweiterte Einstellungen</summary>
       <div class="row">
         <div><label>Min. Gel&auml;ndeabstand (ft)</label><input id="terrClr" type="number" value="1000" min="500" max="3000" step="100"></div>

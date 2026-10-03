@@ -226,3 +226,10 @@ body.mapmax #side,body.mapmax #split{display:none}
 .maxctl a{font-size:17px;line-height:30px}
 @media (max-width:860px),(pointer:coarse) and (max-width:1400px){#split,#profGrip,.maxctl{display:none!important}}
 @media print{#split,#profGrip,.maxctl{display:none!important}}
+
+/* Klick auf die Strecke: Hinweise zum Abschnitt */
+.seghints{margin-top:6px}
+.segwx{margin-top:8px;border-top:1px solid #EEF2F5;padding-top:6px}
+.segwx summary{cursor:pointer;color:#1F5FA8;font-weight:600}
+.seghints .hint{font-size:12px;margin-top:5px}
+a.btn2{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;box-sizing:border-box}

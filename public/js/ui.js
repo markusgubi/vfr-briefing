@@ -149,6 +149,9 @@ async function setWxLayer(v) {
   } catch (e) { $("wxInfo").textContent = "Wetterbild nicht verf\u00fcgbar (" + e.message + ")."; }
 }
 var cvs = L.canvas({ padding: 0.3 });
+/* Route-Linien ueber der Luftraum-Flaeche (Canvas), sonst faengt das Canvas Klick/Maus ab */
+map.createPane("altP").style.zIndex = 440;    /* Alternativen unter der gewaehlten Route */
+map.createPane("routeP").style.zIndex = 450;
 var airLayer = L.layerGroup().addTo(map), routeLayer = L.layerGroup().addTo(map), lineLayer = L.layerGroup().addTo(map);
 var hlLayer = L.layerGroup().addTo(map), editLayer = L.layerGroup().addTo(map);
 
@@ -197,7 +200,7 @@ map.on("click", function (ev) {
   });
   if (hidden) h += "<div class='note' style='margin-top:4px'>" + hidden + " davon wegen H\u00f6henfilter nicht gezeichnet.</div>";
   h += "<div class='asfoot'></div></div>";
-  var pop = L.popup({ maxWidth: Math.min(400, map.getSize().x - 60), autoPanPadding: [12, 12] }).setLatLng(ev.latlng).setContent(h).openOn(map);
+  var pop = L.popup(popOpts({ maxWidth: Math.min(400, map.getSize().x - 60) })).setLatLng(ev.latlng).setContent(h).openOn(map);
   pop.on("remove", function () { if (!AS_KEEP) showAsOutline(null); });
   /* Klicks im Fenster erreichen das Dokument nicht (Leaflet stoppt sie) - daher direkt am Fenster */
   pop.getElement().addEventListener("click", function (e) {
@@ -311,7 +314,7 @@ function swapFromTo() {
   saveSettings();
   if (S.from && S.to && RES) setSts("Von und Nach getauscht \u2013 \u201eSicherste Route berechnen\u201c f\u00fcr den R\u00fcckweg.");
 }
-var KEEP = ["tas", "maxAlt", "terrClr", "cloudClr", "prefAgl", "climb", "desc", "retStay", "xwMax"];
+var KEEP = ["tas", "maxAlt", "terrClr", "cloudClr", "prefAgl", "climb", "desc", "retStayH", "xwMax"];
 function saveSettings() {
   try {
     var o = { v74: true, from: S.from, to: S.to, avoidClr: $("avoidClr").checked, prefGafor: $("prefGafor").checked, retOn: $("retOn").checked, asFilter: $("asFilter").value };
@@ -323,6 +326,8 @@ function loadSettings() {
   try {
     var o = JSON.parse(localStorage.getItem("vfr72") || "null"); if (!o) return;
     KEEP.forEach(function (f) { if (o[f]) $(f).value = o[f]; });
+    /* frueher Aufenthalt in Minuten gespeichert: in Stunden umrechnen */
+    if (!o.retStayH && o.retStay) $("retStayH").value = Math.round(+o.retStay / 30) / 2;
     if (!o.v74 && o.maxAlt === "10000") $("maxAlt").value = 12500;
     $("avoidClr").checked = !!o.avoidClr;
     $("prefGafor").checked = !!o.prefGafor;
@@ -347,7 +352,7 @@ function readP() {
     prefAgl: clampNum($("prefAgl").value, 1000, 5000, 2000), climb: clampNum($("climb").value, 200, 2000, 500),
     desc: clampNum($("desc").value, 200, 2000, 500), avoidClr: $("avoidClr").checked,
     preferGafor: !!GAFOR && $("prefGafor").checked,
-    ret: $("retOn").checked, stay: clampNum($("retStay").value, 0, 600, 60), xwMax: clampNum($("xwMax").value, 5, 35, 15)
+    ret: $("retOn").checked, stay: Math.round(clampNum(String($("retStayH").value).replace(",", "."), 0, 10, 1) * 60), xwMax: clampNum($("xwMax").value, 5, 35, 15)
   };
   P.prefAgl = Math.max(P.prefAgl, P.terrClr);
   return P;
@@ -617,7 +622,8 @@ function expHtml(R) {
     "<div class='note' style='margin-top:6px'>" + (share ? "Im Teilen-Men\u00fc <b>SkyDemon</b> w\u00e4hlen. " : "Datei <b>.flightplan</b> in SkyDemon \u00f6ffnen. ") +
     "Enth\u00e4lt alle Wegpunkte und die Reiseh\u00f6he je Teilstrecke (Liste unten zum Abgleich).</div>" +
     "<div class='btnrow' style='margin-top:10px'><button class='btn2' id='bGpx'>GPX</button>" +
-    (MOB.on ? "" : "<button class='btn2' id='bPrint'>Drucken</button><button class='btn2' id='bWindy'>Windy (VFR)</button>") + "</div>" +
+    (MOB.on ? "" : "<button class='btn2' id='bPrint'>Drucken</button>") +
+    "<a class='btn2' id='bWindy' href='" + windyUrl(R) + "' target='_blank' rel='noopener'>Windy (VFR-Strecke)</a></div>" +
     "<table class='nav' style='margin-top:10px'><tr><th>Wegpunkt</th><th>Reiseh\u00f6he ab hier</th></tr>" +
     R.wps.map(function (w, k) {
       var last = k === R.wps.length - 1;
@@ -633,12 +639,14 @@ function onExpClick(e) {
   if (id === "bSky") exportSkyDemon(R, share);
   if (id === "bGpx") exportGpx(R, share);
   if (id === "bPrint") window.print();
-  if (id === "bWindy") {
-    var c = lerp(RES.G.A, RES.G.B, 0.5);
-    window.open("https://www.windy.com/distance/vfr/" + R.wps.map(function (w) { return w.lat.toFixed(4) + "," + w.lon.toFixed(4); }).join(";") +
-      "?clouds," + c.lat.toFixed(3) + "," + c.lon.toFixed(3) + ",8", "_blank");
-  }
 }
+/* Strecke in Windy (VFR-Ansicht mit Wolken) – als Link, damit es auch am iPhone (App oder Safari) klappt */
+function windyUrl(R) {
+  var c = lerp(RES.G.A, RES.G.B, 0.5);
+  return "https://www.windy.com/distance/vfr/" + R.wps.map(function (w) { return w.lat.toFixed(4) + "," + w.lon.toFixed(4); }).join(";") +
+    "?clouds," + c.lat.toFixed(3) + "," + c.lon.toFixed(3) + ",8";
+}
+function stayTxt(min) { var h = min / 60; return (h === Math.round(h) ? h : h.toFixed(1).replace(".", ",")) + " Std."; }
 /* Rueckflug-Empfehlung (nur wenn bei der Suche aktiviert) */
 function retHtml() {
   var X = RES.ret; if (!X) return "";
@@ -648,9 +656,9 @@ function retHtml() {
   else if (X.latest == null) {
     cls = "bad";
     h = X.reason === "late"
-      ? "<b>R\u00fcckflug heute nicht mehr m\u00f6glich:</b> Ab " + fmtH(X.t0) + " (Ankunft + " + X.stay + " min Aufenthalt) w\u00e4re die Landung in " + esc(A) + " erst nach ECET (" + ecet + ")."
-      : "<b>R\u00fcckflug heute nicht empfohlen:</b> Jeder Abflug von " + fmtH(X.t0) + " (fr\u00fchestens: Landung " + fmtH(base.arrMin) + " + " + X.stay +
-        " min Aufenthalt) bis " + fmtH(X.tLast != null ? X.tLast : X.t0) + " ist KRITISCH" + (X.issue ? " \u2013 " + esc(X.issue) : "") + "." +
+      ? "<b>R\u00fcckflug heute nicht mehr m\u00f6glich:</b> Ab " + fmtH(X.t0) + " (Ankunft + " + stayTxt(X.stay) + " Aufenthalt) w\u00e4re die Landung in " + esc(A) + " erst nach ECET (" + ecet + ")."
+      : "<b>R\u00fcckflug heute nicht empfohlen:</b> Jeder Abflug von " + fmtH(X.t0) + " (fr\u00fchestens: Landung " + fmtH(base.arrMin) + " + " + stayTxt(X.stay) +
+        " Aufenthalt) bis " + fmtH(X.tLast != null ? X.tLast : X.t0) + " ist KRITISCH" + (X.issue ? " \u2013 " + esc(X.issue) : "") + "." +
         (X.structural ? " <b>Das liegt nicht am Wetter, sondern am Gel\u00e4nde/der Steigleistung" + (X.causes.indexOf("climb") >= 0 ? " beim Abflug aus " + esc(B) : "") +
           " \u2013 eine andere Uhrzeit \u00e4ndert nichts.</b>" + (X.causes.indexOf("climb") >= 0 ? " Steigrate (" + RES.P.climb + " ft/min, Erweiterte Einstellungen) pr\u00fcfen oder R\u00fcckroute selbst planen." : "")
           : "");
@@ -664,8 +672,8 @@ function retHtml() {
     if (X.worseFrom != null) h += (X.worseFrom === X.firstOk ? " Durchgehend nur EINGESCHR." : " Ab " + fmtH(X.worseFrom) + " nur EINGESCHR.") +
       (X.worseIssue ? " (" + esc(X.worseIssue) + ")" : "") + ".";
   }
-  return "<div class='retbox " + cls + "'>" + h + "<small>Eigene Routensuche " + esc(B) + " \u2192 " + esc(A) + " mit denselben Wetter-, Gel\u00e4nde- und Luftraumdaten, ab Ankunft + " + X.stay +
-    " min Aufenthalt alle 30 min (Grenze auf 10 min genau). ECET " + esc(A) + " " + ecet + ". Zum Ansehen der R\u00fcckroute Start/Ziel tauschen und neu suchen.</small></div>";
+  return "<div class='retbox " + cls + "'>" + h + "<small>Eigene Routensuche " + esc(B) + " \u2192 " + esc(A) + " mit denselben Wetter-, Gel\u00e4nde- und Luftraumdaten, ab Ankunft + " + stayTxt(X.stay) +
+    " Aufenthalt alle 30 min (Grenze auf 10 min genau). ECET " + esc(A) + " " + ecet + ". Zum Ansehen der R\u00fcckroute Start/Ziel tauschen und neu suchen.</small></div>";
 }
 /* Kurzform fuer die Uebersicht: "Piste 26 · GW 11 · SW 5 R (G 8)" */
 function windShort(w) {
@@ -750,7 +758,7 @@ function drawMap(sel) {
   routeLayer.clearLayers();
   RES.routes.forEach(function (x, k) {
     if (k === sel) return;
-    L.polyline(x.coords, { color: "#4A5A68", weight: 3, opacity: 0.75, dashArray: "6 7", bubblingMouseEvents: false })
+    L.polyline(x.coords, { pane: "altP", color: "#4A5A68", weight: 3, opacity: 0.75, dashArray: "6 7", bubblingMouseEvents: false })
       .bindTooltip(esc(x.name) + " \u2013 " + CAT_TXT[x.cat] + " (anklicken)").on("click", function () { render(k); }).addTo(routeLayer);
   });
   drawRouteLines(R);
@@ -800,7 +808,7 @@ function drawRouteLines(R) {
   lineLayer.clearLayers();
   /* weisser Rand als EINE Linie (sonst ueberlappen die runden Enden zu einer "Perlenkette") */
   var all = [[R.G.nodes[R.rs[0].e.a].lat, R.G.nodes[R.rs[0].e.a].lon]].concat(R.rs.map(function (r) { var b = R.G.nodes[r.e.b]; return [b.lat, b.lon]; }));
-  L.polyline(all, { color: "#fff", weight: EDIT.on && R.custom ? 11 : 9, opacity: 0.9, interactive: false, lineJoin: "round" }).addTo(lineLayer);
+  L.polyline(all, { pane: "routeP", color: "#fff", weight: EDIT.on && R.custom ? 11 : 9, opacity: 0.9, interactive: false, lineJoin: "round" }).addTo(lineLayer);
   /* gleichfarbige Abschnitte zusammenfassen */
   var runs = [];
   R.rs.forEach(function (r) {
@@ -808,10 +816,13 @@ function drawRouteLines(R) {
     if (last && last.cat === r.cat) last.pts.push([b.lat, b.lon]); else runs.push({ cat: r.cat, pts: [[a.lat, a.lon], [b.lat, b.lon]] });
   });
   /* Im Bearbeiten-Modus breite, unsichtbare Tippflaeche auf der Linie (Finger) */
-  if (EDIT.on && R.custom) L.polyline(all, { color: "#000", opacity: 0, weight: 28, bubblingMouseEvents: false })
+  /* breite, unsichtbare Tippflaeche auf der Linie (Finger/Maus): Bearbeiten = einfuegen, sonst Hinweise zum Abschnitt */
+  L.polyline(all, { pane: "routeP", color: "#000", opacity: 0, weight: EDIT.on && R.custom ? 28 : (MOB.on ? 26 : 16), bubblingMouseEvents: false })
+    .on("mousemove", function (ev) { if (!EDIT.dragging && !MOB.on) showCursor(nearestX(R, ev.latlng), "map"); })
+    .on("mouseout", function () { if (!MOB.on) hideCursor(); })
     .on("click", function (ev) { routeLineClick(R, ev); }).addTo(lineLayer);
   runs.forEach(function (run) {
-    L.polyline(run.pts, { color: CAT_COL[run.cat], weight: EDIT.on && R.custom ? 7 : 5.5, lineJoin: "round", bubblingMouseEvents: false })
+    L.polyline(run.pts, { pane: "routeP", color: CAT_COL[run.cat], weight: EDIT.on && R.custom ? 7 : 5.5, lineJoin: "round", bubblingMouseEvents: false })
       .on("mousemove", function (ev) { if (!EDIT.dragging) showCursor(nearestX(R, ev.latlng), "map"); })
       .on("mouseout", function () { hideCursor(); })
       .on("click", function (ev) { routeLineClick(R, ev); })
@@ -1210,9 +1221,34 @@ function profInsert(R, x) {
   return true;
 }
 function routeLineClick(R, ev) {
-  if (!EDIT.on || !R.custom) { showCursor(nearestX(R, ev.latlng), "map"); return; }
+  if (!EDIT.on || !R.custom) { var x = nearestX(R, ev.latlng); showCursor(x, "map"); segPopup(R, x, ev.latlng); return; }
   insertPoint({ lat: ev.latlng.lat, lon: ev.latlng.lng });
   commitEdit();
+}
+/* Fenster auf der Karte: Abstand zu Kopfzeile/Legende (oben) und Knoepfen (rechts), damit nichts verdeckt wird */
+function popOpts(o) {
+  o.autoPanPaddingTopLeft = L.point(12, MOB.on ? 175 : 20);
+  o.autoPanPaddingBottomRight = L.point(MOB.on ? 64 : 60, 12);
+  return o;
+}
+/* Klick auf die Strecke: Wetter an der Stelle und alle Hinweise, die diesen Abschnitt betreffen (wie im Ergebnis) */
+var SEG_NM = 3;
+function segPopup(R, x, ll) {
+  var q = sampleAt(R, x), r = R.rs[q.ri] || R.rs[0];
+  var hs = (R.hints || []).filter(function (h) { return h.x0 != null && x >= h.x0 - SEG_NM && x <= (h.x1 != null ? h.x1 : h.x0) + SEG_NM; });
+  var ord = { bad: 0, warn: 1, info: 2 };
+  hs.sort(function (a, b) { return (ord[a.l] - ord[b.l]) || (a.x0 - b.x0); });
+  /* zuerst die Hinweise, das Wetter an der Stelle zum Aufklappen (sonst wird das Fenster am Handy zu hoch) */
+  var w = r.wa, t = q.t;
+  var h = "<div class='pop'><b class='h'>NM " + Math.round(Math.max(0, x - SEG_NM)) + "\u2013" + Math.round(Math.min(R.D, x + SEG_NM)) +
+    " \u00b7 ~" + fmtH(t) + " \u00b7 " + fmtFt(q.p) + " ft</b> " + catTag(r.cat) +
+    "<div class='seghints'><b>" + (hs.length ? "Hinweise zu diesem Abschnitt" : "Keine besonderen Hinweise f\u00fcr diesen Abschnitt") + "</b>" +
+    hs.slice(0, 10).map(function (x) { return "<div class='hint " + x.l + "'>" + x.t + "</div>"; }).join("") +
+    (hs.length > 10 ? "<div class='note'>\u2026 weitere im Ergebnis</div>" : "") + "</div>" +
+    "<details class='segwx'><summary>Wetter an dieser Stelle (NM " + Math.round(x) + ")</summary>" +
+    nodePopup(w, x, t, null).replace(/^<div class='pop'><b class='h'>[\s\S]*?<\/b> /, "<div>") + "</details></div>";
+  L.popup(popOpts({ maxWidth: Math.min(420, map.getSize().x - 60), maxHeight: Math.round(map.getSize().y * 0.6) }))
+    .setLatLng(ll).setContent(h).openOn(map);
 }
 /* "+"-Griffe in der Mitte jeder Teilstrecke: antippen = Wegpunkt einfuegen, ziehen = einfuegen und verschieben */
 function drawAddHandles() {
