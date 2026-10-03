@@ -29,8 +29,11 @@ await page.screenshot({ path: OUT + "/i-edit-plus2.png" });
 // Tipp ins Profil -> Karte mit Marker
 await page.evaluate(() => stopEdit());
 await page.click("#mnav button[data-p='pProf']"); await page.waitForTimeout(300);
-const box = await page.locator("#profBody svg").boundingBox();
-await page.touchscreen.tap(box.x + 200, box.y + 200); await page.waitForTimeout(600);
+/* seit 9.16: nur ein Tipp auf die Hoehenlinie springt zur Karte */
+const lp = await page.evaluate(() => { const R = RES.routes[RES.sel], pv = RES.pv, svg = $("profSvg").querySelector("svg"), r = svg.getBoundingClientRect();
+  const P = svg.createSVGPoint(); for (let x = 0; x < R.D; x += 0.5) { P.x = pv.X(x); P.y = pv.Y(sampleAt(R, x).p); const s = P.matrixTransform(svg.getScreenCTM());
+    if (s.x > r.x + 40 && s.x < Math.min(r.right, innerWidth) - 40) return { x: s.x, y: s.y }; } return null; });
+await page.touchscreen.tap(lp.x, lp.y); await page.waitForTimeout(600);
 const st = await page.evaluate(() => ({ map: document.getElementById("main").classList.contains("on"), mk: !!CUR.mk, inView: CUR.mk ? map.getBounds().contains(CUR.mk.getLatLng()) : false }));
 ok(st.map && st.mk && st.inView, "Tipp ins Profil zeigt die Stelle auf der Karte " + JSON.stringify(st));
 await page.screenshot({ path: OUT + "/i-profil-karte.png" });
