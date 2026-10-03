@@ -706,14 +706,11 @@ function startEdit() {
   if (!RES) return;
   var base = RES.routes[RES.sel];
   finalize(base, RES.G, RES.P);
-  if (base.custom) { EDIT.pts = base.pts.map(function (p) { return Object.assign({}, p); }); EDIT.ua = Object.assign({}, base.userAlt || {}); }
-  else {
-    EDIT.pts = base.wps.map(function (w, k) {
-      var last = k === base.wps.length - 1;
-      return { lat: w.lat, lon: w.lon, name: (k === 0 || last || w.rp || w.border) ? w.name : null, rp: w.rp || null, border: w.border || null };
-    });
-    EDIT.ua = {};
-  }
+  /* Exakt dieselbe Linie uebernehmen (inkl. Formpunkte), damit die Bewertung identisch bleibt.
+     Ziehbar werden die Wegpunkte des Navigationslogs (Knicke, Hoehenwechsel, Meldepunkte). */
+  EDIT.pts = base.pts.map(function (p) { return Object.assign({}, p); });
+  EDIT.ua = base.custom ? Object.assign({}, base.userAlt || {}) : {};
+  if (!base.custom) base.wps.forEach(function (w) { if (w.pi != null && EDIT.pts[w.pi]) EDIT.pts[w.pi].shape = false; });
   EDIT.on = true; EDIT.A = RES.G.A; EDIT.B = RES.G.B;
   render(evalUser());
   setSts("Bearbeiten: Wegpunkte ziehen, Linie anklicken = Punkt einfügen, Punkt antippen = löschen. Höhen im Profil ziehen.");
@@ -742,15 +739,28 @@ async function commitEdit() {
   render(evalUser());
   if (!$("sts").classList.contains("err")) setSts("");
 }
+/* Teilstrecke (fuer eigene Hoehen) des Abschnitts, der bei pts[k] endet */
+function legOfSeg(k) { var n = 0; for (var j = 1; j < k; j++) if (!EDIT.pts[j].shape) n++; return n; }
+/* Formpunkte zwischen dem vorigen und naechsten Wegpunkt entfernen (gezogener Punkt -> gerade Teilstrecken).
+   Gibt den neuen Index des Punktes zurueck. */
+function straighten(k) {
+  var a = k - 1; while (a > 0 && EDIT.pts[a].shape) a--;
+  var b = k + 1; while (b < EDIT.pts.length - 1 && EDIT.pts[b].shape) b++;
+  var keep = EDIT.pts.slice(0, a + 1).concat([EDIT.pts[k]], EDIT.pts.slice(b));
+  EDIT.pts = keep;
+  return a + 1;
+}
 function drawEditMarkers(R) {
   editLayer.clearLayers();
   if (!EDIT.on || !R.custom) return;
+  var num = 0;
   EDIT.pts.forEach(function (pt, k) {
-    if (k === 0 || k === EDIT.pts.length - 1) return;
-    var lbl = pt.name ? esc(pt.name) : String(k);
+    if (k === 0 || k === EDIT.pts.length - 1 || pt.shape) return;
+    num++;
+    var lbl = pt.name ? esc(pt.name) : String(num);
     var mk = L.marker([pt.lat, pt.lon], { draggable: true, autoPan: true,
       icon: L.divIcon({ className: "wpk" + (pt.rp ? " rp" : ""), html: "<b>" + lbl + "</b>", iconSize: null, iconAnchor: [12, 12] }) });
-    mk.on("dragstart", function () { EDIT.dragging = true; hideCursor(); });
+    mk.on("dragstart", function () { EDIT.dragging = true; hideCursor(); k = straighten(k); });
     mk.on("drag", function (ev) {
       var ll = ev.target.getLatLng();
       EDIT.pts[k] = { lat: ll.lat, lon: ll.lng, name: null };   /* verschoben = kein Meldepunkt mehr */
@@ -763,9 +773,11 @@ function drawEditMarkers(R) {
   });
 }
 function deleteWp(k) {
-  if (k <= 0 || k >= EDIT.pts.length - 1) return;
-  map.closePopup(); EDIT.pts.splice(k, 1);
-  var ua = {}; Object.keys(EDIT.ua).forEach(function (l) { l = +l; if (l < k - 1) ua[l] = EDIT.ua[l]; else if (l > k - 1) ua[l - 1] = EDIT.ua[l]; });
+  if (k <= 0 || k >= EDIT.pts.length - 1 || EDIT.pts[k].shape) return;
+  map.closePopup();
+  var L0 = legOfSeg(k);   /* Teilstrecken L0 und L0+1 werden zu L0 */
+  k = straighten(k); EDIT.pts.splice(k, 1);
+  var ua = {}; Object.keys(EDIT.ua).forEach(function (l) { l = +l; if (l <= L0) ua[l] = EDIT.ua[l]; else if (l > L0 + 1) ua[l - 1] = EDIT.ua[l]; });
   EDIT.ua = ua;
   commitEdit();
 }
@@ -773,8 +785,9 @@ function routeLineClick(R, ev) {
   if (!EDIT.on || !R.custom) { showCursor(nearestX(R, ev.latlng), "map"); return; }
   var p = { lat: ev.latlng.lat, lon: ev.latlng.lng }, best = null;
   for (var k = 0; k < EDIT.pts.length - 1; k++) { var d = segDist(p, EDIT.pts[k], EDIT.pts[k + 1]).d; if (!best || d < best.d) best = { d: d, k: k }; }
+  var L0 = legOfSeg(best.k + 1);   /* Teilstrecke L0 wird in L0 und L0+1 geteilt */
   EDIT.pts.splice(best.k + 1, 0, { lat: p.lat, lon: p.lon, name: null });
-  var ua = {}; Object.keys(EDIT.ua).forEach(function (l) { l = +l; ua[l > best.k ? l + 1 : l] = EDIT.ua[l]; if (l === best.k) ua[l + 1] = EDIT.ua[l]; });
+  var ua = {}; Object.keys(EDIT.ua).forEach(function (l) { l = +l; ua[l > L0 ? l + 1 : l] = EDIT.ua[l]; if (l === L0) ua[l + 1] = EDIT.ua[l]; });
   EDIT.ua = ua;
   commitEdit();
 }

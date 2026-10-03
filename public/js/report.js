@@ -13,7 +13,7 @@ function finalize(R, G, P) {
     var nn = G.nodes[b.e.a];
     if (nn.uw != null || turn >= 4 || a.alt !== b.alt) {
       var up = nn.uw != null && R.pts ? R.pts[nn.uw] : null;
-      wps.push({ lat: nn.lat, lon: nn.lon, name: up && up.name ? up.name : "WP" + wps.length, x: b.x0, t: b.tStart, uw: nn.uw, rp: up ? up.rp : null, border: up ? up.border : null });
+      wps.push({ lat: nn.lat, lon: nn.lon, name: up && up.name ? up.name : "WP" + wps.length, x: b.x0, t: b.tStart, uw: nn.uw, pi: nn.pi, rp: up ? up.rp : null, border: up ? up.border : null });
     }
   }
   wps.push({ lat: G.B.lat, lon: G.B.lon, name: G.B.icao || "ZIEL", x: D, t: R.arrMin });

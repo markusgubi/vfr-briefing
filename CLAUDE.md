@@ -11,7 +11,7 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
 - Cloudflare Access schützt die ganze Seite (Policy "Cloudflare account members", 7 Tage Session).
 - Lokal testen: npm run dev (für /cfg wird OPENAIP_KEY in .dev.vars benötigt, nie committen).
 
-## Architektur (Stand 8.0)
+## Architektur (Stand 8.1)
 - Oberfläche als Workers Static Assets in public/ (index.html, css/app.css, js/*.js, data/gafor.geojson,
   img/ und manifest.webmanifest für den iPhone-Startbildschirm; Manifest mit crossorigin="use-credentials"
   wegen Cloudflare Access).
@@ -45,6 +45,11 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
   Start immer in Platzhöhe; im Abflugbereich (8 NM) nie Kreisen. Im Abflug-/Anflugbereich steigt der geforderte
   Geländeabstand von der Platzhöhe aus an. Konflikt (KRITISCH) unter 500 ft Abstand, knapp (EINGESCHR.) unter
   dem eingestellten Abstand. Geplant wird mit 300 ft Reserve. Jeder Abschnitt hat sein eigenes Höhenband.
+- Einheitliche Bewertung (seit 8.1): Das Suchnetz dient nur zum Finden der Wege. JEDE Route (berechnet,
+  Direktstrecke, Optimierer, Meldepunkte, Bearbeiten) wird über dieselbe Polylinie bewertet (evalPath →
+  polyGraph, Wetter höchstens alle 5 NM). Dieselbe Strecke ergibt so immer dieselbe Einstufung; vorher konnten
+  lange Netzkanten schlechtes Wetter in der Mitte übersehen. Formpunkte (pts[k].shape) halten die Linie exakt,
+  ziehbar sind nur Wegpunkte; beim Ziehen werden die beiden Nachbar-Teilstrecken gerade.
 - Eigene Routen: routeFromPoints/polyGraph bewerten beliebige Wegpunktfolgen; eigene Höhen je Teilstrecke
   (opt.userAlt) werden wie geplante Höhen geprüft. Fehlen Luftraumdaten für einen Teil, ist die Route KRITISCH.
 
@@ -84,7 +89,8 @@ Offen:
   `node tests/e2e/run.mjs LOLW LOWZ gut` und `node tests/e2e/edit.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 8.0, nächste 8.1).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 8.1, nächste 8.2).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.
+- Bearbeiten darf die Bewertung nie verändern: `node tests/e2e/konsistenz.mjs` und tests/unit/konsistenz.test.mjs.

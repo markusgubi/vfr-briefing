@@ -499,16 +499,20 @@ function densAlt(elev, T, qnh) { var pa = elev + (1013.25 - qnh) * 27, isa = 15 
    5 NM geteilt. Gelaende, Luftraum und Wetter kommen aus dem Hauptnetz Gb (Wetter vom naechsten
    Wetterpunkt). Damit bewertet evalRoute jede gezogene oder ueber Meldepunkte gelegte Route. */
 var WX_FAR_NM = 15;
+/* pts[k].shape = Formpunkt (aus dem Suchnetz, kein eigener Wegpunkt). Teilstrecken ("legs", fuer eigene
+   Hoehen) laufen von Wegpunkt zu Wegpunkt; Formpunkte teilen keine Teilstrecke. */
 function polyGraph(Gb, pts) {
-  var G = Object.create(Gb), nodes = [], edges = [], along = 0;
+  var G = Object.create(Gb), nodes = [], edges = [], along = 0, leg = 0;
   pts.forEach(function (p, k) {
-    if (k === 0) { nodes.push({ i: 0, j: 0, lat: p.lat, lon: p.lon, along: 0, uw: 0 }); return; }
+    if (k === 0) { nodes.push({ i: 0, j: 0, lat: p.lat, lon: p.lon, along: 0, uw: 0, pi: 0 }); return; }
     var a = pts[k - 1], len = distNm(a, p), n = Math.max(1, Math.ceil(len / 5));
     for (var m = 1; m <= n; m++) {
       var q = lerp(a, p, m / n);
-      nodes.push({ i: nodes.length, j: 0, lat: q.lat, lon: q.lon, along: along + len * m / n, uw: m === n ? k : null });
-      edges.push({ a: nodes.length - 2, b: nodes.length - 1, leg: k - 1 });
+      nodes.push({ i: nodes.length, j: 0, lat: q.lat, lon: q.lon, along: along + len * m / n,
+        uw: m === n && !p.shape ? k : null, pi: m === n ? k : null });
+      edges.push({ a: nodes.length - 2, b: nodes.length - 1, leg: leg });
     }
+    if (!p.shape) leg++;
     along += len;
   });
   nodes.forEach(function (nd) {
@@ -539,6 +543,27 @@ function routeFromPoints(Gb, P, pts, userAlt, id, name) {
   return R;
 }
 
+/* Einheitliche Bewertung: Das Suchnetz dient nur zum Finden der Wege. Jede Route (berechnet, Direktstrecke,
+   Optimierer, Bearbeiten) wird ueber dieselbe Polylinie mit Wetter hoechstens alle 5 NM bewertet. So liefert
+   dieselbe Strecke immer dasselbe Ergebnis, und schlechtes Wetter mitten auf einer langen Netzkante wird
+   nicht uebersehen. */
+function ptsFromPath(G, path) {
+  var pts = [{ lat: G.A.lat, lon: G.A.lon, name: G.A.icao || "START" }];
+  path.forEach(function (ei, k) {
+    var n = G.nodes[G.edges[ei].b], last = k === path.length - 1;
+    pts.push(last ? { lat: G.B.lat, lon: G.B.lon, name: G.B.icao || "ZIEL" } : { lat: n.lat, lon: n.lon, shape: true });
+  });
+  return pts;
+}
+function evalPath(G, P, depH, path, id, name) {
+  var key = path.join(","), cache = G.polyCache || (G.polyCache = {});
+  var pg = cache[key] || (cache[key] = polyGraph(G, ptsFromPath(G, path)));
+  var R = evalRoute(pg, P, depH, pg.edges.map(function (e, k) { return k; }), id, name);
+  R.pts = ptsFromPath(G, path); R.custom = false;
+  R.path = path; R.key = key;   /* Netzweg fuer Aehnlichkeit/Duplikate */
+  return R;
+}
+
 /* ==================== 11. Kandidaten, Rangfolge, Begruendung ==================== */
 function laneMap(path, G) { var m = {}; path.forEach(function (ei) { var n = G.nodes[G.edges[ei].b]; m[n.i] = n.j; }); return m; }
 function similar(a, b, G) {
@@ -565,8 +590,8 @@ function candidatePaths(G, P, depH, quick) {
   return out;
 }
 function computeRoutes(G, P) {
-  var dp = directPath(G), direct = dp ? evalRoute(G, P, P.depH, dp, "direct", "Direktstrecke") : null;
-  var evals = candidatePaths(G, P, P.depH, false).map(function (p, k) { return evalRoute(G, P, P.depH, p, "c" + k, ""); })
+  var dp = directPath(G), direct = dp ? evalPath(G, P, P.depH, dp, "direct", "Direktstrecke") : null;
+  var evals = candidatePaths(G, P, P.depH, false).map(function (p, k) { return evalPath(G, P, P.depH, p, "c" + k, ""); })
     .filter(function (r) { return !direct || r.key !== direct.key; });
   var all = evals.concat(direct ? [direct] : []).sort(rankCmp);
   if (!all.length) throw new Error("Keine zul\u00e4ssige Route: verbotene Lufträume oder Gel\u00e4nde blockieren alle Varianten.");
@@ -586,7 +611,7 @@ async function optimizer(G, P, onHour) {
     var ps = candidatePaths(G, P, h, true), dp = directPath(G);
     if (dp) ps.push(dp);
     var best = null;
-    ps.forEach(function (p) { var R = evalRoute(G, P, h, p, "", ""); if (!best || rankCmp(R, best) < 0) best = R; });
+    ps.forEach(function (p) { var R = evalPath(G, P, h, p, "", ""); if (!best || rankCmp(R, best) < 0) best = R; });
     out.push(best ? { h: h, score: best.score, cat: best.cat } : { h: h, score: 0, cat: 2 });
     if (onHour) { onHour(h - Math.max(0, lo) + 1, Math.min(23, hi) - Math.max(0, lo) + 1, h); await new Promise(function (r) { setTimeout(r, 0); }); }
   }

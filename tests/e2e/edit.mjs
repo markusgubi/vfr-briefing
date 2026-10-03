@@ -3,7 +3,7 @@ import { openApp, planRoute } from "./lib.mjs";
 const OUT = process.env.OUT || ".";
 const { browser, page, errors } = await openApp();
 const ok = (c, m) => { console.log((c ? "OK   " : "FAIL ") + m); if (!c) process.exitCode = 1; };
-const cur = () => page.evaluate(() => { const R = RES.routes[RES.sel]; return { id: R.id, n: R.pts && R.pts.length, cat: R.cat, conf: R.conflicts.map(c => c.cause),
+const cur = () => page.evaluate(() => { const R = RES.routes[RES.sel]; return { id: R.id, n: EDIT.pts ? EDIT.pts.filter(p => !p.shape).length : 0, cat: R.cat, conf: R.conflicts.map(c => c.cause),
   ua: Object.assign({}, EDIT.ua), D: +R.D.toFixed(1), miss: (R.airMissing || []).length, far: (R.wxFar || []).length, legs: (R.legX || []).length, wps: R.wps.map(w => w.name) }; });
 
 await planRoute(page, "LOLW", "LOWZ");
