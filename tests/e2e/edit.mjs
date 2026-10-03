@@ -57,16 +57,18 @@ const minA = await page.evaluate(leg => legMinAlt(RES.routes[RES.sel], leg), h.l
 ok(r4.ua[h.leg] >= minA - 1 && !r4.conf.includes("low"), "Ziehen ins Gelaende wird an der Mindesthoehe " + minA + " gestoppt (" + r4.ua[h.leg] + ", Konflikte: " + r4.conf.join(",") + ")");
 await page.screenshot({ path: OUT + "/e2e-edit-tief.png" });
 
-// 5) Doppelklick = wieder automatisch
+// 5) Griff antippen + Knopf Auto = wieder automatisch
 const d5 = await page.evaluate(leg => {
   const R = RES.routes[RES.sel], l = R.legX.find(x => x.leg === leg), pv = RES.pv, svg = document.querySelector("#profBody svg");
   const pt = svg.createSVGPoint(); pt.x = pv.X((l.x0 + l.x1) / 2); pt.y = pv.Y(l.alt);
   const sp = pt.matrixTransform(svg.getScreenCTM()); return { x: sp.x, y: sp.y };
 }, h.leg);
-await page.mouse.dblclick(d5.x, d5.y);
+await page.mouse.click(d5.x, d5.y);
+await page.waitForTimeout(300);
+await page.click("#altBar button[data-auto]");
 await page.waitForTimeout(400);
 const r5 = await cur();
-ok(r5.ua[h.leg] == null, "Doppelklick setzt Hoehe zurueck auf automatisch");
+ok(r5.ua[h.leg] == null, "Griff antippen + Auto setzt Hoehe zurueck auf automatisch");
 
 // 6) Punkt weit aus dem geladenen Gebiet ziehen -> Daten werden nachgeladen
 await page.evaluate(async () => { EDIT.pts.splice(1, 0, { lat: 46.75, lon: 12.2, name: null }); await commitEdit(); });
