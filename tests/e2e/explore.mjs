@@ -110,8 +110,8 @@ for (const [from, to, sc, tm, mob] of CASES) {
       await page.evaluate(async ([x, y, y2]) => {
         const el = document.elementFromPoint(x, y), o = { pointerId: 7, pointerType: "touch", bubbles: true, clientX: x, clientY: y };
         el.dispatchEvent(new PointerEvent("pointerdown", o));
-        for (let i = 1; i <= 8; i++) { document.getElementById("profBody").dispatchEvent(new PointerEvent("pointermove", { ...o, clientY: y + (y2 - y) * i / 8 })); await new Promise(r => setTimeout(r, 30)); }
-        document.getElementById("profBody").dispatchEvent(new PointerEvent("pointerup", { ...o, clientY: y2 }));
+        for (let i = 1; i <= 8; i++) { document.getElementById("profTouch").dispatchEvent(new PointerEvent("pointermove", { ...o, clientY: y + (y2 - y) * i / 8 })); await new Promise(r => setTimeout(r, 30)); }
+        document.getElementById("profTouch").dispatchEvent(new PointerEvent("pointerup", { ...o, clientY: y2 }));
       }, [p.x, p.y, p.y2]);
       await page.waitForTimeout(600);
     } else await drag(page, p.x, p.y, p.x, p.y2);

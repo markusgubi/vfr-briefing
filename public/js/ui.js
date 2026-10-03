@@ -373,7 +373,7 @@ function render(sel) {
     : "<button class='btn2' id='bEdit'>\u270e Route &amp; H\u00f6hen bearbeiten</button>") +
     (hasUser ? "<button class='btn2' id='bUserDel'>Eigene Route verwerfen</button>" : "") + "</div>";
   if (EDIT.on && R.custom) h += "<div class='note' style='margin-top:6px'>Bewertet f\u00fcr Abflug <b>" + fmtH(P.depH * 60) + "</b> am " + esc(P.date.split("-").reverse().join(".")) + ". <b>Karte:</b> Wegpunkt ziehen \u00b7 <b>+</b> antippen oder ziehen = Wegpunkt einf\u00fcgen \u00b7 Wegpunkt antippen = l\u00f6schen. " +
-    "<b>Profil:</b> Griff \u2195 ziehen = Reiseh\u00f6he der Teilstrecke, Doppelklick = wieder automatisch. Bewertung rechnet live mit.</div>";
+    "<b>Profil:</b> Griff \u2195 ziehen oder antippen + Kn\u00f6pfe unter dem Profil = Reiseh\u00f6he der Teilstrecke (Auto = wieder automatisch), Tipp daneben ins Profil = Wegpunkt. Bewertung rechnet live mit.</div>";
   h += "</div>";
   h += "<div class='card'><h3>Hinweise &amp; Freigaben <span style='text-transform:none;letter-spacing:0;font-weight:400'>(anklicken = auf Karte zeigen)</span></h3>" +
     R.hints.map(function (x, k) { return "<div class='hint " + x.l + (x.x0 != null ? " clk" : "") + "'" + (x.x0 != null ? " data-hi='" + k + "'" : "") + ">" + x.t + "</div>"; }).join("") + "</div>";
@@ -614,7 +614,8 @@ function profLegend() {
   return it.join("");
 }
 function drawProfile(R) {
-  $("profBody").innerHTML = profSvg(R); $("prof").style.display = "block";
+  $("profSvg").innerHTML = profSvg(R); $("prof").style.display = "block";
+  renderAltBar(R);
   /* waehrend des Ziehens keine Legende aendern: sonst verschiebt sich das Profil unter dem Finger */
   if (!EDIT.drag) $("profLeg").innerHTML = profLegend();
   $("prof").classList.toggle("editing", !!(EDIT.on && R.custom));
@@ -793,7 +794,7 @@ function profSvg(R) {
 /* ==================== 14a. Route und Hoehen bearbeiten ==================== */
 /* Bearbeiten macht aus der gewaehlten Route eine "Eigene Route": Wegpunkte auf der Karte ziehen,
    per Klick auf die Linie einfuegen, per Popup/Rechtsklick loeschen; Reiseflughoehe je Teilstrecke im
-   Profil ziehen (Doppelklick = wieder automatisch). Alles wird live neu bewertet. */
+   Profil ziehen oder per Hoehenleiste setzen (Auto = automatisch). Alles wird live neu bewertet. */
 /* dirty = Nutzer hat wirklich etwas geaendert. Nur dann bleibt eine "Eigene Route" als Variante bestehen. */
 var EDIT = { on: false, drag: null, dragging: false, pts: null, ua: {}, raf: 0, A: null, B: null, dirty: false, baseName: null };
 function userIdx() { for (var k = 0; k < RES.routes.length; k++) if (RES.routes[k].id === "user") return k; return -1; }
@@ -894,7 +895,7 @@ function drawEditMarkers(R) {
 }
 function deleteWp(k) {
   if (k <= 0 || k >= EDIT.pts.length - 1 || EDIT.pts[k].shape) return Promise.resolve();
-  map.closePopup(); EDIT.dirty = true;
+  map.closePopup(); EDIT.dirty = true; EDIT.sel = null;
   var L0 = legOfSeg(k);   /* Teilstrecken L0 und L0+1 werden zu L0 */
   k = straighten(k); EDIT.pts.splice(k, 1);
   var ua = {}; Object.keys(EDIT.ua).forEach(function (l) { l = +l; if (l <= L0) ua[l] = EDIT.ua[l]; else if (l > L0 + 1) ua[l - 1] = EDIT.ua[l]; });
@@ -905,7 +906,7 @@ function deleteWp(k) {
 function insertPoint(p) {
   var best = null;
   for (var k = 0; k < EDIT.pts.length - 1; k++) { var d = segDist(p, EDIT.pts[k], EDIT.pts[k + 1]).d; if (!best || d < best.d) best = { d: d, k: k }; }
-  EDIT.dirty = true;
+  EDIT.dirty = true; EDIT.sel = null;
   var L0 = legOfSeg(best.k + 1);   /* Teilstrecke L0 wird in L0 und L0+1 geteilt */
   EDIT.pts.splice(best.k + 1, 0, { lat: p.lat, lon: p.lon, name: null });
   var ua = {}; Object.keys(EDIT.ua).forEach(function (l) { l = +l; ua[l > L0 ? l + 1 : l] = EDIT.ua[l]; if (l === L0) ua[l + 1] = EDIT.ua[l]; });
@@ -1012,10 +1013,11 @@ function editSvg(R, X, Y, f2, lbl, reserve) {
     var x0 = X(l.x0) + 3, x1 = X(l.x1) - 3, y = Y(l.alt), xm = (x0 + x1) / 2;
     if (x1 - x0 < 6) return;
     var miss = l.user && !l.reach && !(EDIT.drag && EDIT.drag.leg === l.leg);
+    var sel = EDIT.sel === l.leg;   /* gewaehlte Teilstrecke (Hoehenleiste) gefuellt */
     out += "<line x1='" + x0 + "' x2='" + x1 + "' y1='" + y + "' y2='" + y + "' stroke='" + (miss ? "#C0392B" : "#B02E7A") + "' stroke-width='" + (miss ? 3 : 9) + "'" +
       (miss ? " stroke-dasharray='6 5' stroke-opacity='0.7'" : " stroke-opacity='0.18'") + " stroke-linecap='round'/>" +
-      "<circle cx='" + xm.toFixed(1) + "' cy='" + y + "' r='8' fill='#fff' stroke='#B02E7A' stroke-width='2.5' style='cursor:ns-resize'/>" +
-      "<path d='M " + (xm - 3).toFixed(1) + " " + (y - 2) + " l 3 -3 l 3 3 M " + (xm - 3).toFixed(1) + " " + (y + 2) + " l 3 3 l 3 -3' stroke='#B02E7A' stroke-width='1.5' fill='none'/>";
+      "<circle cx='" + xm.toFixed(1) + "' cy='" + y + "' r='" + (sel ? 10 : 8) + "' fill='" + (sel ? "#B02E7A" : "#fff") + "' stroke='#B02E7A' stroke-width='2.5' style='cursor:ns-resize'/>" +
+      "<path d='M " + (xm - 3).toFixed(1) + " " + (y - 2) + " l 3 -3 l 3 3 M " + (xm - 3).toFixed(1) + " " + (y + 2) + " l 3 3 l 3 -3' stroke='" + (sel ? "#fff" : "#B02E7A") + "' stroke-width='1.5' fill='none'/>";
     if (EDIT.drag && EDIT.drag.leg === l.leg && EDIT.drag.minA) {   /* waehrend des Ziehens: Mindesthoehe zeigen */
       var ym = Y(EDIT.drag.minA);
       out += "<line x1='" + x0 + "' x2='" + x1 + "' y1='" + ym + "' y2='" + ym + "' stroke='#C0392B' stroke-width='2' stroke-dasharray='5 4'/>";
@@ -1027,13 +1029,45 @@ function editSvg(R, X, Y, f2, lbl, reserve) {
   });
   return { g: out, t: txt };
 }
-function legAt(c) {
+/* Griff (Teilstrecke) an einer Profilstelle: naechster Griff senkrecht innerhalb tol Einheiten */
+function legAt(c, tol) {
   var R = RES.routes[RES.sel], pv = RES.pv; if (!R || !R.legX) return null;
-  for (var k = 0; k < R.legX.length; k++) {
-    var l = R.legX[k];
-    if (c.x >= l.x0 - 0.3 && c.x <= l.x1 + 0.3 && Math.abs(pv.Y(l.alt) - c.y) <= 16) return l;
+  tol = tol || 16;
+  var best = null;
+  R.legX.forEach(function (l) {
+    if (c.x < l.x0 - 0.3 || c.x > l.x1 + 0.3) return;
+    var d = Math.abs(pv.Y(l.alt) - c.y);
+    if (d <= tol && (!best || d < best.d)) best = { d: d, l: l };
+  });
+  return best ? best.l : null;
+}
+/* Hoehenleiste unter dem Profil (Bearbeiten): gewaehlte Teilstrecke, Hoehe, Mindesthoehe, Knoepfe */
+function renderAltBar(R) {
+  var bar = $("altBar"); if (!bar) return;
+  if (!EDIT.on || !R || !R.custom) { bar.innerHTML = ""; return; }
+  var l = EDIT.sel != null && R.legX ? R.legX.filter(function (x) { return x.leg === EDIT.sel; })[0] : null;
+  if (!l) {
+    bar.innerHTML = "<span class='t'>H\u00f6he \u00e4ndern: Griff \u25ef im Profil antippen oder ziehen \u00b7 Tipp daneben ins Profil = Wegpunkt</span>";
+    return;
   }
-  return null;
+  var minA = legMinAlt(R, l.leg), cur = EDIT.ua[l.leg] != null ? EDIT.ua[l.leg] : l.alt, user = EDIT.ua[l.leg] != null;
+  var note = EDIT.drag && EDIT.drag.clamp ? " \u00b7 <span class='w'>tiefer nicht m\u00f6glich (Gel\u00e4nde)</span>"
+    : user && !l.reach && !EDIT.drag ? " \u00b7 <span class='w'>hier nicht erreichbar (siehe Hinweise)</span>" : "";
+  function b(d, t) { var dis = (d < 0 && cur + d < minA && cur <= minA) || (d > 0 && cur >= 15000); return "<button type='button' data-d='" + d + "'" + (dis ? " disabled" : "") + ">" + t + "</button>"; }
+  bar.innerHTML = "<span class='t'>Teilstrecke " + (l.leg + 1) + ": <b>" + cur + " ft</b> " + (user ? "\u270e" : "auto") +
+    " \u00b7 min. " + minA + " ft" + note + "</span>" + b(-500, "\u2212500") + b(-100, "\u2212100") + b(100, "+100") + b(500, "+500") +
+    "<button type='button' data-auto='1'" + (user ? "" : " disabled") + ">Auto</button>";
+}
+function altBarClick(e) {
+  var btn = e.target.closest("button"); if (!btn || btn.disabled || !EDIT.on || EDIT.sel == null) return;
+  var R = RES.routes[RES.sel], l = R.legX && R.legX.filter(function (x) { return x.leg === EDIT.sel; })[0]; if (!l) return;
+  EDIT.dirty = true;
+  if (btn.getAttribute("data-auto")) { delete EDIT.ua[l.leg]; render(evalUser()); setSts("Teilstrecke " + (l.leg + 1) + ": H\u00f6he wieder automatisch."); return; }
+  var minA = legMinAlt(R, l.leg), cur = EDIT.ua[l.leg] != null ? EDIT.ua[l.leg] : l.alt, a = cur + +btn.getAttribute("data-d"), msg = "";
+  if (a < minA) { a = minA; msg = "Tiefer nicht m\u00f6glich: Mindesth\u00f6he " + minA + " ft (Gel\u00e4nde \u00b11 NM + 500 ft + Puffer)."; }
+  if (a > 15000) { a = 15000; msg = "H\u00f6her als 15.000 ft ist nicht vorgesehen."; }
+  else if (a > RES.P.maxAlt) msg = "Achtung: \u00fcber der eingestellten Max. H\u00f6he (" + RES.P.maxAlt + " ft).";
+  EDIT.ua[l.leg] = a; render(evalUser()); setSts(msg);
 }
 /* Mindesthoehe einer Teilstrecke beim Ziehen: harte Grenze (Gelaende +-1 NM + 500 ft + DEM-Puffer,
    im Ab-/Anflugbereich von der Platzhoehe ansteigend), auf 100 ft aufgerundet */
@@ -1103,55 +1137,67 @@ function nearestX(R, ll) {
   return best ? best.x : 0;
 }
 function setupCursor() {
-  var pb = $("profBody");
-  pb.addEventListener("pointerdown", function (ev) {
-    if (!EDIT.on || !RES || !RES.routes[RES.sel] || !RES.routes[RES.sel].custom) return;
-    var c = svgX(ev), l = c && legAt(c); if (!l) return;
-    ev.preventDefault(); ev.stopPropagation(); ev.vfrHandle = true;   /* Griff getroffen: kein Tipp ins Profil */
-    /* Doppeltipp/-klick auf den Griff = Hoehe wieder automatisch (eigene Erkennung, da das Profil
-       zwischen den Klicks neu gezeichnet wird und der Browser dann kein dblclick meldet) */
-    var now = Date.now();
-    if (EDIT.lastTap && EDIT.lastTap.leg === l.leg && now - EDIT.lastTap.t < 450) {
-      EDIT.lastTap = null; EDIT.dirty = true; delete EDIT.ua[l.leg]; render(evalUser()); return;
-    }
-    EDIT.drag = { leg: l.leg, moved: false, a0: l.alt, y0: c.y, minA: legMinAlt(RES.routes[RES.sel], l.leg) }; RES.pvFreeze = RES.pv.yMax;
-    try { pb.setPointerCapture(ev.pointerId); } catch (e) {}
-    hideCursor();
-  }, true);
-  pb.addEventListener("pointermove", function (ev) {
+  var pb = $("profBody"), pt = $("profTouch");
+  function editing() { return EDIT.on && RES && RES.routes[RES.sel] && RES.routes[RES.sel].custom; }
+  /* Finger auf einem Griff: Seiten-Scrollen/Zoomen von Safari fuer diese Beruehrung sperren */
+  pt.addEventListener("touchstart", function (e) {
+    if (!editing() || e.touches.length !== 1) return;
+    var c = svgX(e.touches[0]); if (c && legAt(c, 30)) e.preventDefault();
+  }, { passive: false });
+  pt.addEventListener("pointerdown", function (ev) {
+    if (!editing()) return;
+    var c = svgX(ev), l = c && legAt(c, ev.pointerType === "mouse" ? 16 : 30); if (!l) return;
+    ev.preventDefault(); ev.vfrHandle = true;   /* Griff getroffen: kein Tipp ins Profil */
+    var R = RES.routes[RES.sel];
+    EDIT.sel = l.leg;
+    EDIT.drag = { leg: l.leg, moved: false, a0: l.alt, y0: c.y, minA: legMinAlt(R, l.leg), clamp: false }; RES.pvFreeze = RES.pv.yMax;
+    try { pt.setPointerCapture(ev.pointerId); } catch (e) {}
+    hideCursor(); renderAltBar(R);
+  });
+  pt.addEventListener("pointermove", function (ev) {
     if (EDIT.drag) {
       var cd = svgX(ev); if (!cd) return;
+      ev.preventDefault();
       /* Ziehen beginnt erst nach 2 Einheiten senkrecht (kein versehentliches Verstellen beim Tippen);
          danach folgt die Hoehe direkt der Fingerposition */
-      if (!EDIT.drag.moved && Math.abs(cd.y - EDIT.drag.y0) < 2) { ev.preventDefault(); return; }
+      if (!EDIT.drag.moved && Math.abs(cd.y - EDIT.drag.y0) < 2) return;
       /* nie ins Gelaende: hoechstens bis zur Mindesthoehe der Teilstrecke (Konfliktgrenze) */
-      var a = Math.max(altFromY(cd.y), EDIT.drag.minA);
-      EDIT.drag.moved = true; EDIT.dirty = true; EDIT.lastTap = null;
+      var want = altFromY(cd.y), a = Math.max(want, EDIT.drag.minA);
+      EDIT.drag.moved = true; EDIT.dirty = true; EDIT.drag.clamp = want < EDIT.drag.minA;
       if (EDIT.ua[EDIT.drag.leg] !== a) { EDIT.ua[EDIT.drag.leg] = a; scheduleQuick(); }
-      ev.preventDefault(); return;
+      else renderAltBar(RES.routes[RES.sel]);
+      return;
     }
     var c = svgX(ev); if (!c) return;
+    if (ev.pointerType === "mouse") pt.classList.toggle("grab", !!(editing() && legAt(c, 16)));
     if (c.x < -0.5 || c.x > RES.pv.D + 0.5) { hideCursor(); return; }
     showCursor(c.x, "prof");
   });
   var tap = null;
-  pb.addEventListener("pointerdown", function (ev) {
-    var c = svgX(ev); if (c && c.x >= 0 && c.x <= RES.pv.D) showCursor(c.x, "prof");
-    tap = c && !ev.vfrHandle ? { cx: ev.clientX, cy: ev.clientY, t: Date.now(), x: c.x } : null;
+  pt.addEventListener("pointerdown", function (ev) {
+    var c = svgX(ev); if (c && c.x >= 0 && c.x <= RES.pv.D && !ev.vfrHandle) showCursor(c.x, "prof");
+    tap = c && !ev.vfrHandle ? { cx: ev.clientX, cy: ev.clientY, t: Date.now(), x: c.x, y: c.y, touch: ev.pointerType !== "mouse" } : null;
   });
   /* Kurzer Tipp/Klick ins Profil: beim Bearbeiten = Wegpunkt an dieser Stelle einfuegen (teilt die
      Teilstrecke, damit dort eine eigene Hoehe gesetzt werden kann); sonst auf Handy/Tablet zur Karte */
-  pb.addEventListener("pointerup", function (ev) {
-    if (!tap || EDIT.drag || EDIT.lastTap && Date.now() - EDIT.lastTap.t < 50) { tap = null; return; }
-    var moved = Math.abs(ev.clientX - tap.cx) + Math.abs(ev.clientY - tap.cy), x = tap.x; tap = null;
+  pt.addEventListener("pointerup", function (ev) {
+    if (!tap || EDIT.drag) { tap = null; return; }
+    var moved = Math.abs(ev.clientX - tap.cx) + Math.abs(ev.clientY - tap.cy), x = tap.x, y = tap.y, touch = tap.touch; tap = null;
     if (moved > 10 || x < 0 || x > RES.pv.D) return;
     var R = RES.routes[RES.sel];
-    if (EDIT.on && R && R.custom) {
+    if (editing()) {
       ev.preventDefault();
       /* Tipp auf einen im Profil eingefuegten Punkt (Linie oder Knopf) = Einfuegen rueckgaengig */
       var tol = 14 * RES.pv.D / (RES.pv.W - RES.pv.Lp - RES.pv.Rp), hit = null;
       (RES.pvWp || []).forEach(function (w) { if (w.prof && Math.abs(w.x - x) <= tol && (!hit || Math.abs(w.x - x) < Math.abs(hit.x - x))) hit = w; });
       if (hit) { var k = EDIT.pts.indexOf(hit.pt); if (k > 0) { hideCursor(); deleteWp(k).then(function () { setSts("Eingef\u00fcgter Wegpunkt wieder entfernt."); }); } return; }
+      /* knapp neben einem Griff: diese Teilstrecke waehlen statt einen Wegpunkt einzufuegen */
+      var near = legAt({ x: x, y: y }, touch ? 40 : 26);
+      if (near) {
+        EDIT.sel = near.leg; hideCursor(); drawProfile(R);
+        setSts("Teilstrecke " + (near.leg + 1) + " gew\u00e4hlt \u2013 H\u00f6he mit den Kn\u00f6pfen unter dem Profil oder durch Ziehen am Griff \u00e4ndern.");
+        return;
+      }
       profInsert(R, x); return;
     }
     if (!MOB.on) return;
@@ -1159,16 +1205,21 @@ function setupCursor() {
     showCursor(x, "prof"); showPane("main");
     setTimeout(function () { if (CUR.mk) map.setView(CUR.mk.getLatLng(), Math.max(map.getZoom(), 10)); }, 150);
   });
-  pb.addEventListener("pointerleave", function (ev) { if (ev.pointerType === "mouse" && !EDIT.drag) hideCursor(); });
+  pt.addEventListener("pointerleave", function (ev) { if (ev.pointerType === "mouse" && !EDIT.drag) hideCursor(); });
   function endDrag() {
     if (!EDIT.drag) return;
-    var moved = EDIT.drag.moved, leg = EDIT.drag.leg; EDIT.drag = null; RES.pvFreeze = null;
-    /* nur ein Tipp OHNE Ziehen zaehlt fuer den Doppeltipp (schnelles erneutes Ziehen setzt nie zurueck) */
-    EDIT.lastTap = moved ? null : { leg: leg, t: Date.now() };
-    if (moved) render(evalUser());
+    var d = EDIT.drag; EDIT.drag = null; RES.pvFreeze = null;
+    var R = RES.routes[RES.sel];
+    if (d.moved) {
+      render(evalUser());
+      setSts(d.clamp ? "Tiefer nicht m\u00f6glich: Mindesth\u00f6he " + d.minA + " ft f\u00fcr Teilstrecke " + (d.leg + 1) + " (Gel\u00e4nde \u00b11 NM + 500 ft + Puffer)."
+        : "Teilstrecke " + (d.leg + 1) + ": " + EDIT.ua[d.leg] + " ft.");
+    } else { drawProfile(R); setSts("Teilstrecke " + (d.leg + 1) + " gew\u00e4hlt \u2013 ziehen oder die Kn\u00f6pfe unter dem Profil nutzen."); }
   }
-  pb.addEventListener("pointerup", endDrag);
-  pb.addEventListener("pointercancel", endDrag);
+  pt.addEventListener("pointerup", endDrag);
+  pt.addEventListener("pointercancel", endDrag);
+  pt.addEventListener("lostpointercapture", endDrag);
+  $("altBar").addEventListener("click", altBarClick);
 }
 
 /* ==================== 15. Start ==================== */

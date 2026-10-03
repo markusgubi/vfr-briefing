@@ -69,8 +69,13 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
   (seit 8.6) zeigt das Profil genau die ziehbaren Wegpunkte mit denselben Nummern wie die Karte (Teilstrecken-
   grenzen, ohne Knick-Punkte des Navlogs). Tipp/Klick ins Profil neben die Griffe fügt dort einen Wegpunkt ein
   (Teilstrecke wird geteilt, Linie und Bewertung bleiben gleich), danach eigene Höhe für das Stück setzbar.
-  Höhen-Ziehen: startet nach 2 Einheiten senkrecht, Höhe folgt direkt dem Finger; Doppeltipp (nur Tipps ohne
-  Ziehen) = automatisch. Im Profil eingefügte Punkte (pt.fromProf) sind magenta hervorgehoben; Tipp auf ihr ✕ bzw.
+  Höhen-Eingabe (seit 8.9, für iPhone überarbeitet): feste Eingabefläche #profTouch über dem SVG (wird beim
+  Neuzeichnen nie ersetzt – Safari verlor sonst den Finger), touchstart auf einem Griff mit preventDefault (kein
+  Seiten-Scrollen), Trefferzone Finger 30 / Maus 16 Einheiten. Tipp knapp neben einen Griff (Finger 40 / Maus 26)
+  wählt die Teilstrecke statt einen Wegpunkt einzufügen. Gewählte Teilstrecke (EDIT.sel, Griff gefüllt) in der
+  Höhenleiste #altBar unter dem Profil: Höhe, Mindesthöhe, Knöpfe −500/−100/+100/+500/Auto, klare Meldung am
+  Minimum ("Tiefer nicht möglich …") und bei nicht erreichbarer Höhe. Kein Doppeltipp mehr (setzte bei
+  wiederholten Versuchen versehentlich zurück). Ziehen startet nach 2 Einheiten senkrecht. Im Profil eingefügte Punkte (pt.fromProf) sind magenta hervorgehoben; Tipp auf ihr ✕ bzw.
   ihre Linie = Einfügen rückgängig (seit 8.8). Bearbeiten-Modus deutlich markiert (body.editmode: Rahmen um
   Karte/Profil, Leiste mit "✓ Fertig", Stift aktiv). Eigene Höhen, die nirgends in ihrer Teilstrecke geflogen werden
   (z. B. zu tief vor einem Berg, weil vorher gestiegen werden muss), zeigt das Profil rot gestrichelt mit

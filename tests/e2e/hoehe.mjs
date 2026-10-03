@@ -38,7 +38,7 @@ async function run(mob) {
     const x = h.x + (opt.dx || 0), y = h.y, y2 = y + dy, steps = opt.steps || 12;
     if (mob) {
       await touch("touchStart", x, y);
-      for (let i = 1; i <= steps; i++) { await touch("touchMove", x + (opt.wiggle ? (i % 2 ? 6 : -6) : 0), y + dy * i / steps); await page.waitForTimeout(opt.fast ? 4 : 20); }
+      for (let i = 1; i <= steps; i++) { await touch("touchMove", x + (opt.wiggle ? (i % 2 ? 6 : -6) : 0) + (opt.diag ? 18 * Math.min(1, i / 3) : 0), y + dy * i / steps); await page.waitForTimeout(opt.fast ? 4 : 20); }
       await touch("touchEnd");
     } else {
       await page.mouse.move(x, y); await page.mouse.down();
@@ -71,6 +71,11 @@ async function run(mob) {
     const s = await state(page);
     ok(s.ua[l0] != null && Math.abs(s.ua[l0] - want) <= 150, `${tag} schneller Folgezug ${k + 1}: ${h.alt} -> ${s.ua[l0]} (Ziel ${want})`);
   }
+  // schraeg anfangen (Finger rutscht seitlich): darf nicht als Seiten-Wischen enden
+  { const h = await handle(page, l0), want = h.alt - 500;
+    await dragTo(l0, 500 * h.pxPerFt, { diag: true });
+    const s2 = await state(page);
+    ok(s2.ua[l0] != null && Math.abs(s2.ua[l0] - Math.max(want, await page.evaluate(leg => legMinAlt(RES.routes[RES.sel], leg), l0))) <= 150, `${tag} schraeger Zug: ${h.alt} -> ${s2.ua[l0]}`); }
   // ueber den oberen Rand hinaus ziehen und dort loslassen
   const hTop = await handle(page, l0);
   await dragTo(l0, -(hTop.y + 200), {});
@@ -83,21 +88,49 @@ async function run(mob) {
     const sg = await state(page), conf = await page.evaluate(() => RES.routes[RES.sel].conflicts.map(c => c.cause));
     ok(sg.ua[l.leg] === minA && !conf.includes("low"), `${tag} Teilstrecke ${l.leg} ins Gelaende gezogen: stoppt bei ${sg.ua[l.leg]} (min. ${minA}), Konflikte: ${conf.join(",") || "-"}`);
   }
-  // Doppeltipp setzt zurueck
+  // Tipp auf den Griff (ohne Ziehen) waehlt die Teilstrecke; Hoehenleiste: +500, Auto, Minimum
   if (mob) { const hs = await handle(page, l0); await page.evaluate(x => { document.getElementById("profBody").scrollLeft += x - 195; }, hs.x); await page.waitForTimeout(150); }
   const hD = await handle(page, l0);
-  if (mob) { await touch("touchStart", hD.x, hD.y); await touch("touchEnd"); await page.waitForTimeout(80); await touch("touchStart", hD.x, hD.y); await touch("touchEnd"); }
-  else await page.mouse.dblclick(hD.x, hD.y);
+  if (mob) { await touch("touchStart", hD.x, hD.y); await touch("touchEnd"); } else await page.mouse.click(hD.x, hD.y);
   await page.waitForTimeout(400);
+  const bar = () => page.evaluate(() => ({ sel: EDIT.sel, txt: document.getElementById("altBar").textContent, sts: document.getElementById("sts").textContent }));
+  let b = await bar();
+  ok(b.sel === l0 && b.txt.includes("Teilstrecke " + (l0 + 1)), `${tag} Tipp auf Griff waehlt Teilstrecke ${l0 + 1}: "${b.txt}"`);
+  const a0 = (await state(page)).ua[l0];
+  const clickBtn = async sel => { const el = page.locator("#altBar " + sel); if (mob) await el.tap(); else await el.click(); await page.waitForTimeout(400); };
+  await clickBtn("button[data-d='500']");
   s = await state(page);
-  ok(s.ua[l0] == null, `${tag} Doppeltipp setzt Teilstrecke ${l0} auf automatisch`);
+  ok(s.ua[l0] === Math.min(15000, a0 + 500), `${tag} Knopf +500: ${a0} -> ${s.ua[l0]}`);
+  await clickBtn("button[data-auto]");
+  s = await state(page);
+  ok(s.ua[l0] == null, `${tag} Knopf Auto setzt Teilstrecke ${l0 + 1} auf automatisch`);
+  // Minimum per Knoepfen: bis zur Mindesthoehe, dann klare Meldung bzw. Knopf gesperrt
+  const minL = await page.evaluate(leg => legMinAlt(RES.routes[RES.sel], leg), l0);
+  for (let k = 0; k < 40; k++) {
+    const dis = await page.locator("#altBar button[data-d='-500']").isDisabled();
+    if (dis) break;
+    await clickBtn("button[data-d='-500']");
+  }
+  s = await state(page); b = await bar();
+  ok(s.ua[l0] === minL && /Tiefer nicht m|min\. /.test(b.sts + b.txt), `${tag} Knoepfe stoppen an der Mindesthoehe ${minL} (${s.ua[l0]}) mit Hinweis: "${b.sts}"`);
+  // knapp neben den Griff getippt (Finger ungenau): waehlt die Teilstrecke, fuegt KEINEN Wegpunkt ein
+  const nBefore = await page.evaluate(() => EDIT.pts.filter(p => !p.shape).length);
+  await page.evaluate(() => { EDIT.sel = null; });
+  const hM = await handle(page, legs[0].leg);
+  if (mob) { await page.evaluate(x => { document.getElementById("profBody").scrollLeft += x - 195; }, hM.x); await page.waitForTimeout(150); }
+  const hM2 = await handle(page, legs[0].leg);
+  if (mob) { await touch("touchStart", hM2.x + 4, hM2.y - 24); await touch("touchEnd"); } else await page.mouse.click(hM2.x + 4, hM2.y - 20);
+  await page.waitForTimeout(500);
+  b = await bar();
+  const nAfter = await page.evaluate(() => EDIT.pts.filter(p => !p.shape).length);
+  ok(b.sel === legs[0].leg && nAfter === nBefore, `${tag} knapp daneben: Teilstrecke gewaehlt (${b.sel}), kein Wegpunkt eingefuegt (${nBefore} -> ${nAfter})`);
   // Tipp ins Profil (neben den Griffen) fuegt einen Wegpunkt ein; der neue Abschnitt bekommt eine eigene Hoehe
   const info = () => page.evaluate(() => { const R = RES.routes[RES.sel]; return { n: EDIT.pts.filter(p => !p.shape).length, legs: R.legX.length, D: R.D, cat: R.cat,
     pane: MOB.on ? document.querySelector(".pane.on").id : "" }; });
   const before = await info();
   const lg = await page.evaluate(() => { const R = RES.routes[RES.sel]; return R.legX.slice().sort((a, b) => (b.x1 - b.x0) - (a.x1 - a.x0))[0]; });
   const xIns = lg.x0 + (lg.x1 - lg.x0) * 0.25;
-  const scr = x => page.evaluate(([x]) => { const pv = RES.pv, svg = document.querySelector("#profBody svg"), P = svg.createSVGPoint(); P.x = pv.X(x); P.y = pv.Y(500);
+  const scr = x => page.evaluate(([x]) => { const pv = RES.pv, svg = document.querySelector("#profBody svg"), P = svg.createSVGPoint(); P.x = pv.X(x); P.y = pv.Y(100);
     const a = P.matrixTransform(svg.getScreenCTM()); return { x: a.x, y: a.y }; }, [x]);
   if (mob) { const t0 = await scr(xIns); await page.evaluate(d => { document.getElementById("profBody").scrollLeft += d; }, t0.x - 195); await page.waitForTimeout(150); }
   const tp = await scr(xIns);

@@ -108,8 +108,19 @@ table.nav th:first-child,table.nav td:first-child{text-align:left}
 .brd{background:#fff;border:1.5px solid #0F1D2A;border-radius:4px;padding:1px 5px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.3);width:auto!important;height:auto!important}
 .rptip{font-weight:700;color:#1F5FA8;font-size:11px;padding:1px 5px}
 .curtip{font-size:11.5px;font-weight:600;padding:3px 7px}
-#profBody svg{touch-action:pan-x pan-y;cursor:crosshair}
-#prof.editing #profBody svg{touch-action:pan-x}
+#profInner{position:relative}
+/* feste Eingabeflaeche ueber dem Profil: wird beim Neuzeichnen nie ersetzt (Safari verliert sonst den Finger) */
+#profTouch{position:absolute;inset:0;touch-action:pan-x pan-y;cursor:crosshair;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+#prof.editing #profTouch{touch-action:pan-x}
+#profTouch.grab{cursor:ns-resize}
+/* Hoehenleiste beim Bearbeiten: feste Hoehe, damit sich das Profil nie verschiebt */
+#altBar{display:none}
+#prof.editing #altBar{display:flex;align-items:center;gap:6px;height:40px;padding:0 10px;border-top:1px solid #F0D9E6;background:#FCF4F8;font-size:12.5px;overflow:hidden;white-space:nowrap}
+#altBar .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;color:#0F1D2A}
+#altBar .t b{font-size:15px;color:#B02E7A}
+#altBar .t .w{color:#C0392B;font-weight:700}
+#altBar button{flex:none;height:30px;min-width:44px;border:1px solid #B02E7A;background:#fff;color:#B02E7A;border-radius:6px;font:inherit;font-weight:700;padding:0 6px;cursor:pointer}
+#altBar button:disabled{opacity:.35;cursor:default}
 .navwrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
 #mnav,#mchip{display:none}
 @media (max-width:860px), (pointer:coarse) and (max-width:1400px){
@@ -132,6 +143,10 @@ table.nav th:first-child,table.nav td:first-child{text-align:left}
   #profHead{display:none}
   #profBody{overflow-x:auto;-webkit-overflow-scrolling:touch;padding:6px}
   #profBody svg{width:880px;max-width:none}
+  #profInner{width:880px}
+  #prof.editing #altBar{position:sticky;bottom:calc(64px + env(safe-area-inset-bottom));height:auto;min-height:48px;flex-wrap:wrap;padding:6px 8px;white-space:normal;border-radius:0 0 10px 10px}
+  #altBar .t{flex-basis:100%}
+  #altBar button{height:38px;min-width:52px;font-size:14px}
   input,select{font-size:16px;height:44px}
   .btn{height:50px;font-size:16px}
   .btn2{height:42px;font-size:14px;flex:1 1 45%}
