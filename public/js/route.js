@@ -791,7 +791,15 @@ async function returnPlan(G, P, R, stayMin, onStep) {
   while (i < steps.length && steps[i].cat === 2) i++;
   if (i === steps.length) {
     out.reason = steps.length && steps.some(function (s) { return !s.night; }) ? "wx" : "late";
-    out.issue = (steps.filter(function (s) { return !s.night; })[0] || steps[0] || {}).issue;
+    var day = steps.filter(function (s) { return !s.night; });
+    out.issue = (day[0] || steps[0] || {}).issue;
+    out.tLast = day.length ? day[day.length - 1].t : null;
+    /* Ursache unabhaengig von der Uhrzeit? (Gelaende/Steigrate/Luftraum statt Wetter in allen Zeiten) */
+    var WXC = { wx: 1, cloud: 1 };
+    out.structural = day.length > 0 && day.every(function (s) {
+      return s.R.conflicts.length && s.R.conflicts.every(function (c) { return !WXC[c.cause]; });
+    });
+    out.causes = day.length ? day[0].R.conflicts.map(function (c) { return c.cause; }) : [];
     return out;
   }
   out.firstOk = steps[i].t;

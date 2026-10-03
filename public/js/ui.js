@@ -498,7 +498,11 @@ function retHtml() {
     cls = "bad";
     h = X.reason === "late"
       ? "<b>R\u00fcckflug heute nicht mehr m\u00f6glich:</b> Ab " + fmtH(X.t0) + " (Ankunft + " + X.stay + " min Aufenthalt) w\u00e4re die Landung in " + esc(A) + " erst nach ECET (" + ecet + ")."
-      : "<b>R\u00fcckflug heute nicht empfohlen:</b> ab " + fmtH(X.t0) + " durchgehend KRITISCH" + (X.issue ? " \u2013 " + esc(X.issue) : "") + ".";
+      : "<b>R\u00fcckflug heute nicht empfohlen:</b> Jeder Abflug von " + fmtH(X.t0) + " (fr\u00fchestens: Landung " + fmtH(base.arrMin) + " + " + X.stay +
+        " min Aufenthalt) bis " + fmtH(X.tLast != null ? X.tLast : X.t0) + " ist KRITISCH" + (X.issue ? " \u2013 " + esc(X.issue) : "") + "." +
+        (X.structural ? " <b>Das liegt nicht am Wetter, sondern am Gel\u00e4nde/der Steigleistung" + (X.causes.indexOf("climb") >= 0 ? " beim Abflug aus " + esc(B) : "") +
+          " \u2013 eine andere Uhrzeit \u00e4ndert nichts.</b>" + (X.causes.indexOf("climb") >= 0 ? " Steigrate (" + RES.P.climb + " ft/min, Erweiterte Einstellungen) pr\u00fcfen oder R\u00fcckroute selbst planen." : "")
+          : "");
   } else {
     cls = X.worseFrom != null ? "warn" : "ok";
     h = "<b>R\u00fcckflug " + esc(B) + " \u2192 " + esc(A) + " sp\u00e4testens " + fmtH(X.latest) + "</b> (Landung ~" + fmtH(X.latestArr) + ")";
@@ -951,7 +955,9 @@ function insertPoint(p) {
 /* Wegpunkt aus dem Hoehenprofil einfuegen (nicht naeher als 1 NM an einem vorhandenen Wegpunkt) */
 function profInsert(R, x) {
   if (x < 1 || x > R.D - 1) return false;
-  if (R.wps.some(function (w) { return Math.abs(w.x - x) < 1; })) { setSts("Zu nah an einem Wegpunkt \u2013 etwas weiter daneben tippen."); return false; }
+  /* beim Bearbeiten zaehlen nur die ziehbaren (nummerierten) Wegpunkte, nicht die Knickpunkte des Navlogs */
+  var wl = EDIT.on && RES.pvWp ? RES.pvWp : R.wps;
+  if (wl.some(function (w) { return Math.abs(w.x - x) < 1; })) { setSts("Zu nah (unter 1 NM) an einem Wegpunkt \u2013 etwas weiter daneben tippen."); return false; }
   var q = sampleInterp(R, x);
   var k = insertPoint({ lat: q.lat, lon: q.lon });
   EDIT.pts[k].fromProf = true;
@@ -1076,6 +1082,11 @@ function legAt(c, tol) {
   });
   return best ? best.l : null;
 }
+/* Liegt ein Tipp (SVG-x) nahe am runden Griff der Teilstrecke? Sonst gilt er als Tipp auf die Linie. */
+function nearHandle(R, leg, sx, touch) {
+  var l = R.legX && R.legX.filter(function (x) { return x.leg === leg; })[0]; if (!l || sx == null) return false;
+  return Math.abs(sx - RES.pv.X((l.x0 + l.x1) / 2)) <= (touch ? 36 : 22);
+}
 /* Hoehenleiste unter dem Profil (Bearbeiten): gewaehlte Teilstrecke, Hoehe, Mindesthoehe, Knoepfe */
 function renderAltBar(R) {
   var bar = $("altBar"); if (!bar) return;
@@ -1185,7 +1196,8 @@ function setupCursor() {
     ev.preventDefault(); ev.vfrHandle = true;   /* Griff getroffen: kein Tipp ins Profil */
     var R = RES.routes[RES.sel];
     EDIT.sel = l.leg;
-    EDIT.drag = { leg: l.leg, moved: false, a0: l.alt, y0: c.y, minA: legMinAlt(R, l.leg), clamp: false }; RES.pvFreeze = RES.pv.yMax;
+    EDIT.drag = { leg: l.leg, moved: false, a0: l.alt, y0: c.y, x: c.x, sx: c.sx, touch: ev.pointerType !== "mouse",
+      minA: legMinAlt(R, l.leg), clamp: false }; RES.pvFreeze = RES.pv.yMax;
     try { pt.setPointerCapture(ev.pointerId); } catch (e) {}
     hideCursor(); renderAltBar(R);
   });
@@ -1211,13 +1223,13 @@ function setupCursor() {
   var tap = null;
   pt.addEventListener("pointerdown", function (ev) {
     var c = svgX(ev); if (c && c.x >= 0 && c.x <= RES.pv.D && !ev.vfrHandle) showCursor(c.x, "prof");
-    tap = c && !ev.vfrHandle ? { cx: ev.clientX, cy: ev.clientY, t: Date.now(), x: c.x, y: c.y, touch: ev.pointerType !== "mouse" } : null;
+    tap = c && !ev.vfrHandle ? { cx: ev.clientX, cy: ev.clientY, t: Date.now(), x: c.x, y: c.y, sx: c.sx, touch: ev.pointerType !== "mouse" } : null;
   });
   /* Kurzer Tipp/Klick ins Profil: beim Bearbeiten = Wegpunkt an dieser Stelle einfuegen (teilt die
      Teilstrecke, damit dort eine eigene Hoehe gesetzt werden kann); sonst auf Handy/Tablet zur Karte */
   pt.addEventListener("pointerup", function (ev) {
     if (!tap || EDIT.drag) { tap = null; return; }
-    var moved = Math.abs(ev.clientX - tap.cx) + Math.abs(ev.clientY - tap.cy), x = tap.x, y = tap.y, touch = tap.touch; tap = null;
+    var moved = Math.abs(ev.clientX - tap.cx) + Math.abs(ev.clientY - tap.cy), x = tap.x, y = tap.y, touch = tap.touch, tap0sx = tap.sx; tap = null;
     if (moved > 10 || x < 0 || x > RES.pv.D) return;
     var R = RES.routes[RES.sel];
     if (editing()) {
@@ -1228,6 +1240,7 @@ function setupCursor() {
       if (hit) { var k = EDIT.pts.indexOf(hit.pt); if (k > 0) { hideCursor(); deleteWp(k).then(function () { setSts("Eingef\u00fcgter Wegpunkt wieder entfernt."); }); } return; }
       /* knapp neben einem Griff: diese Teilstrecke waehlen statt einen Wegpunkt einzufuegen */
       var near = legAt({ x: x, y: y }, touch ? 40 : 26);
+      if (near && !nearHandle(R, near.leg, tap0sx, touch)) near = null;   /* nur nahe am runden Griff */
       if (near) {
         EDIT.sel = near.leg; hideCursor(); drawProfile(R);
         setSts("Teilstrecke " + (near.leg + 1) + " gew\u00e4hlt \u2013 H\u00f6he mit den Kn\u00f6pfen unter dem Profil oder durch Ziehen am Griff \u00e4ndern.");
@@ -1249,7 +1262,9 @@ function setupCursor() {
       render(evalUser());
       setSts(d.clamp ? "Tiefer nicht m\u00f6glich: Mindesth\u00f6he " + d.minA + " ft f\u00fcr Teilstrecke " + (d.leg + 1) + " (Gel\u00e4nde \u00b11 NM + 500 ft + Puffer)."
         : "Teilstrecke " + (d.leg + 1) + ": " + EDIT.ua[d.leg] + " ft.");
-    } else { drawProfile(R); setSts("Teilstrecke " + (d.leg + 1) + " gew\u00e4hlt \u2013 ziehen oder die Kn\u00f6pfe unter dem Profil nutzen."); }
+    } else if (nearHandle(R, d.leg, d.sx, d.touch)) {
+      drawProfile(R); setSts("Teilstrecke " + (d.leg + 1) + " gew\u00e4hlt \u2013 ziehen oder die Kn\u00f6pfe unter dem Profil nutzen.");
+    } else profInsert(R, d.x);   /* kurzer Tipp auf die Hoehenlinie abseits des Griffs = Wegpunkt dort einfuegen */
   }
   pt.addEventListener("pointerup", endDrag);
   pt.addEventListener("pointercancel", endDrag);

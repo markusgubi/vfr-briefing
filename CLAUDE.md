@@ -72,7 +72,9 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
   Höhen-Eingabe (seit 8.9, für iPhone überarbeitet): feste Eingabefläche #profTouch über dem SVG (wird beim
   Neuzeichnen nie ersetzt – Safari verlor sonst den Finger), touchstart auf einem Griff mit preventDefault (kein
   Seiten-Scrollen), Trefferzone Finger 30 / Maus 16 Einheiten. Tipp knapp neben einen Griff (Finger 40 / Maus 26)
-  wählt die Teilstrecke statt einen Wegpunkt einzufügen. Gewählte Teilstrecke (EDIT.sel, Griff gefüllt) in der
+  wählt die Teilstrecke statt einen Wegpunkt einzufügen – aber NUR nahe am runden Griff (nearHandle: Finger 36 /
+  Maus 22 Einheiten waagrecht). Ein kurzer Tipp auf die Höhenlinie/das Band abseits des Griffs fügt dort einen
+  Wegpunkt ein (seit 9.1); "zu nah" (< 1 NM) zählt beim Bearbeiten nur die nummerierten Wegpunkte. Gewählte Teilstrecke (EDIT.sel, Griff gefüllt) in der
   Höhenleiste #altBar unter dem Profil: Höhe, Mindesthöhe, Knöpfe −500/−100/+100/+500/Auto, klare Meldung am
   Minimum ("Tiefer nicht möglich …") und bei nicht erreichbarer Höhe. Kein Doppeltipp mehr (setzte bei
   wiederholten Versuchen versehentlich zurück). Ziehen startet nach 2 Einheiten senkrecht. Im Profil eingefügte Punkte (pt.fromProf) sind magenta hervorgehoben; Tipp auf ihr ✕ bzw.
@@ -112,7 +114,9 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
   Aufenthalt alle 30 min die sicherste Route (bestRouteAt), Grenze auf 10 min verfeinert. Empfehlung "spätestens
   HH:MM": letzter Abflug, der nicht KRITISCH ist und vor ECET am Startplatz landet; Grund (ECET oder Wetter ab ...),
   "mit Tageslichtreserve bis ...", "durchgehend/ab ... nur EINGESCHR.". Kommt der Hinflug nach ECET an: Warnung
-  "Kein Rückflug am selben Tag". Test: tests/unit/tageslicht.test.mjs, `node tests/e2e/rueckflug.mjs`.
+  "Kein Rückflug am selben Tag". Ist jede Zeit KRITISCH, nennt der Text den geprüften Zeitraum "von (Landung +
+  Aufenthalt) bis ..." und – wenn in allen Zeiten nur Gelände/Steigrate/Luftraum die Ursache sind (structural) –
+  dass eine andere Uhrzeit nichts ändert. Test: tests/unit/tageslicht.test.mjs, `node tests/e2e/rueckflug.mjs`.
 - Eigene Routen: routeFromPoints/polyGraph bewerten beliebige Wegpunktfolgen; eigene Höhen je Teilstrecke
   (opt.userAlt) werden wie geplante Höhen geprüft. Fehlen Luftraumdaten für einen Teil, ist die Route KRITISCH.
 
@@ -157,7 +161,7 @@ Offen:
   `node tests/e2e/run.mjs LOLW LOWZ gut`, `node tests/e2e/edit.mjs` und `node tests/e2e/lang.mjs` (> 250 NM). Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.0, nächste 9.1).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.1, nächste 9.2).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.

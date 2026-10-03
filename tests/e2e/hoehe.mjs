@@ -156,6 +156,24 @@ async function run(mob) {
   ok(await page.evaluate(() => document.querySelectorAll("#profBody .wpundo").length === 0), `${tag} kein X mehr sichtbar`);
   ok(await page.evaluate(() => document.body.classList.contains("editmode")), `${tag} Bearbeiten-Modus sichtbar markiert`);
   await page.screenshot({ path: `${OUT}/hoehe-${tag}-edit.png` });
+  // kurzer Tipp direkt AUF die Hoehenlinie (Band) abseits des Griffs: fuegt dort einen Wegpunkt ein
+  { const nb = (await info()).n;
+    const lgB = await page.evaluate(() => { const R = RES.routes[RES.sel]; return R.legX.slice().sort((a, b) => (b.x1 - b.x0) - (a.x1 - a.x0))[0]; });
+    const xb = lgB.x0 + (lgB.x1 - lgB.x0) * 0.8;
+    const bp = () => page.evaluate(([x, a]) => { const pv = RES.pv, svg = document.querySelector("#profBody svg"), P = svg.createSVGPoint(); P.x = pv.X(x); P.y = pv.Y(a);
+      const q = P.matrixTransform(svg.getScreenCTM()); return { x: q.x, y: q.y }; }, [xb, lgB.alt]);
+    if (mob) { const t0 = await bp(); await page.evaluate(d => { document.getElementById("profBody").scrollLeft += d; }, t0.x - 195); await page.waitForTimeout(150); }
+    const p = await bp();
+    if (mob) { await touch("touchStart", p.x, p.y); await touch("touchEnd"); } else await page.mouse.click(p.x, p.y);
+    await page.waitForTimeout(900);
+    const na = (await info()).n;
+    ok(na === nb + 1, `${tag} Tipp auf die Hoehenlinie (NM ${xb.toFixed(1)}) fuegt Wegpunkt ein (${nb} -> ${na})`);
+    if (na === nb + 1) {   /* wieder entfernen */
+      const ub2 = await page.evaluate(() => { const b = document.querySelector("#profBody .wpundo circle").getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; });
+      if (mob) { await touch("touchStart", ub2.x, ub2.y); await touch("touchEnd"); } else await page.mouse.click(ub2.x, ub2.y);
+      await page.waitForTimeout(900);
+    }
+  }
   const labels = await page.evaluate(() => { const nsp = EDIT.pts.filter((p, i) => i > 0 && i < EDIT.pts.length - 1 && !p.shape).length;
     const t = [...document.querySelectorAll("#profBody svg text")].map(e => e.textContent); return { nsp, ok: Array.from({ length: nsp }, (_, j) => String(j + 1)).filter(n => !t.includes(n)) }; });
   ok(!labels.ok.length, `${tag} Profil zeigt alle Wegpunktnummern wie die Karte (fehlend: ${labels.ok.join(",")})`);

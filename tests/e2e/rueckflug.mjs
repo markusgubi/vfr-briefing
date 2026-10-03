@@ -20,7 +20,8 @@ for (const mob of [false, true]) {
   // Rueckflug aus dem Tal (Testgelaende: Abflug LOWZ mit 500 ft/min nicht sicher) -> nicht empfohlen, mit Grund
   await planRoute(page, "LOLW", "LOWZ", "10:00");
   const v = await page.evaluate(() => (document.querySelector("#out .retbox") || {}).textContent || "");
-  ok(/nicht empfohlen: ab \d\d:\d\d durchgehend KRITISCH . .+/.test(v), `${tag} unfliegbarer Rueckflug begruendet: "${v.slice(0, 120)}"`);
+  ok(/nicht empfohlen: Jeder Abflug von \d\d:\d\d \(fr.hestens: Landung \d\d:\d\d \+ 60 min Aufenthalt\) bis \d\d:\d\d ist KRITISCH . .+/.test(v), `${tag} unfliegbarer Rueckflug mit Zeitraum: "${v.slice(0, 200)}"`);
+  ok(/nicht am Wetter, sondern am Gel.nde/.test(v), `${tag} Ursache unabhaengig von der Uhrzeit erklaert`);
   // spaeter Hinflug: Ankunft nach ECET -> Warnung, kein Rueckflug
   await planRoute(page, "LOLW", "LOWZ", "18:45");
   const s = await page.evaluate(() => ({ box: (document.querySelector("#out .retbox") || {}).textContent || "", night: RES.routes[0].night,
