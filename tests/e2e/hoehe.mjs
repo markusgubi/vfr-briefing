@@ -112,6 +112,17 @@ async function run(mob) {
   await dragTo(newLeg, -1000 * hN.pxPerFt, {});
   s = await state(page);
   ok(s.ua[newLeg] != null && Math.abs(s.ua[newLeg] - wantN) <= 150, `${tag} neuer Abschnitt ${newLeg}: Hoehe ${hN.alt} -> ${s.ua[newLeg]} (Ziel ${wantN})`);
+  // Rueckgaengig: Tipp auf den hervorgehobenen Punkt (Knopf mit X) entfernt ihn wieder
+  ok(await page.evaluate(() => document.querySelectorAll("#profBody .wpundo").length === 1), `${tag} eingefuegter Punkt im Profil hervorgehoben`);
+  if (mob) { const t0 = await scr(xIns); await page.evaluate(d => { document.getElementById("profBody").scrollLeft += d; }, t0.x - 195); await page.waitForTimeout(150); }
+  const ub = await page.evaluate(() => { const b = document.querySelector("#profBody .wpundo circle").getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; });
+  if (mob) { await touch("touchStart", ub.x, ub.y); await touch("touchEnd"); } else await page.mouse.click(ub.x, ub.y);
+  await page.waitForTimeout(900);
+  const und = await info();
+  ok(und.n === before.n && Math.abs(und.D - before.D) < 0.05, `${tag} Tipp auf X macht das Einfuegen rueckgaengig (${aft.n} -> ${und.n})`);
+  ok(await page.evaluate(() => document.querySelectorAll("#profBody .wpundo").length === 0), `${tag} kein X mehr sichtbar`);
+  ok(await page.evaluate(() => document.body.classList.contains("editmode")), `${tag} Bearbeiten-Modus sichtbar markiert`);
+  await page.screenshot({ path: `${OUT}/hoehe-${tag}-edit.png` });
   const labels = await page.evaluate(() => { const nsp = EDIT.pts.filter((p, i) => i > 0 && i < EDIT.pts.length - 1 && !p.shape).length;
     const t = [...document.querySelectorAll("#profBody svg text")].map(e => e.textContent); return { nsp, ok: Array.from({ length: nsp }, (_, j) => String(j + 1)).filter(n => !t.includes(n)) }; });
   ok(!labels.ok.length, `${tag} Profil zeigt alle Wegpunktnummern wie die Karte (fehlend: ${labels.ok.join(",")})`);

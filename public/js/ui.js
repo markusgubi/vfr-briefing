@@ -618,6 +618,7 @@ function drawProfile(R) {
   /* waehrend des Ziehens keine Legende aendern: sonst verschiebt sich das Profil unter dem Finger */
   if (!EDIT.drag) $("profLeg").innerHTML = profLegend();
   $("prof").classList.toggle("editing", !!(EDIT.on && R.custom));
+  document.body.classList.toggle("editmode", !!(EDIT.on && R.custom));   /* Bearbeiten deutlich zeigen */
   if (CUR.x != null) showCursor(CUR.x);
 }
 /* Reiter-Ansicht fuer Handy und Tablet (auch iPad quer): schmale Fenster oder Touch-Geraete bis 1400 px */
@@ -735,9 +736,13 @@ function profSvg(R) {
   if (EDIT.on && R.custom && EDIT.pts) {
     var nsp = EDIT.pts.filter(function (p, i) { return i > 0 && i < EDIT.pts.length - 1 && !p.shape; }), lx = {};
     R.rs.forEach(function (r) { lx[r.e.leg] = r.x1; });
-    wpl = nsp.map(function (p, j) { return { x: lx[j], name: p.name || String(j + 1) }; }).filter(function (w) { return w.x != null; });
+    wpl = nsp.map(function (p, j) { return { x: lx[j], name: p.name || String(j + 1), prof: !!p.fromProf, pt: p }; }).filter(function (w) { return w.x != null; });
   }
-  wpl.forEach(function (w) { s += "<line x1='" + X(w.x).toFixed(1) + "' x2='" + X(w.x).toFixed(1) + "' y1='" + Tp + "' y2='" + (H - Bp) + "' stroke='#1F5FA8' stroke-opacity='0.55' stroke-width='1' stroke-dasharray='3 4'/>"; });
+  wpl.forEach(function (w) {
+    s += w.prof   /* im Profil eingefuegter Punkt: hervorgehoben, Tipp darauf = rueckgaengig */
+      ? "<line x1='" + X(w.x).toFixed(1) + "' x2='" + X(w.x).toFixed(1) + "' y1='" + Tp + "' y2='" + (H - Bp) + "' stroke='#B02E7A' stroke-opacity='0.8' stroke-width='2' stroke-dasharray='6 3'/>"
+      : "<line x1='" + X(w.x).toFixed(1) + "' x2='" + X(w.x).toFixed(1) + "' y1='" + Tp + "' y2='" + (H - Bp) + "' stroke='#1F5FA8' stroke-opacity='0.55' stroke-width='1' stroke-dasharray='3 4'/>";
+  });
   var pl = "M " + X(0) + " " + Y(G.depElev) + " L " + X(0) + " " + Y(sm[0].p);
   sm.forEach(function (q) {
     if (q.circ) pl += " L " + X(q.x) + " " + Y(q.p - q.circ) + coil(X(q.x), Y(q.p - q.circ), Y(q.p));
@@ -756,8 +761,19 @@ function profSvg(R) {
   txts += lbl(W - Rp - 4, Tp + f1 * 0.2, G.B.icao || G.B.name, f1, "#0F1D2A", "end", true, [0, f1 * 1.2]);
   wpl.forEach(function (w) {
     var nm = /^WP\d+$/.test(w.name) ? w.name.slice(2) : w.name;
+    if (w.prof) {   /* Rueckgaengig-Knopf oben an der Linie */
+      var bx = X(w.x), by = Tp + f2 * 0.9, r = mob ? 13 : 10;
+      s += "<g class='wpundo'><circle cx='" + bx.toFixed(1) + "' cy='" + by.toFixed(1) + "' r='" + r + "' fill='#B02E7A'/>" +
+        "<path d='M " + (bx - r * 0.38).toFixed(1) + " " + (by - r * 0.38).toFixed(1) + " L " + (bx + r * 0.38).toFixed(1) + " " + (by + r * 0.38).toFixed(1) +
+        " M " + (bx + r * 0.38).toFixed(1) + " " + (by - r * 0.38).toFixed(1) + " L " + (bx - r * 0.38).toFixed(1) + " " + (by + r * 0.38).toFixed(1) + "' stroke='#fff' stroke-width='2.4' stroke-linecap='round'/></g>";
+      reserve(bx - r - 2, by - r - 2, bx + r + 2, by + r + 2);
+      txts += lbl(bx + r + 4, by + f2 * 0.35, nm, f2, "#B02E7A", "start", true, [0, f2 * 1.2, f2 * 2.4]) ||
+        lbl(bx - r - 4, by + f2 * 0.35, nm, f2, "#B02E7A", "end", true, [0, f2 * 1.2, f2 * 2.4]);
+      return;
+    }
     txts += lbl(X(w.x), Tp + f2 * 1.2, nm, f2, "#1F5FA8", "middle", true, [0, f2 * 1.2, f2 * 2.4, f2 * 3.6, H - Bp - Tp - f2 * 1.6]);
   });
+  RES.pvWp = wpl.map(function (w) { return { x: w.x, prof: w.prof, pt: w.pt }; });
   if (!(EDIT.on && R.custom)) R.legs.forEach(function (l, k) {   /* im Bearbeiten-Modus zeigen die Griffe die Hoehen */
     var xm = (R.wps[k].x + R.wps[k + 1].x) / 2;
     if (X(R.wps[k + 1].x) - X(R.wps[k].x) < (mob ? 40 : 30)) return;
@@ -810,7 +826,7 @@ function startEdit() {
   setSts("Bearbeiten: Wegpunkte ziehen, + antippen oder ziehen = Wegpunkt einfügen, Wegpunkt antippen = löschen. Höhen im Profil ziehen.");
 }
 function stopEdit() {
-  EDIT.on = false; editLayer.clearLayers(); setSts("");
+  EDIT.on = false; editLayer.clearLayers(); setSts(""); document.body.classList.remove("editmode");
   if (!EDIT.dirty) {   /* nichts geaendert: zurueck zur urspruenglichen Route, keine "Eigene Route" anlegen */
     var k = userIdx(); if (k >= 0) RES.routes.splice(k, 1);
     EDIT.pts = null; EDIT.ua = {};
@@ -877,13 +893,13 @@ function drawEditMarkers(R) {
   drawAddHandles();
 }
 function deleteWp(k) {
-  if (k <= 0 || k >= EDIT.pts.length - 1 || EDIT.pts[k].shape) return;
+  if (k <= 0 || k >= EDIT.pts.length - 1 || EDIT.pts[k].shape) return Promise.resolve();
   map.closePopup(); EDIT.dirty = true;
   var L0 = legOfSeg(k);   /* Teilstrecken L0 und L0+1 werden zu L0 */
   k = straighten(k); EDIT.pts.splice(k, 1);
   var ua = {}; Object.keys(EDIT.ua).forEach(function (l) { l = +l; if (l <= L0) ua[l] = EDIT.ua[l]; else if (l > L0 + 1) ua[l - 1] = EDIT.ua[l]; });
   EDIT.ua = ua;
-  commitEdit();
+  return commitEdit();
 }
 /* Neuen Wegpunkt an Position p in den naechstgelegenen Abschnitt einfuegen; gibt den Index zurueck */
 function insertPoint(p) {
@@ -901,8 +917,10 @@ function profInsert(R, x) {
   if (x < 1 || x > R.D - 1) return false;
   if (R.wps.some(function (w) { return Math.abs(w.x - x) < 1; })) { setSts("Zu nah an einem Wegpunkt \u2013 etwas weiter daneben tippen."); return false; }
   var q = sampleInterp(R, x);
-  insertPoint({ lat: q.lat, lon: q.lon });
-  hideCursor(); commitEdit();
+  var k = insertPoint({ lat: q.lat, lon: q.lon });
+  EDIT.pts[k].fromProf = true;
+  hideCursor();
+  commitEdit().then(function () { setSts("Wegpunkt eingef\u00fcgt \u2013 Tipp auf \u2715 im Profil macht es r\u00fcckg\u00e4ngig."); });
   return true;
 }
 function routeLineClick(R, ev) {
@@ -1123,7 +1141,14 @@ function setupCursor() {
     var moved = Math.abs(ev.clientX - tap.cx) + Math.abs(ev.clientY - tap.cy), x = tap.x; tap = null;
     if (moved > 10 || x < 0 || x > RES.pv.D) return;
     var R = RES.routes[RES.sel];
-    if (EDIT.on && R && R.custom) { ev.preventDefault(); profInsert(R, x); return; }
+    if (EDIT.on && R && R.custom) {
+      ev.preventDefault();
+      /* Tipp auf einen im Profil eingefuegten Punkt (Linie oder Knopf) = Einfuegen rueckgaengig */
+      var tol = 14 * RES.pv.D / (RES.pv.W - RES.pv.Lp - RES.pv.Rp), hit = null;
+      (RES.pvWp || []).forEach(function (w) { if (w.prof && Math.abs(w.x - x) <= tol && (!hit || Math.abs(w.x - x) < Math.abs(hit.x - x))) hit = w; });
+      if (hit) { var k = EDIT.pts.indexOf(hit.pt); if (k > 0) { hideCursor(); deleteWp(k).then(function () { setSts("Eingef\u00fcgter Wegpunkt wieder entfernt."); }); } return; }
+      profInsert(R, x); return;
+    }
     if (!MOB.on) return;
     ev.preventDefault(); MAP_CLICK_OFF = Date.now() + 700;
     showCursor(x, "prof"); showPane("main");
@@ -1160,6 +1185,7 @@ function setupCursor() {
   $("out").addEventListener("click", onOutClick);
   $("exp").addEventListener("click", onExpClick);
   $("asFilter").addEventListener("change", function () { drawAir(); saveSettings(); });
+  $("editDone").addEventListener("click", function () { if (EDIT.on) stopEdit(); });
   $("wxLayer").addEventListener("change", function () { setWxLayer(this.value); });
   try { var wl = localStorage.getItem("vfrWxLayer"); if (wl) { $("wxLayer").value = wl; setWxLayer(wl); } } catch (e) {}
   $("avoidClr").addEventListener("change", saveSettings);
