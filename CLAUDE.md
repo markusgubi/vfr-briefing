@@ -64,7 +64,12 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
   Nur wo das Gelände davor es verlangt, bis zur doppelten Sinkrate (STEEP_F) mit Hinweis "Steiler Sinkflug"
   (über 1,5-fach = EINGESCHR.). Reicht auch das nicht: Konflikt "desc" (KRITISCH). Kein Kreisen über dem Ziel.
   Anflugbereich (rampArrNm) analog zum Abflugbereich; die Routensuche bestraft Kanten mit descDef/descDefS.
-- Wegpunkte erscheinen im Höhenprofil als senkrechte Linien mit Nummer/Name (wie Karte/Navlog).
+- Wegpunkte erscheinen im Höhenprofil als senkrechte Linien mit Nummer/Name (wie Navlog). Beim Bearbeiten
+  (seit 8.6) zeigt das Profil genau die ziehbaren Wegpunkte mit denselben Nummern wie die Karte (Teilstrecken-
+  grenzen, ohne Knick-Punkte des Navlogs). Tipp/Klick ins Profil neben die Griffe fügt dort einen Wegpunkt ein
+  (Teilstrecke wird geteilt, Linie und Bewertung bleiben gleich), danach eigene Höhe für das Stück setzbar.
+  Höhen-Ziehen: startet nach 4 Einheiten senkrecht, Höhe folgt direkt dem Finger; Doppeltipp (nur Tipps ohne
+  Ziehen) = automatisch. Belastungstest: `node tests/e2e/hoehe.mjs` (echte Maus-/Touch-Eingaben).
 - Lange Strecken (seit 8.5): keine 250-NM-Grenze mehr, Hinweis "Lange Strecke" (Kraftstoff, Zwischenlandung
   entscheidet der Pilot). Gelände-Zoom adaptiv (demZoom: 10/9/8, DEM-Puffer 150/300/450 ft), Netz bis 70 Schritte,
   Wetterraster bis 20 Schritte, /awx bis 12° × 16°. Luftraum gilt nur in den Länderrechtecken (CTRY) geladener
@@ -124,7 +129,7 @@ Offen:
   `node tests/e2e/run.mjs LOLW LOWZ gut`, `node tests/e2e/edit.mjs` und `node tests/e2e/lang.mjs` (> 250 NM). Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 8.5, nächste 8.6).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 8.6, nächste 8.7).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.

@@ -23,6 +23,7 @@ async function run(mob) {
   const tag = mob ? "iPhone" : "Desktop";
   const { browser, page, errors } = await openApp({ mob });
   await planRoute(page, "LOLW", "LOWZ");
+  if (mob) await page.click("#mnav button[data-p='pRes']");
   await page.click("#bEdit"); await page.waitForTimeout(500);
   if (mob) { await page.click("#mnav button[data-p='pProf']"); await page.waitForTimeout(400); }
   const cdp = mob ? await page.context().newCDPSession(page) : null;
@@ -65,8 +66,7 @@ async function run(mob) {
   const l0 = legs[Math.min(1, legs.length - 1)].leg;
   for (let k = 0; k < 3; k++) {
     const h = await handle(page, l0), want = h.alt + 500;
-    await dragTo(l0, -500 * h.pxPerFt, { pause: 60 });
-    await page.waitForTimeout(300);
+    await dragTo(l0, -500 * h.pxPerFt, { pause: 40 });   // sofort weiter: unter 450 ms nach dem letzten Zug
     const s = await state(page);
     ok(s.ua[l0] != null && Math.abs(s.ua[l0] - want) <= 150, `${tag} schneller Folgezug ${k + 1}: ${h.alt} -> ${s.ua[l0]} (Ziel ${want})`);
   }
@@ -82,6 +82,30 @@ async function run(mob) {
   await page.waitForTimeout(400);
   s = await state(page);
   ok(s.ua[l0] == null, `${tag} Doppeltipp setzt Teilstrecke ${l0} auf automatisch`);
+  // Tipp ins Profil (neben den Griffen) fuegt einen Wegpunkt ein; der neue Abschnitt bekommt eine eigene Hoehe
+  const info = () => page.evaluate(() => { const R = RES.routes[RES.sel]; return { n: EDIT.pts.filter(p => !p.shape).length, legs: R.legX.length, D: R.D, cat: R.cat,
+    pane: MOB.on ? document.querySelector(".pane.on").id : "" }; });
+  const before = await info();
+  const lg = await page.evaluate(() => { const R = RES.routes[RES.sel]; return R.legX.slice().sort((a, b) => (b.x1 - b.x0) - (a.x1 - a.x0))[0]; });
+  const xIns = lg.x0 + (lg.x1 - lg.x0) * 0.25;
+  const scr = x => page.evaluate(([x]) => { const pv = RES.pv, svg = document.querySelector("#profBody svg"), P = svg.createSVGPoint(); P.x = pv.X(x); P.y = pv.Y(500);
+    const a = P.matrixTransform(svg.getScreenCTM()); return { x: a.x, y: a.y }; }, [x]);
+  if (mob) { const t0 = await scr(xIns); await page.evaluate(d => { document.getElementById("profBody").scrollLeft += d; }, t0.x - 195); await page.waitForTimeout(150); }
+  const tp = await scr(xIns);
+  if (mob) { await touch("touchStart", tp.x, tp.y); await touch("touchEnd"); } else await page.mouse.click(tp.x, tp.y);
+  await page.waitForTimeout(900);
+  const aft = await info();
+  ok(aft.n === before.n + 1 && aft.legs === before.legs + 1, `${tag} Tipp ins Profil fuegt Wegpunkt ein (${before.n} -> ${aft.n}, Abschnitte ${before.legs} -> ${aft.legs})`);
+  ok(Math.abs(aft.D - before.D) < 0.05 && aft.cat === before.cat, `${tag} Strecke und Bewertung bleiben gleich (D ${before.D.toFixed(1)} -> ${aft.D.toFixed(1)}, Kat. ${before.cat} -> ${aft.cat})`);
+  if (mob) ok(aft.pane === "pProf", `${tag} bleibt im Profil (${aft.pane})`);
+  const newLeg = await page.evaluate(([x]) => RES.routes[RES.sel].legX.find(l => l.x0 <= x + 0.2 && l.x1 >= x + 0.2).leg, [xIns]);
+  const hN = await handle(page, newLeg), wantN = hN.alt - 1000;
+  await dragTo(newLeg, 1000 * hN.pxPerFt, {});
+  s = await state(page);
+  ok(s.ua[newLeg] != null && Math.abs(s.ua[newLeg] - wantN) <= 150, `${tag} neuer Abschnitt ${newLeg}: Hoehe ${hN.alt} -> ${s.ua[newLeg]} (Ziel ${wantN})`);
+  const labels = await page.evaluate(() => { const nsp = EDIT.pts.filter((p, i) => i > 0 && i < EDIT.pts.length - 1 && !p.shape).length;
+    const t = [...document.querySelectorAll("#profBody svg text")].map(e => e.textContent); return { nsp, ok: Array.from({ length: nsp }, (_, j) => String(j + 1)).filter(n => !t.includes(n)) }; });
+  ok(!labels.ok.length, `${tag} Profil zeigt alle Wegpunktnummern wie die Karte (fehlend: ${labels.ok.join(",")})`);
   await page.screenshot({ path: `${OUT}/hoehe-${tag}.png` });
   ok(!errors.length, `${tag} keine JS-Fehler ${JSON.stringify(errors)}`);
   await browser.close();

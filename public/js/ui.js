@@ -576,7 +576,7 @@ function profLegend() {
   if (f.circ) sw("<path d='M13 1 C 6 1 6 4 13 4 C 6 4 6 7 13 7 C 6 7 6 10 13 10' fill='none' stroke='#B02E7A' stroke-width='1.8'/>", "Vollkreise: unterwegs im Tal kreisend steigen");
   if (f.wp) sw("<path d='M13 0 V12' stroke='#1F5FA8' stroke-width='1.2' stroke-dasharray='3 3'/>", "Wegpunkt (Nummer wie in der Karte)");
   if (f.hl) sw("<rect x='0' y='0' width='26' height='12' fill='#FFD400' fill-opacity='0.4'/>", "Gew\u00e4hlter Hinweis");
-  if (f.edit) sw("<circle cx='13' cy='6' r='4.5' fill='#fff' stroke='#B02E7A' stroke-width='2'/>", "Griff ziehen = Reiseh\u00f6he \u00e4ndern");
+  if (f.edit) sw("<circle cx='13' cy='6' r='4.5' fill='#fff' stroke='#B02E7A' stroke-width='2'/>", "Griff ziehen = Reiseh\u00f6he \u00e4ndern, Tipp ins Profil = Wegpunkt einf\u00fcgen");
   return it.join("");
 }
 function drawProfile(R) {
@@ -696,6 +696,12 @@ function profSvg(R) {
   }
   /* Wegpunkte als senkrechte Linien (Nummer/Name wie in Karte und Navlog) */
   var wpl = R.wps.slice(1, -1).filter(function (w) { return w.x > 0.3 && w.x < D - 0.3; });
+  /* Beim Bearbeiten: genau die ziehbaren Wegpunkte mit derselben Nummer wie auf der Karte (Teilstrecken-Grenzen) */
+  if (EDIT.on && R.custom && EDIT.pts) {
+    var nsp = EDIT.pts.filter(function (p, i) { return i > 0 && i < EDIT.pts.length - 1 && !p.shape; }), lx = {};
+    R.rs.forEach(function (r) { lx[r.e.leg] = r.x1; });
+    wpl = nsp.map(function (p, j) { return { x: lx[j], name: p.name || String(j + 1) }; }).filter(function (w) { return w.x != null; });
+  }
   wpl.forEach(function (w) { s += "<line x1='" + X(w.x).toFixed(1) + "' x2='" + X(w.x).toFixed(1) + "' y1='" + Tp + "' y2='" + (H - Bp) + "' stroke='#1F5FA8' stroke-opacity='0.55' stroke-width='1' stroke-dasharray='3 4'/>"; });
   var pl = "M " + X(0) + " " + Y(G.depElev) + " L " + X(0) + " " + Y(sm[0].p);
   sm.forEach(function (q) {
@@ -854,6 +860,15 @@ function insertPoint(p) {
   var ua = {}; Object.keys(EDIT.ua).forEach(function (l) { l = +l; ua[l > L0 ? l + 1 : l] = EDIT.ua[l]; if (l === L0) ua[l + 1] = EDIT.ua[l]; });
   EDIT.ua = ua;
   return best.k + 1;
+}
+/* Wegpunkt aus dem Hoehenprofil einfuegen (nicht naeher als 1 NM an einem vorhandenen Wegpunkt) */
+function profInsert(R, x) {
+  if (x < 1 || x > R.D - 1) return false;
+  if (R.wps.some(function (w) { return Math.abs(w.x - x) < 1; })) { setSts("Zu nah an einem Wegpunkt \u2013 etwas weiter daneben tippen."); return false; }
+  var q = sampleInterp(R, x);
+  insertPoint({ lat: q.lat, lon: q.lon });
+  hideCursor(); commitEdit();
+  return true;
 }
 function routeLineClick(R, ev) {
   if (!EDIT.on || !R.custom) { showCursor(nearestX(R, ev.latlng), "map"); return; }
@@ -1022,25 +1037,26 @@ function setupCursor() {
   pb.addEventListener("pointerdown", function (ev) {
     if (!EDIT.on || !RES || !RES.routes[RES.sel] || !RES.routes[RES.sel].custom) return;
     var c = svgX(ev), l = c && legAt(c); if (!l) return;
-    ev.preventDefault(); ev.stopPropagation();
+    ev.preventDefault(); ev.stopPropagation(); ev.vfrHandle = true;   /* Griff getroffen: kein Tipp ins Profil */
     /* Doppeltipp/-klick auf den Griff = Hoehe wieder automatisch (eigene Erkennung, da das Profil
        zwischen den Klicks neu gezeichnet wird und der Browser dann kein dblclick meldet) */
     var now = Date.now();
     if (EDIT.lastTap && EDIT.lastTap.leg === l.leg && now - EDIT.lastTap.t < 450) {
       EDIT.lastTap = null; EDIT.dirty = true; delete EDIT.ua[l.leg]; render(evalUser()); return;
     }
-    EDIT.lastTap = { leg: l.leg, t: now };
-    EDIT.drag = { leg: l.leg, moved: false }; RES.pvFreeze = RES.pv.yMax;
+    EDIT.drag = { leg: l.leg, moved: false, a0: l.alt, y0: c.y }; RES.pvFreeze = RES.pv.yMax;
     try { pb.setPointerCapture(ev.pointerId); } catch (e) {}
     hideCursor();
   }, true);
   pb.addEventListener("pointermove", function (ev) {
     if (EDIT.drag) {
       var cd = svgX(ev); if (!cd) return;
+      /* Ziehen beginnt erst nach 4 Einheiten senkrecht (kein versehentliches Verstellen beim Tippen);
+         danach folgt die Hoehe direkt der Fingerposition */
+      if (!EDIT.drag.moved && Math.abs(cd.y - EDIT.drag.y0) < 4) { ev.preventDefault(); return; }
       var a = altFromY(cd.y);
-      var curA = EDIT.ua[EDIT.drag.leg];
-      if (!EDIT.drag.moved && curA == null) { var lg = legAt({ x: cd.x, y: RES.pv.Y(a) }) || {}; curA = lg.alt; }
-      if (curA !== a && (EDIT.drag.moved || Math.abs(a - curA) >= 200)) { EDIT.drag.moved = true; EDIT.dirty = true; EDIT.lastTap = null; EDIT.ua[EDIT.drag.leg] = a; scheduleQuick(); }
+      EDIT.drag.moved = true; EDIT.dirty = true; EDIT.lastTap = null;
+      if (EDIT.ua[EDIT.drag.leg] !== a) { EDIT.ua[EDIT.drag.leg] = a; scheduleQuick(); }
       ev.preventDefault(); return;
     }
     var c = svgX(ev); if (!c) return;
@@ -1050,13 +1066,17 @@ function setupCursor() {
   var tap = null;
   pb.addEventListener("pointerdown", function (ev) {
     var c = svgX(ev); if (c && c.x >= 0 && c.x <= RES.pv.D) showCursor(c.x, "prof");
-    tap = c ? { cx: ev.clientX, cy: ev.clientY, t: Date.now(), x: c.x } : null;
+    tap = c && !ev.vfrHandle ? { cx: ev.clientX, cy: ev.clientY, t: Date.now(), x: c.x } : null;
   });
-  /* Handy/Tablet: kurzer Tipp ins Profil springt zur Karte und zeigt die Stelle */
+  /* Kurzer Tipp/Klick ins Profil: beim Bearbeiten = Wegpunkt an dieser Stelle einfuegen (teilt die
+     Teilstrecke, damit dort eine eigene Hoehe gesetzt werden kann); sonst auf Handy/Tablet zur Karte */
   pb.addEventListener("pointerup", function (ev) {
-    if (!MOB.on || !tap || EDIT.drag || EDIT.lastTap && Date.now() - EDIT.lastTap.t < 50) { tap = null; return; }
+    if (!tap || EDIT.drag || EDIT.lastTap && Date.now() - EDIT.lastTap.t < 50) { tap = null; return; }
     var moved = Math.abs(ev.clientX - tap.cx) + Math.abs(ev.clientY - tap.cy), x = tap.x; tap = null;
     if (moved > 10 || x < 0 || x > RES.pv.D) return;
+    var R = RES.routes[RES.sel];
+    if (EDIT.on && R && R.custom) { ev.preventDefault(); profInsert(R, x); return; }
+    if (!MOB.on) return;
     ev.preventDefault(); MAP_CLICK_OFF = Date.now() + 700;
     showCursor(x, "prof"); showPane("main");
     setTimeout(function () { if (CUR.mk) map.setView(CUR.mk.getLatLng(), Math.max(map.getZoom(), 10)); }, 150);
@@ -1064,7 +1084,9 @@ function setupCursor() {
   pb.addEventListener("pointerleave", function (ev) { if (ev.pointerType === "mouse" && !EDIT.drag) hideCursor(); });
   function endDrag() {
     if (!EDIT.drag) return;
-    var moved = EDIT.drag.moved; EDIT.drag = null; RES.pvFreeze = null;
+    var moved = EDIT.drag.moved, leg = EDIT.drag.leg; EDIT.drag = null; RES.pvFreeze = null;
+    /* nur ein Tipp OHNE Ziehen zaehlt fuer den Doppeltipp (schnelles erneutes Ziehen setzt nie zurueck) */
+    EDIT.lastTap = moved ? null : { leg: leg, t: Date.now() };
     if (moved) render(evalUser());
   }
   pb.addEventListener("pointerup", endDrag);
