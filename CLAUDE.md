@@ -1,4 +1,4 @@
-# VFR-Briefing (vfr.markusgubi.workers.dev)
+# VFR-Briefing (vfr.gubi.co.at, auch vfr.markusgubi.workers.dev)
 
 Privates, sicherheitsorientiertes VFR-Planungstool für einen Privatpiloten (PPL) in Österreich.
 Ziel: die wetterbasiert SICHERSTE VFR-Route mit realistischer Flughöhe finden, nur durch erlaubte Lufträume,
@@ -8,7 +8,10 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
 ## Betrieb
 - Cloudflare Worker "vfr", Deploy automatisch per Workers Builds bei Push auf main.
 - Secret OPENAIP_KEY liegt in Cloudflare (niemals ins Repo).
-- Cloudflare Access schützt die ganze Seite (Policy "Cloudflare account members", 7 Tage Session).
+- Cloudflare Access schützt die ganze Seite (Policy "Cloudflare account members", 7 Tage Session), und zwar
+  je Adresse eine eigene Access-Application: "vfr - Cloudflare Workers" (workers.dev) und "vfr" (vfr.gubi.co.at).
+  Eine neue Adresse NIE ohne eigene Access-Application freischalten: /cfg gibt sonst den openAIP-Key heraus.
+- Eigene Domain vfr.gubi.co.at als Custom Domain in wrangler.toml (routes, custom_domain = true).
 - Lokal testen: npm run dev (für /cfg wird OPENAIP_KEY in .dev.vars benötigt, nie committen).
 
 ## Architektur (Stand 8.4)

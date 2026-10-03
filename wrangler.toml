@@ -2,6 +2,10 @@ name = "vfr"
 main = "src/worker.js"
 compatibility_date = "2026-10-02"
 
+# Eigene Adresse (eigene Cloudflare-Access-Application "vfr" schuetzt sie) und weiterhin die workers.dev-Adresse
+routes = [{ pattern = "vfr.gubi.co.at", custom_domain = true }]
+workers_dev = true
+
 # Oberflaeche (HTML/CSS/JS) als Static Assets; alle anderen Pfade gehen an den Worker
 [assets]
 directory = "./public"
