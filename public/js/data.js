@@ -2,7 +2,7 @@
 var TYPE_TXT = {0:"Sonstiges",1:"Flugbeschr\u00e4nkungsgebiet (R)",2:"Gefahrengebiet (D)",3:"Sperrgebiet (P)",
   4:"CTR",5:"TMZ",6:"RMZ",7:"TMA",8:"TRA",9:"TSA",10:"FIR",11:"UIR",12:"ADIZ",13:"ATZ",14:"MATZ",
   15:"Airway",16:"MTR",17:"Alert Area",18:"Warning Area",19:"Schutzgebiet",20:"HTZ",21:"Segelflugsektor",
-  22:"TRP",23:"TIZ",24:"TIA",25:"MTA",26:"CTA",27:"ACC-Sektor",28:"Sport/Freizeit",29:"Tiefflugbeschr\u00e4nkung"};
+  22:"TRP",23:"TIZ",24:"TIA",25:"MTA",26:"CTA",27:"ACC-Sektor",28:"Sport/Freizeit",29:"Tiefflugbeschr\u00e4nkung",33:"FIS-Sektor"};
 var CLASS_TXT = {0:"A",1:"B",2:"C",3:"D",4:"E",5:"F",6:"G",8:"nicht klassifiziert"};
 var KIND = {
   forbidden: { c: "#C0392B", t: "verboten" }, danger: { c: "#E67E22", t: "Gefahren-/Aktivierungsgebiet" },
@@ -16,7 +16,8 @@ function isNature(a) { return a.type === 19 || a.type === 29 || /NATIONALPARK|NA
 function classify(a) {
   var t = a.type, c = a.icaoClass;
   if (t === 10) return "fir";   /* FIR = Landesgrenze fuer Grenzuebertritte, nicht gezeichnet */
-  if (t === 11 || t === 15 || t === 27) return "ignore";
+  if (t === 27 || t === 33) return "svc";   /* ACC-/FIS-Sektor: nur als Frequenzquelle, nie gezeichnet/bewertet */
+  if (t === 11 || t === 15) return "ignore";
   if (c === 0 || t === 1 || t === 3) return "forbidden";
   if (t === 8 || t === 9) return "tra";
   if (t === 2) return "danger";
@@ -252,15 +253,19 @@ async function dataIn(t, w, s, e, n, onCountry) {
     return loadCountry(c, t).finally(function () { done++; if (onCountry) onCountry(done, cs.length); });
   }));
   var failed = cs.filter(function (c, i) { return res[i].status !== "fulfilled"; });
-  var db = t === "asp" ? AIRDB : t === "rp" ? RPDB : APTDB, seen = {}, out = [], firs = [];
+  var db = t === "asp" ? AIRDB : t === "rp" ? RPDB : APTDB, seen = {}, out = [], firs = [], svc = [];
   cs.forEach(function (c) {
     (db[c] || []).forEach(function (a) {
-      if (t === "asp") { if (seen[a.id] || !bbOverlap([w, s, e, n], a.bb)) return; seen[a.id] = 1; if (a.kind === "fir") { firs.push(a); return; } }
+      if (t === "asp") {
+        if (seen[a.id] || !bbOverlap([w, s, e, n], a.bb)) return; seen[a.id] = 1;
+        if (a.kind === "fir") { firs.push(a); return; }
+        if (a.kind === "svc") { svc.push(a); return; }
+      }
       else { if (a.lon < w || a.lon > e || a.lat < s || a.lat > n) return; }
       out.push(a);
     });
   });
-  return { list: out, failed: failed, firs: firs, ok: cs.filter(function (c) { return failed.indexOf(c) < 0; }) };
+  return { list: out, failed: failed, firs: firs, svc: svc, ok: cs.filter(function (c) { return failed.indexOf(c) < 0; }) };
 }
 
 /* ==================== 5. Gelaende (Terrarium-Kacheln) ==================== */

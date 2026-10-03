@@ -49,6 +49,17 @@ for (const mob of [false, true]) {
   await tapRow(iN);
   await page.evaluate(() => map.closePopup()); await page.waitForTimeout(200);
   ok(await page.evaluate(() => asSelLayer.getLayers().length === 0), `${tag} Fenster schliessen entfernt den Umriss`);
+  // CTA ohne Platz und ohne eigene Frequenz: Frequenz aus dem ACC-Sektor (openAIP), Sektor selbst nicht gezeichnet
+  await page.evaluate(() => map.setView([47.0, 12.15], 10, { animate: false }));
+  await page.waitForFunction(() => VIEW_AIR.some(a => /CTA TESTBERG/.test(a.name)), null, { timeout: 15000 });
+  const svcDrawn = await page.evaluate(() => VIEW_AIR.some(a => /WIEN ACC TEST/.test(a.name)));
+  ok(!svcDrawn, `${tag} ACC-Sektor wird nicht als Luftraum gezeichnet`);
+  const pt2 = await page.evaluate(() => { const p = map.latLngToContainerPoint([47.0, 12.15]), r = document.getElementById("map").getBoundingClientRect(); return { x: r.x + p.x, y: r.y + p.y }; });
+  if (mob) await page.touchscreen.tap(pt2.x, pt2.y); else await page.mouse.click(pt2.x, pt2.y);
+  await page.waitForTimeout(500);
+  const fq2 = await page.evaluate(() => [...document.querySelectorAll(".asel")].map(e => e.textContent).join(" | "));
+  ok(/CTA TESTBERG.*Freigabe: WIEN RADAR 134\.350.*ACC-Sektor WIEN ACC TEST/.test(fq2), `${tag} CTA-Frequenz aus ACC-Sektor: ${fq2}`);
+  await page.screenshot({ path: `${OUT}/luftraum-${tag}-cta.png` });
   ok(!errors.length, `${tag} keine JS-Fehler ` + JSON.stringify(errors));
   await browser.close();
 }

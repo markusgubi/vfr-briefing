@@ -129,7 +129,7 @@ function finalize(R, G, P) {
     var where = "NM " + Math.round(g.x0) + " (~" + fmtH(g.t0) + ")";
     var reqX = Math.max(0, g.x0 - 10), req = reqX < 1 ? "direkt nach dem Start" : "spätestens bei NM " + Math.round(reqX) + " (~" + fmtH(sampleAt(R, reqX).t) + ")";
     var at = actTxt(a), atx = at ? " <b>" + at + "</b> – NOTAM/FIS prüfen." : "";
-    var fq = unitFreq(a, G);
+    var fq = unitFreq(a, G, sampleAt(R, Math.min(D, g.x0 + 0.3)));
     if (!g.inside) { if (a.kind === "clearance") add("info", "Unter " + nm + " bleiben: Untergrenze ~" + fmtFt(g.lo) + " ft MSL, geplant bis " + fmtFt(g.alt) + " ft.", g.x0, g.x1); return; }
     if (a.kind === "forbidden") add("bad", nm + " (" + (TYPE_TXT[a.type] || clsTxt(a)) + ", " + lim + ") wird bei " + where + " berührt – so nicht zulässig." + atx, g.x0, g.x1);
     else if (a.kind === "clearance") {
@@ -271,7 +271,43 @@ function pickFreq(list, types, re) {
   l.sort(function (a, b) { return (b.p - a.p); });
   return l;
 }
-function unitFreq(as, G) {
+/* Fallback, wenn weder der Luftraum noch ein Platz eine Frequenz liefert: (a) ACC-/FIS-Sektor aus openAIP, der den
+   Luftraum an dieser Stelle und Hoehe abdeckt, (b) FIR-Frequenz aus openAIP, (c) nur die zustaendige Stelle mit Namen
+   (FIS des Landes) ohne Frequenzzahl. Nie eine Zahl erfinden. */
+var FIS_UNIT = { AT: "Wien Information", SI: "Ljubljana Information", HU: "Budapest Information", CZ: "Praha Information",
+  SK: "Bratislava Information", HR: "Zagreb Information" };
+function aspRefPoint(as) {
+  var g = as.geometry, ring = g && (g.type === "Polygon" ? g.coordinates[0] : g.type === "MultiPolygon" ? g.coordinates[0][0] : null);
+  if (!ring || !ring.length) return null;
+  var lon = 0, lat = 0; ring.forEach(function (c) { lon += c[0]; lat += c[1]; }); lon /= ring.length; lat /= ring.length;
+  if (inGeom(g, lon, lat)) return { lat: lat, lon: lon };
+  /* nicht konvex: Punkt knapp innerhalb einer Ecke */
+  for (var i = 1; i < ring.length; i++) { var q = { lon: ring[i][0] + (lon - ring[i][0]) * 0.05, lat: ring[i][1] + (lat - ring[i][1]) * 0.05 }; if (inGeom(g, q.lon, q.lat)) return q; }
+  return null;
+}
+function sectorFreq(as, G, p) {
+  function fmt(l) { return l.slice(0, 2).map(function (f) { return (f.n ? esc(f.n) + " " : "") + esc(f.v); }).join(" / "); }
+  p = p || aspRefPoint(as);
+  var svc = (G && G.SVC) || (typeof VIEW_SVC !== "undefined" ? VIEW_SVC : []), firs = (G && G.FIRS && G.FIRS.length ? G.FIRS : (typeof VIEW_FIRS !== "undefined" ? VIEW_FIRS : []));
+  var lo = isFinite(as.loFt) ? as.loFt : 0;
+  if (p) {
+    var covers = function (s) { return s.freq && s.freq.length && s.bb && inBox(p, s.bb) && inGeom(s.geometry, p.lon, p.lat); };
+    var hits = svc.filter(function (s) { return covers(s) && (s.loFt || 0) <= lo + 100 && approxFt(s.upper) >= lo; });
+    /* freigabepflichtig: zuerst die Flugsicherung (ACC), sonst FIS */
+    hits.sort(function (a, b) { return ((a.type === 27 ? 0 : 1) - (b.type === 27 ? 0 : 1)) || (a.loFt || 0) - (b.loFt || 0); });
+    if (as.kind !== "clearance") hits.reverse();
+    if (hits.length) {
+      var s0 = hits[0];
+      return " – " + fmt(s0.freq.map(function (f) { return { v: f.v, n: f.n || s0.name }; })) + " <small>(" + (s0.type === 27 ? "ACC" : "FIS") + "-Sektor " + esc(s0.name) + ", openAIP)</small>";
+    }
+    var f = firs.filter(covers)[0];
+    if (f) return " – " + fmt(f.freq.map(function (x) { return { v: x.v, n: x.n || f.name }; })) + " <small>(FIR " + esc(f.name) + ", openAIP – dort Freigabe anfragen bzw. weiterverbinden lassen)</small>";
+  }
+  var u = FIS_UNIT[as.country];
+  if (u) return " – erste Ansprechstelle <b>" + u + "</b> (FIS), Frequenz laut ICAO-Karte/AIP";
+  return null;
+}
+function unitFreq(as, G, p) {
   function fmt(l) { return l.slice(0, 2).map(function (f) { return (f.n ? esc(f.n) + " " : "") + esc(f.v); }).join(" / "); }
   if (as.freq && as.freq.length) return " – " + fmt(as.freq.map(function (f) { return { v: f.v, n: f.n || as.name }; }));
   var ap = aptForAsp(as, G);
@@ -281,5 +317,5 @@ function unitFreq(as, G) {
     if (!l.length && !isCtr) l = pickFreq(ap.freq, FQ_TWR, /TOWER|TWR/i);
     if (l.length) return " – " + fmt(l) + " <small>(openAIP, " + esc(ap.icao || ap.name) + ")</small>";
   }
-  return " (Frequenz laut AIP/ICAO-Karte)";
+  return sectorFreq(as, G, p) || " (Frequenz laut AIP/ICAO-Karte)";
 }

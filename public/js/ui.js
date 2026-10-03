@@ -101,13 +101,13 @@ var cvs = L.canvas({ padding: 0.3 });
 var airLayer = L.layerGroup().addTo(map), routeLayer = L.layerGroup().addTo(map), lineLayer = L.layerGroup().addTo(map);
 var hlLayer = L.layerGroup().addTo(map), editLayer = L.layerGroup().addTo(map);
 
-var VIEW_AIR = [], airTimer = null;
+var VIEW_AIR = [], VIEW_SVC = [], VIEW_FIRS = [], airTimer = null;
 async function loadAirView() {
   if (map.getZoom() < 7) { airLayer.clearLayers(); VIEW_AIR = []; return; }
   var b = map.getBounds();
   try {
     var r = await dataIn("asp", b.getWest(), b.getSouth(), b.getEast(), b.getNorth());
-    VIEW_AIR = r.list;
+    VIEW_AIR = r.list; VIEW_SVC = r.svc || []; VIEW_FIRS = r.firs || [];
     drawAir();
     if (r.failed.length) setSts("Luftraumdaten f\u00fcr " + r.failed.join(", ") + " nicht geladen \u2013 Karte unvollst\u00e4ndig.", "err");
   } catch (e) { setSts("Luftraum: " + esc(e.message), "err"); }
@@ -135,7 +135,7 @@ map.on("click", function (ev) {
   if (!hits.length) { showAsOutline(null); return; }
   hits.sort(function (x, y) { return x.loFt - y.loFt; });
   var lim = +$("asFilter").value, hidden = lim ? hits.filter(function (a) { return a.loFt > lim; }).length : 0;
-  CLICK_HITS = hits;
+  CLICK_HITS = hits; CLICK_PT = { lat: lat, lon: lon };
   var h = "<div class='pop'><b class='h'>" + hits.length + " Luftr\u00e4um" + (hits.length > 1 ? "e" : "") + " an diesem Punkt</b>" +
     "<div class='note' style='margin:2px 0 3px'>Antippen = Umriss auf der Karte zeigen</div>";
   hits.forEach(function (a, i) {
@@ -158,12 +158,12 @@ map.on("click", function (ev) {
 /* Zustaendige Frequenz im Klick-Fenster: bei freigabepflichtigen Lufträumen, RMZ, Gefahren-/TRA-Gebieten */
 function asFreqLine(a) {
   if (["clearance", "rmz", "danger", "tra"].indexOf(a.kind) < 0) return "";
-  var f = unitFreq(a, RES && RES.G), lbl = a.kind === "clearance" ? "Freigabe" : a.kind === "rmz" ? "Funk" : "Info/Aktivierung";
-  var known = /^ \u2013 /.test(f);
-  return "<div class='asfq" + (known ? "" : " unk") + "'>\ud83d\udcfb " + lbl + ": " + (known ? f.slice(3) : "laut AIP/ICAO-Karte (in openAIP nicht hinterlegt)") + "</div>";
+  var f = unitFreq(a, RES && RES.G, CLICK_PT), lbl = a.kind === "clearance" ? "Freigabe" : a.kind === "rmz" ? "Funk" : "Info/Aktivierung";
+  var known = /^ \u2013 /.test(f), partial = /laut ICAO/.test(f);
+  return "<div class='asfq" + (known && !partial ? "" : " unk") + "'>\ud83d\udcfb " + lbl + ": " + (known ? f.slice(3) : "laut AIP/ICAO-Karte (in openAIP nicht hinterlegt)") + "</div>";
 }
 /* Umriss eines Luftraums aus dem Klick-Fenster hervorheben (weisser Rand + kraeftige Linie) */
-var AS_KEEP = false, CLICK_HITS = [], asSelLayer = L.layerGroup().addTo(map), asSelIdx = null;
+var AS_KEEP = false, CLICK_PT = null, CLICK_HITS = [], asSelLayer = L.layerGroup().addTo(map), asSelIdx = null;
 function showAsOutline(i) {
   asSelLayer.clearLayers(); asSelIdx = i;
   var ft0 = document.querySelector(".leaflet-popup .asfoot"); if (ft0) ft0.innerHTML = "";
@@ -385,7 +385,7 @@ async function plan() {
     G.destElev = B.elevFt != null ? B.elevFt : (elevFt(B.lat, B.lon) || 0);
     G.demBox = [w - 0.07, s - 0.05, e + 0.07, n + 0.05]; G.demZ = demZ;
     var got = await Promise.all([pAsp, pApt, pAwx]);
-    G.airFailed = got[0].failed; G.AIR = got[0].list; G.FIRS = got[0].firs || []; G.airBoxes = coverBoxes([bw, bs, be, bn], got[0].ok || []);
+    G.airFailed = got[0].failed; G.AIR = got[0].list; G.FIRS = got[0].firs || []; G.SVC = got[0].svc || []; G.airBoxes = coverBoxes([bw, bs, be, bn], got[0].ok || []);
     if (!got[0].list.length && got[0].failed.length) throw new Error("Luftraumdaten nicht verfügbar (" + got[0].failed.join(", ") + ") – ohne Luftraumprüfung wird nicht geplant. Später erneut versuchen.");
     STN = buildStations(got[2]);
     var qs = STN.map(function (x) { return x.metar && x.metar.qnh; }).filter(Boolean);

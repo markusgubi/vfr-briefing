@@ -193,7 +193,12 @@ Offen:
   vom zuständigen Platz: (1) ICAO-Code im Namen, (2) Ortsname im Namen (z. B. "SALZBURG CTR"), (3) Platz innerhalb
   von CTR/ATZ/TMA/CTA; CTR → Turm, sonst Radar/Anflug. Ohne Treffer "laut AIP/ICAO-Karte" – nie raten. Steht in
   den Freigabe-Hinweisen und im Klick-Fenster der Karte (asFreqLine, auch ohne geplante Route).
-  Test: tests/unit/frequenz.test.mjs.
+  Fallback seit 9.11 (sectorFreq; z. B. CTA GLOCKNER hat in openAIP keine Frequenz): (a) openAIP ACC-Sektor (Typ 27,
+  bei Freigaben bevorzugt) bzw. FIS-Sektor (Typ 33), der den Luftraum an der Stelle (Klickpunkt bzw. Einflug) und
+  in der Höhe abdeckt – diese Sektoren sind kind "svc", werden nie gezeichnet/bewertet (G.SVC, VIEW_SVC);
+  (b) FIR-Frequenz (openAIP); (c) nur die Stelle mit Namen (FIS_UNIT, z. B. "Wien Information"), ohne Zahl.
+  Amtliche Quellen (Austro Control eAIP, openflightmaps) sind aus der Cloud-Umgebung gesperrt – eine eigene
+  Frequenztabelle nur aus vom Nutzer gelieferten AIP-Auszügen. Test: tests/unit/frequenz.test.mjs, luftraum.mjs.
 - Knopf "tauschen" (seit 9.6, swapFromTo): Von/Nach mit einem Klick tauschen, wird gespeichert; Test tests/e2e/tauschen.mjs.
 - orte.json: englische Exonyme durch Landesnamen ersetzt (Wien, München, Venezia …), Stadtteile ≤ 5,5 km um
   Großstädte entfernt. GAFOR-Linien seit 9.5 dicker (6 px, weißer Unterstrich).
@@ -215,7 +220,7 @@ Offen:
   `node tests/e2e/grenze.mjs` (AT→IT ohne Meldepunkt/FIR), `rueckflug.mjs`, `hoehe.mjs`, `gafor.mjs`, `wetterbild.mjs`, `tauschen.mjs`, `luftraum.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.10, nächste 9.11).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.11, nächste 9.12).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.

@@ -35,3 +35,32 @@ test("Ohne passenden Platz verweist die Frequenz auf AIP/ICAO-Karte statt etwas 
   const f = app.unitFreq(asp(app, "CTA C", 26, 10.0, 45.0), null);
   assert.match(f, /laut AIP/);
 });
+
+function sector(app, name, type, lon, lat, r, lo, hi, freq) {
+  const g = { type: "Polygon", coordinates: [[[lon - r, lat - r], [lon + r, lat - r], [lon + r, lat + r], [lon - r, lat + r], [lon - r, lat - r]]] };
+  return { name, type, kind: "svc", geometry: g, bb: app.geomBbox(g), loFt: lo, upper: { value: hi, unit: 1, referenceDatum: 1 }, freq };
+}
+
+test("Ohne Platz-Frequenz liefert der ACC-Sektor (openAIP), der die CTA an dieser Stelle und Höhe abdeckt, die Frequenz.", () => {
+  const app = setup();
+  const cta = { ...asp(app, "CTA GLOCKNER", 26, 12.7, 47.1), country: "AT", loFt: 14500 };
+  const G = { SVC: [
+    sector(app, "WIEN FIS WEST", 33, 12.7, 47.1, 1, 0, 9500, [{ v: "124.400", n: "WIEN INFORMATION" }]),
+    sector(app, "WIEN ACC WEST", 27, 12.7, 47.1, 1, 9500, 24500, [{ v: "134.350", n: "WIEN RADAR" }]),
+    sector(app, "WIEN ACC OST", 27, 16.0, 48.0, 1, 0, 24500, [{ v: "999.999", n: "FALSCH" }])
+  ], FIRS: [] };
+  const f = app.unitFreq(cta, G, null);
+  assert.match(f, /WIEN RADAR 134\.350/);
+  assert.match(f, /ACC-Sektor WIEN ACC WEST/);
+});
+
+test("Ohne Sektor greift die FIR-Frequenz, ohne FIR nur die zuständige Stelle mit Namen – keine erfundene Zahl.", () => {
+  const app = setup();
+  const cta = { ...asp(app, "CTA GLOCKNER", 26, 12.7, 47.1), country: "AT", loFt: 14500 };
+  const fir = { ...sector(app, "LOVV FIR", 10, 13.5, 47.5, 3, 0, 66000, [{ v: "124.400", n: "WIEN INFORMATION" }]), kind: "fir" };
+  assert.match(app.unitFreq(cta, { SVC: [], FIRS: [fir] }, null), /WIEN INFORMATION 124\.400.*FIR LOVV FIR/);
+  const f = app.unitFreq(cta, { SVC: [], FIRS: [] }, null);
+  assert.match(f, /Wien Information/);
+  assert.match(f, /laut ICAO-Karte/);
+  assert.doesNotMatch(f, /\d{3}\.\d/);
+});
