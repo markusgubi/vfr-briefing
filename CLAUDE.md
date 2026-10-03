@@ -11,7 +11,7 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
 - Cloudflare Access schützt die ganze Seite (Policy "Cloudflare account members", 7 Tage Session).
 - Lokal testen: npm run dev (für /cfg wird OPENAIP_KEY in .dev.vars benötigt, nie committen).
 
-## Architektur (Stand 8.3)
+## Architektur (Stand 8.4)
 - Oberfläche als Workers Static Assets in public/ (index.html, css/app.css, js/*.js, data/gafor.geojson,
   img/ und manifest.webmanifest für den iPhone-Startbildschirm; Manifest mit crossorigin="use-credentials"
   wegen Cloudflare Access).
@@ -58,7 +58,10 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
   werden aufgefüllt, soweit Wolken/Luftraum es erlauben. Eigene Höhen bleiben unverändert; ist eine eigene
   Höhe über der Max. Höhe oder mit der Steigrate (rechtzeitig) nicht erreichbar, steht ein Hinweis dabei.
 - Bearbeiten macht nur markante Punkte ziehbar (Douglas-Peucker 0,75 NM, Meldepunkte, Grenzübertritte);
-  die Linie selbst bleibt exakt gleich.
+  die Linie selbst bleibt exakt gleich. Einfügen über "+"-Griffe in der Mitte jeder Teilstrecke (antippen oder
+  ziehen; ausgeblendet, wenn < 34 px neben einem Wegpunkt) und über eine breite unsichtbare Tippfläche der Linie.
+- Handy/Tablet: Tipp ins Höhenprofil springt zur Karte und zeigt die Stelle (durchfallender Tipp wird ignoriert).
+  Die Karte wird nur eingepasst, wenn sie sichtbar ist (sonst Zoom 0 bei 0-px-Karte → Ziehen springt um Grad).
 - Bearbeiten ohne Änderung (Stift an/aus) legt keine "Eigene Route" an. Nur wirklich geänderte eigene Routen
   bleiben beim Neuberechnen erhalten und werden mit der neu geplanten Abflugzeit bewertet.
 - GAFOR (seit 8.2): nur mit Haken "GAFOR-Strecken bevorzugen" (P.preferGafor/GAFOR_ON). Dann zusätzliche
@@ -103,11 +106,12 @@ Offen:
   `node tests/e2e/run.mjs LOLW LOWZ gut` und `node tests/e2e/edit.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 8.3, nächste 8.4).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 8.4, nächste 8.5).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.
 - Erkundungstest über 5 Routen mit Ziehen von Strecke und Höhen (Desktop + iPhone), prüft u. a. Überschneidungen
   von Beschriftungen, NaN, fehlende Begründungen, gehaltene eigene Höhen, Export: `node tests/e2e/explore.mjs`.
   Die Bilder danach immer auch selbst ansehen.
+- iPhone-Bedienung: `node tests/e2e/iphone-edit.mjs` (Reiterwechsel/Zoom, "+"-Griffe, Profil→Karte).
 - Bearbeiten darf die Bewertung nie verändern: `node tests/e2e/konsistenz.mjs` und tests/unit/konsistenz.test.mjs.

@@ -10,14 +10,14 @@
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <link rel="icon" type="image/svg+xml" href="img/icon.svg">
 <link rel="manifest" href="manifest.webmanifest" crossorigin="use-credentials">
-<title>VFR Briefing 8.3</title>
+<title>VFR Briefing 8.4</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
 <div id="side">
   <h1>VFR <em>&#9656;</em> Route &amp; Wetter</h1>
-  <div class="sub">Version 8.3 &middot; sicherste Route aus 5 Wettermodellen, Gel&auml;nde, Luftraum und METAR/TAF</div>
+  <div class="sub">Version 8.4 &middot; sicherste Route aus 5 Wettermodellen, Gel&auml;nde, Luftraum und METAR/TAF</div>
   <div class="noprint">
     <label>Von</label>
     <div class="acw"><input id="fIn" placeholder="ICAO oder Name, z.B. LOLW" autocomplete="off"><div class="ac" id="fAc"></div></div>
@@ -70,6 +70,11 @@
       <option value="19500">FL 195</option>
       <option value="0">alle</option>
     </select>
+    <div style="font-weight:700;margin-top:6px">Auf der Route</div>
+    <div><i style="background:#1F5FA8;border-radius:50%"></i>Einflug freigabepflichtig</div>
+    <div><i style="background:#fff;border:2px solid #1F7A4C;border-radius:50%;width:8px;height:8px"></i>Ausweichplatz</div>
+    <div><i style="background:#1F5FA8;border-radius:50%;width:9px;height:9px;border:1px solid #fff"></i>Meldepunkt (mit Name)</div>
+    <div><b style="display:inline-block;width:17px">&#9873;</b>Grenz&uuml;bertritt</div>
     <div style="font-size:10.5px;color:#61717F;margin-top:4px">Klick in die Karte: alle Lufträume an diesem Punkt</div></div>
   </div>
   <div id="prof"><div id="profHead"><span>Vertikalprofil</span><span id="profTgl">&#9660;</span></div><div id="profBody"></div><div id="profLeg"></div></div>

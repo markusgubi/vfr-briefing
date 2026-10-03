@@ -51,7 +51,9 @@ function drawAir() {
 }
 map.on("moveend", function () { clearTimeout(airTimer); airTimer = setTimeout(loadAirView, 350); });
 /* Klick in die Karte: ALLE Lufträume am Punkt, nach Untergrenze sortiert */
+var MAP_CLICK_OFF = 0;   /* nach dem Sprung vom Profil zur Karte den "durchfallenden" Tipp ignorieren */
 map.on("click", function (ev) {
+  if (Date.now() < MAP_CLICK_OFF) return;
   var lat = ev.latlng.lat, lon = ev.latlng.lng;
   var hits = VIEW_AIR.filter(function (a) { return lon >= a.bb[0] && lon <= a.bb[2] && lat >= a.bb[1] && lat <= a.bb[3] && inGeom(a.geometry, lon, lat); });
   if (!hits.length) return;
@@ -336,7 +338,7 @@ function render(sel) {
     ? "<button class='btn2 on' id='bEditEnd'>\u2713 Bearbeiten beenden</button>" + (uaN ? "<button class='btn2' id='bAltAuto'>H\u00f6hen automatisch</button>" : "")
     : "<button class='btn2' id='bEdit'>\u270e Route &amp; H\u00f6hen bearbeiten</button>") +
     (hasUser ? "<button class='btn2' id='bUserDel'>Eigene Route verwerfen</button>" : "") + "</div>";
-  if (EDIT.on && R.custom) h += "<div class='note' style='margin-top:6px'>Bewertet f\u00fcr Abflug <b>" + fmtH(P.depH * 60) + "</b> am " + esc(P.date.split("-").reverse().join(".")) + ". <b>Karte:</b> Wegpunkt ziehen \u00b7 Linie anklicken = Punkt einf\u00fcgen \u00b7 Punkt anklicken/Rechtsklick = l\u00f6schen. " +
+  if (EDIT.on && R.custom) h += "<div class='note' style='margin-top:6px'>Bewertet f\u00fcr Abflug <b>" + fmtH(P.depH * 60) + "</b> am " + esc(P.date.split("-").reverse().join(".")) + ". <b>Karte:</b> Wegpunkt ziehen \u00b7 <b>+</b> antippen oder ziehen = Wegpunkt einf\u00fcgen \u00b7 Wegpunkt antippen = l\u00f6schen. " +
     "<b>Profil:</b> Griff \u2195 ziehen = Reiseh\u00f6he der Teilstrecke, Doppelklick = wieder automatisch. Bewertung rechnet live mit.</div>";
   h += "</div>";
   h += "<div class='card'><h3>Hinweise &amp; Freigaben <span style='text-transform:none;letter-spacing:0;font-weight:400'>(anklicken = auf Karte zeigen)</span></h3>" +
@@ -532,7 +534,8 @@ function drawMap(sel) {
   });
   if (!RES.fitted) {
     RES.fitBox = L.latLngBounds(RES.routes.reduce(function (a, x) { return a.concat(x.coords); }, [])).pad(0.12);
-    if (MOB.on && !$("main").classList.contains("on")) RES.needFit = true; else map.fitBounds(RES.fitBox);
+    var sz = map.getSize();
+    if ((MOB.on && !$("main").classList.contains("on")) || !sz.x || !sz.y) RES.needFit = true; else map.fitBounds(RES.fitBox);
     RES.fitted = true;
   }
 }
@@ -547,6 +550,9 @@ function drawRouteLines(R) {
     var a = R.G.nodes[r.e.a], b = R.G.nodes[r.e.b], last = runs[runs.length - 1];
     if (last && last.cat === r.cat) last.pts.push([b.lat, b.lon]); else runs.push({ cat: r.cat, pts: [[a.lat, a.lon], [b.lat, b.lon]] });
   });
+  /* Im Bearbeiten-Modus breite, unsichtbare Tippflaeche auf der Linie (Finger) */
+  if (EDIT.on && R.custom) L.polyline(all, { color: "#000", opacity: 0, weight: 28, bubblingMouseEvents: false })
+    .on("click", function (ev) { routeLineClick(R, ev); }).addTo(lineLayer);
   runs.forEach(function (run) {
     L.polyline(run.pts, { color: CAT_COL[run.cat], weight: EDIT.on && R.custom ? 7 : 5.5, lineJoin: "round", bubblingMouseEvents: false })
       .on("mousemove", function (ev) { if (!EDIT.dragging) showCursor(nearestX(R, ev.latlng), "map"); })
@@ -602,8 +608,10 @@ function showPane(id) {
   ["side", "main", "pProf", "pRes", "pExp"].forEach(function (p) { $(p).classList.toggle("on", p === id); });
   Array.prototype.forEach.call(document.querySelectorAll("#mnav button"), function (b) { b.classList.toggle("on", b.getAttribute("data-p") === id); });
   if (id === "main") setTimeout(function () {
+    if (!$("main").classList.contains("on")) return;   /* inzwischen andere Seite: nicht an einer 0-px-Karte einpassen */
     map.invalidateSize();
-    if (RES && RES.needFit) { map.fitBounds(RES.fitBox); RES.needFit = false; }
+    /* Einpassen nachholen; auch wenn die Karte durch einen frueheren Fehler auf Weltansicht steht */
+    if (RES && RES.fitBox && (RES.needFit || map.getZoom() < 5)) { map.fitBounds(RES.fitBox); RES.needFit = false; }
   }, 60);
 }
 /* Vertikalprofil. Alle Beschriftungen laufen ueber eine Kollisionspruefung:
@@ -754,7 +762,7 @@ function startEdit() {
   EDIT.on = true; EDIT.A = RES.G.A; EDIT.B = RES.G.B;
   if (!base.custom) { EDIT.dirty = false; EDIT.baseName = base.name; }
   render(evalUser());
-  setSts("Bearbeiten: Wegpunkte ziehen, Linie anklicken = Punkt einfügen, Punkt antippen = löschen. Höhen im Profil ziehen.");
+  setSts("Bearbeiten: Wegpunkte ziehen, + antippen oder ziehen = Wegpunkt einfügen, Wegpunkt antippen = löschen. Höhen im Profil ziehen.");
 }
 function stopEdit() {
   EDIT.on = false; editLayer.clearLayers(); setSts("");
@@ -821,6 +829,7 @@ function drawEditMarkers(R) {
     mk.bindPopup("<div class='pop'><b class='h'>Wegpunkt " + lbl + "</b><br><button class='btn2' data-delwp='" + k + "' style='margin-top:6px'>Wegpunkt löschen</button></div>");
     mk.addTo(editLayer);
   });
+  drawAddHandles();
 }
 function deleteWp(k) {
   if (k <= 0 || k >= EDIT.pts.length - 1 || EDIT.pts[k].shape) return;
@@ -831,20 +840,56 @@ function deleteWp(k) {
   EDIT.ua = ua;
   commitEdit();
 }
-function routeLineClick(R, ev) {
-  if (!EDIT.on || !R.custom) { showCursor(nearestX(R, ev.latlng), "map"); return; }
-  var p = { lat: ev.latlng.lat, lon: ev.latlng.lng }, best = null;
+/* Neuen Wegpunkt an Position p in den naechstgelegenen Abschnitt einfuegen; gibt den Index zurueck */
+function insertPoint(p) {
+  var best = null;
   for (var k = 0; k < EDIT.pts.length - 1; k++) { var d = segDist(p, EDIT.pts[k], EDIT.pts[k + 1]).d; if (!best || d < best.d) best = { d: d, k: k }; }
   EDIT.dirty = true;
   var L0 = legOfSeg(best.k + 1);   /* Teilstrecke L0 wird in L0 und L0+1 geteilt */
   EDIT.pts.splice(best.k + 1, 0, { lat: p.lat, lon: p.lon, name: null });
   var ua = {}; Object.keys(EDIT.ua).forEach(function (l) { l = +l; ua[l > L0 ? l + 1 : l] = EDIT.ua[l]; if (l === L0) ua[l + 1] = EDIT.ua[l]; });
   EDIT.ua = ua;
+  return best.k + 1;
+}
+function routeLineClick(R, ev) {
+  if (!EDIT.on || !R.custom) { showCursor(nearestX(R, ev.latlng), "map"); return; }
+  insertPoint({ lat: ev.latlng.lat, lon: ev.latlng.lng });
   commitEdit();
+}
+/* "+"-Griffe in der Mitte jeder Teilstrecke: antippen = Wegpunkt einfuegen, ziehen = einfuegen und verschieben */
+function drawAddHandles() {
+  var wp = []; EDIT.pts.forEach(function (p, i) { if (!p.shape) wp.push(i); });
+  for (var j = 1; j < wp.length; j++) {
+    var a = wp[j - 1], b = wp[j], len = 0, k;
+    for (k = a + 1; k <= b; k++) len += distNm(EDIT.pts[k - 1], EDIT.pts[k]);
+    if (len < 4) continue;
+    var half = len / 2, acc = 0, mid = null;
+    for (k = a + 1; k <= b && !mid; k++) {
+      var d = distNm(EDIT.pts[k - 1], EDIT.pts[k]);
+      if (acc + d >= half) mid = lerp(EDIT.pts[k - 1], EDIT.pts[k], d ? (half - acc) / d : 0);
+      acc += d;
+    }
+    /* nicht anzeigen, wenn der Griff auf dem Bildschirm zu nah an einem Wegpunkt laege (Finger trifft sonst falsch) */
+    var pm = map.latLngToContainerPoint([mid.lat, mid.lon]);
+    if (pm.distanceTo(map.latLngToContainerPoint([EDIT.pts[a].lat, EDIT.pts[a].lon])) < 34 ||
+        pm.distanceTo(map.latLngToContainerPoint([EDIT.pts[b].lat, EDIT.pts[b].lon])) < 34) continue;
+    (function (mid) {
+      var idx = null;
+      var mk = L.marker([mid.lat, mid.lon], { draggable: true, autoPan: true, zIndexOffset: -100,
+        icon: L.divIcon({ className: "wpadd", html: "+", iconSize: [22, 22], iconAnchor: [11, 11] }) });
+      mk.on("click", function () { insertPoint(mid); commitEdit(); });
+      mk.on("dragstart", function () { EDIT.dragging = true; hideCursor(); idx = straighten(insertPoint(mid)); });
+      mk.on("drag", function (ev) { var ll = ev.target.getLatLng(); EDIT.pts[idx] = { lat: ll.lat, lon: ll.lng, name: null }; scheduleQuick(); });
+      mk.on("dragend", function () { EDIT.dragging = false; commitEdit(); });
+      mk.addTo(editLayer);
+    })(mid);
+  }
 }
 map.getContainer().addEventListener("click", function (e) {
   var b = e.target.closest("[data-delwp]"); if (b) deleteWp(+b.getAttribute("data-delwp"));
 });
+/* "+"-Griffe nach dem Zoomen neu setzen (Abstand in Bildschirmpixeln aendert sich) */
+map.on("zoomend", function () { if (EDIT.on && !EDIT.dragging && RES && RES.routes[RES.sel] && RES.routes[RES.sel].custom) drawEditMarkers(RES.routes[RES.sel]); });
 /* Daten fuer einen gezogenen Bereich nachladen: Gelaende je Teilstrecke, Luftraum, fehlende Wetterpunkte */
 async function ensureArea(pts) {
   var G = RES.G, jobs = [];
@@ -950,7 +995,7 @@ function showCursor(x, from) {
   var ll = [q.lat, q.lon];
   if (!CUR.mk) {
     CUR.mk = L.circleMarker(ll, { radius: 8, color: "#B02E7A", weight: 3, fillColor: "#fff", fillOpacity: 1, interactive: false }).addTo(curLayer);
-    CUR.mk.bindTooltip("", { permanent: true, direction: "right", offset: [10, 0], className: "curtip" });
+    CUR.mk.bindTooltip("", { permanent: true, direction: MOB.on ? "top" : "right", offset: MOB.on ? [0, -10] : [10, 0], className: "curtip" });
   } else CUR.mk.setLatLng(ll);
   CUR.mk.setTooltipContent(esc(cursorTxt(q)));
   if (from === "prof" && !MOB.on && !map.getBounds().pad(-0.05).contains(ll)) map.panTo(ll, { animate: true });
@@ -998,7 +1043,20 @@ function setupCursor() {
     if (c.x < -0.5 || c.x > RES.pv.D + 0.5) { hideCursor(); return; }
     showCursor(c.x, "prof");
   });
-  pb.addEventListener("pointerdown", function (ev) { var c = svgX(ev); if (c && c.x >= 0 && c.x <= RES.pv.D) showCursor(c.x, "prof"); });
+  var tap = null;
+  pb.addEventListener("pointerdown", function (ev) {
+    var c = svgX(ev); if (c && c.x >= 0 && c.x <= RES.pv.D) showCursor(c.x, "prof");
+    tap = c ? { cx: ev.clientX, cy: ev.clientY, t: Date.now(), x: c.x } : null;
+  });
+  /* Handy/Tablet: kurzer Tipp ins Profil springt zur Karte und zeigt die Stelle */
+  pb.addEventListener("pointerup", function (ev) {
+    if (!MOB.on || !tap || EDIT.drag || EDIT.lastTap && Date.now() - EDIT.lastTap.t < 50) { tap = null; return; }
+    var moved = Math.abs(ev.clientX - tap.cx) + Math.abs(ev.clientY - tap.cy), x = tap.x; tap = null;
+    if (moved > 10 || x < 0 || x > RES.pv.D) return;
+    ev.preventDefault(); MAP_CLICK_OFF = Date.now() + 700;
+    showCursor(x, "prof"); showPane("main");
+    setTimeout(function () { if (CUR.mk) map.setView(CUR.mk.getLatLng(), Math.max(map.getZoom(), 10)); }, 150);
+  });
   pb.addEventListener("pointerleave", function (ev) { if (ev.pointerType === "mouse" && !EDIT.drag) hideCursor(); });
   function endDrag() {
     if (!EDIT.drag) return;
