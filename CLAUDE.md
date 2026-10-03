@@ -189,6 +189,11 @@ Offen:
   Bewertung unverändert. Klick in die Karte: alle Lufträume am Punkt; Antippen eines Eintrags hebt dessen Umriss
   hervor (asSelLayer, erneut antippen = aus, Fenster zu = aus), ragt er aus dem Bild, Knopf "ganzen Umriss zeigen"
   im Fensterfuß (nicht in der Zeile, sonst trifft ein zweiter Tipp ihn). Test: `node tests/e2e/luftraum.mjs`.
+- Frequenzen der Lufträume (seit 9.10, unitFreq/aptForAsp in report.js): Frequenz aus openAIP am Luftraum, sonst
+  vom zuständigen Platz: (1) ICAO-Code im Namen, (2) Ortsname im Namen (z. B. "SALZBURG CTR"), (3) Platz innerhalb
+  von CTR/ATZ/TMA/CTA; CTR → Turm, sonst Radar/Anflug. Ohne Treffer "laut AIP/ICAO-Karte" – nie raten. Steht in
+  den Freigabe-Hinweisen und im Klick-Fenster der Karte (asFreqLine, auch ohne geplante Route).
+  Test: tests/unit/frequenz.test.mjs.
 - Knopf "tauschen" (seit 9.6, swapFromTo): Von/Nach mit einem Klick tauschen, wird gespeichert; Test tests/e2e/tauschen.mjs.
 - orte.json: englische Exonyme durch Landesnamen ersetzt (Wien, München, Venezia …), Stadtteile ≤ 5,5 km um
   Großstädte entfernt. GAFOR-Linien seit 9.5 dicker (6 px, weißer Unterstrich).
@@ -210,7 +215,7 @@ Offen:
   `node tests/e2e/grenze.mjs` (AT→IT ohne Meldepunkt/FIR), `rueckflug.mjs`, `hoehe.mjs`, `gafor.mjs`, `wetterbild.mjs`, `tauschen.mjs`, `luftraum.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.9, nächste 9.10).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.10, nächste 9.11).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.

@@ -19,6 +19,8 @@ for (const mob of [false, true]) {
   const rows = await page.evaluate(() => [...document.querySelectorAll(".asel")].map(e => e.querySelector("b").textContent));
   ok(rows.length >= 2 && rows.some(r => /NATIONALPARK/.test(r)) && rows.some(r => /TMA LOWL 2/.test(r)), `${tag} Klick zeigt mehrere Luftraeume: ${rows.join(" / ")}`);
   const iN = rows.findIndex(r => /NATIONALPARK/.test(r)), iT = rows.findIndex(r => /TMA LOWL 2/.test(r));
+  const fq = await page.evaluate(() => [...document.querySelectorAll(".asel")].map(e => (e.querySelector(".asfq") || {}).textContent || ""));
+  ok(/Freigabe: LINZ RADAR 129\.625/.test(fq[iT]) && !fq[iN], `${tag} Frequenz fuer Freigabe im Fenster: ${JSON.stringify(fq)}`);
   const tapRow = async i => { const loc = page.locator(".asel").nth(i); if (mob) await loc.tap(); else await loc.click(); await page.waitForTimeout(300); };
   await tapRow(iN);
   let st = await page.evaluate(() => ({ sel: asSelIdx, n: asSelLayer.getLayers().length, on: [...document.querySelectorAll(".asel.on b")].map(e => e.textContent) }));

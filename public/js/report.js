@@ -241,14 +241,28 @@ function partName(n) { var b = baseName(n), s = String(n || "").toUpperCase().re
 /* Zustaendige Stelle und Frequenz NUR aus Daten: Frequenzen des Luftraums, sonst des zugehoerigen Platzes
    (ICAO-Code im Luftraumnamen oder Platz innerhalb einer CTR). Sonst Verweis auf AIP/ICAO-Karte. */
 var FQ_TWR = [14], FQ_APP = [0, 13, 2, 6];
+/* Zustaendiger Platz eines Luftraums: (1) ICAO-Code im Namen ("TMA LOWL 1"), (2) Ortsname im Namen
+   ("SALZBURG CTR", "TMA GRAZ"), (3) Platz innerhalb des Luftraums (CTR/ATZ/TMA/CTA). Funktioniert auch ohne
+   geplante Route (Klick in die Karte): alle geladenen Plaetze. */
+var ASP_WORDS = /^(TMA|CTA|CTR|ATZ|TIZ|TIA|RMZ|TMZ|SECTOR|SEKTOR|SECT|AREA|ZONE|CLASS|KLASSE|LOWER|UPPER|NORTH|SOUTH|EAST|WEST|NORD|SUED|OST|NORTE|SUD|EST|OVEST|PART|TEIL)$/;
+function aptPool(G) {
+  var all = ((typeof RES !== "undefined" && RES && RES.apts) || []).concat(G ? [G.A, G.B] : []);
+  if (typeof APTDB !== "undefined") Object.keys(APTDB).forEach(function (c) { all = all.concat(APTDB[c] || []); });
+  return all.filter(function (a) { return a && a.icao; });
+}
 function aptForAsp(as, G) {
-  var apts = (RES && RES.apts) || [], all = apts.concat([G.A, G.B]), name = String(as.name || "").toUpperCase();
+  var all = aptPool(G), name = String(as.name || "").toUpperCase();
   var codes = name.match(/\b[A-Z]{4}\b/g) || [];
-  for (var k = 0; k < codes.length; k++) { var hit = all.filter(function (a) { return a && a.icao === codes[k]; })[0]; if (hit) return hit; }
-  if (as.type === 4 || as.type === 13) {
-    var inside = all.filter(function (a) { return a && a.icao && inBox(a, as.bb) && inGeom(as.geometry, a.lon, a.lat); });
-    inside.sort(function (a, b) { return ((b.freq || []).length - (a.freq || []).length); });
-    if (inside.length) return inside[0];
+  for (var k = 0; k < codes.length; k++) { var hit = all.filter(function (a) { return a.icao === codes[k]; })[0]; if (hit) return hit; }
+  function best(l) { l.sort(function (a, b) { return ((b.freq || []).length - (a.freq || []).length); }); return l[0] || null; }
+  var words = name.split(/[^A-Z\u00C0-\u017F]+/).filter(function (w) { return w.length >= 4 && !ASP_WORDS.test(w); }).map(normTxt);
+  var near = all.filter(function (a) { return as.bb && a.lon > as.bb[0] - 0.5 && a.lon < as.bb[2] + 0.5 && a.lat > as.bb[1] - 0.5 && a.lat < as.bb[3] + 0.5; });
+  if (words.length) {
+    var byName = near.filter(function (a) { var n = normTxt(a.name); return words.some(function (w) { return n.indexOf(w) >= 0; }); });
+    if (byName.length) return best(byName);
+  }
+  if ([4, 13, 7, 26].indexOf(as.type) >= 0 && as.geometry) {
+    return best(near.filter(function (a) { return inBox(a, as.bb) && inGeom(as.geometry, a.lon, a.lat) && (a.freq || []).length; }));
   }
   return null;
 }

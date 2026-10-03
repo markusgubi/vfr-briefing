@@ -209,3 +209,5 @@ body.editmode .editctl a{background:#B02E7A!important;color:#fff!important}
 .asel:hover{background:#F2F6FA}
 .asel.on{background:#E6EFF9;box-shadow:inset 3px 0 0 #1F5FA8}
 .asfoot .asfit{display:block;margin-top:6px;padding:6px 0 2px;border-top:1px solid #EEF2F5;font-size:12.5px;color:#1F5FA8}
+.asfq{font-size:12.5px;color:#0F1D2A;margin-top:2px}
+.asfq.unk{color:#8A5A00}

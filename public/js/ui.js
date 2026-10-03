@@ -142,7 +142,7 @@ map.on("click", function (ev) {
     var at = actTxt(a), col = a.kind === "info" && isNature(a) ? NATURE_C : KIND[a.kind].c;
     h += "<div class='asr asel' data-asi='" + i + "'><i style='background:" + col + "'></i><b>" + esc(a.name) + "</b><br><small>" +
       (TYPE_TXT[a.type] || "?") + " (Nr. " + a.type + ") \u00b7 " + clsTxt(a) + " \u00b7 " + fmtLimit(a.lower) + " \u2013 " + fmtLimit(a.upper) +
-      (at ? " \u00b7 <b style='color:#C1810B'>" + at + "</b>" : "") + "</small></div>";
+      (at ? " \u00b7 <b style='color:#C1810B'>" + at + "</b>" : "") + "</small>" + asFreqLine(a) + "</div>";
   });
   if (hidden) h += "<div class='note' style='margin-top:4px'>" + hidden + " davon wegen H\u00f6henfilter nicht gezeichnet.</div>";
   h += "<div class='asfoot'></div></div>";
@@ -155,6 +155,13 @@ map.on("click", function (ev) {
   });
   if (hits.length === 1) showAsOutline(0);   /* nur einer: gleich zeigen */
 });
+/* Zustaendige Frequenz im Klick-Fenster: bei freigabepflichtigen Lufträumen, RMZ, Gefahren-/TRA-Gebieten */
+function asFreqLine(a) {
+  if (["clearance", "rmz", "danger", "tra"].indexOf(a.kind) < 0) return "";
+  var f = unitFreq(a, RES && RES.G), lbl = a.kind === "clearance" ? "Freigabe" : a.kind === "rmz" ? "Funk" : "Info/Aktivierung";
+  var known = /^ \u2013 /.test(f);
+  return "<div class='asfq" + (known ? "" : " unk") + "'>\ud83d\udcfb " + lbl + ": " + (known ? f.slice(3) : "laut AIP/ICAO-Karte (in openAIP nicht hinterlegt)") + "</div>";
+}
 /* Umriss eines Luftraums aus dem Klick-Fenster hervorheben (weisser Rand + kraeftige Linie) */
 var AS_KEEP = false, CLICK_HITS = [], asSelLayer = L.layerGroup().addTo(map), asSelIdx = null;
 function showAsOutline(i) {
