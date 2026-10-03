@@ -205,7 +205,8 @@ Offen:
   118.525), RMZ-Frequenzen (ENR 2.2 Abschn. 3), Grenzen der APP-Sektoren (Abschn. 5) und FIS-Sektoren APPROACH/
   NORTH/SOUTH (Abschn. 6; UPPER erst ab FL660, weggelassen). "entlang der Bundesgrenze" folgt grenzen.json (~1 km).
   Reihenfolge in unitFreq: openAIP-Luftraum → Platz → openAIP-ACC/FIS-Sektor → aipContact (AIP) → FIR → Stellenname.
-  Welche FIC-Frequenz zu NORTH/SOUTH gehört, steht nicht in ENR 2.1/2.2 (ENR 6) – beide angezeigt. Wien Radar hat
+  FIS-Frequenz je Sektor (fisFreq, vom Nutzer bestätigt, steht in ENR 6): Nord 134.625, Süd 124.400, Ost/Wien
+  (APPROACH) 118.525 – angezeigt nur die des Sektors am Ort. Wien Radar hat
   keine Frequenz je Luftraum im AIP → "Sektorfrequenz über FIS/ICAO-Karte". Bei neuer AIRAC-Ausgabe neu bauen.
   Test: tests/unit/aip.test.mjs, luftraum.mjs (CTA GLOCKNER).
 - Desktop-Layout (seit 9.13, nur ohne Reiter-Ansicht): Seitenleiste per Leiste #split 300 px bis 60 % breit ziehen,
@@ -235,7 +236,7 @@ Offen:
   `node tests/e2e/grenze.mjs` (AT→IT ohne Meldepunkt/FIR), `rueckflug.mjs`, `hoehe.mjs`, `gafor.mjs`, `wetterbild.mjs`, `tauschen.mjs`, `luftraum.mjs`, `layout.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.13, nächste 9.14).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.14, nächste 9.15).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.

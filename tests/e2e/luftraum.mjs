@@ -68,7 +68,7 @@ for (const mob of [false, true]) {
   if (mob) await page.touchscreen.tap(pt3.x, pt3.y); else await page.mouse.click(pt3.x, pt3.y);
   await page.waitForTimeout(500);
   const fq3 = await page.evaluate(() => [...document.querySelectorAll(".asel")].map(e => e.textContent).join(" | "));
-  ok(/CTA GLOCKNER.*WIEN RADAR \(ACC.*WIEN INFORMATION 134\.625 \/ 124\.400.*FIS-Sektor SOUTH.*AIP ENR 2\.1\/2\.2/.test(fq3), `${tag} CTA GLOCKNER aus AIP: ${fq3}`);
+  ok(/CTA GLOCKNER.*WIEN RADAR \(ACC.*WIEN INFORMATION 124\.400 \(FIS-Sektor Süd.*AIP ENR 2\.1\/2\.2/.test(fq3), `${tag} CTA GLOCKNER aus AIP: ${fq3}`);
   await page.screenshot({ path: `${OUT}/luftraum-${tag}-aip.png` });
   ok(!errors.length, `${tag} keine JS-Fehler ` + JSON.stringify(errors));
   await browser.close();

@@ -131,7 +131,12 @@ out = {"quelle": "AIP Austria ENR 2.1 und ENR 2.2 (Austro Control GmbH), vom Nut
        "stand": "ENR 2.1 bis AIRAC AMDT %s, ENR 2.2 bis AIRAC AMDT %s" % (max(map(int, amdt21)), max(map(int, amdt22))),
        "hinweis": "Nicht amtlich verwendbar – vor dem Flug mit gueltiger AIP/ICAO-Karte abgleichen. Grenzabschnitte ca. 1 km genau.",
        "zeiten": "Betriebszeiten UTC Winter (Sommer in Klammern)",
-       "units": UNITS, "freq": FREQ, "rmz": RMZ, "app": APP, "fis": FIS}
+       "units": UNITS, "freq": FREQ,
+       # Zuordnung der FIC-Frequenzen zu den FIS-Sektoren: steht in ENR 6, nicht in ENR 2.1/2.2 – vom Nutzer
+       # bestaetigt (Nord 134.625, Sued 124.400, Ost/Wien 118.525); Werte muessen in FREQ vorkommen
+       "fisFreq": {"FIC WIEN NORTH": "134.625", "FIC WIEN SOUTH": "124.400", "FIC WIEN APPROACH": "118.525"}, "rmz": RMZ, "app": APP, "fis": FIS}
+allf = sum(FREQ.values(), [])
+assert all(f in allf for f in out["fisFreq"].values()), "FIS-Zuordnung passt nicht zu ENR 2.1"
 json.dump(out, open("public/data/aip-lo.json", "w"), ensure_ascii=False, separators=(",", ":"))
 print("TMA/CTA:", len(UNITS), "| APP:", {k: len(v) for k, v in APP.items()}, "| FIS:", {k: len(v) for k, v in FIS.items()})
 print("FREQ:", {k: (v if len(v) < 4 else str(len(v)) + " Frequenzen") for k, v in FREQ.items()}, "| RMZ:", RMZ, "| Stand:", out["stand"])

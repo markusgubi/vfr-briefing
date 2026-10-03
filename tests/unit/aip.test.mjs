@@ -27,8 +27,8 @@ test("CTA GLOCKNER: Wien Radar (ACC) und Wien Information des FIS-Sektors am Ort
   const a = app();
   const f = a.unitFreq(box(a, "CTA GLOCKNER", 26, 13.0, 47.05, 0.1, 14500), null, { lat: 47.05, lon: 13.0 });
   assert.match(f, /WIEN RADAR<\/b> \(ACC/);
-  assert.match(f, /WIEN INFORMATION<\/b> 134\.625 \/ 124\.400/);
-  assert.match(f, /FIS-Sektor SOUTH/);
+  assert.match(f, /WIEN INFORMATION<\/b> 124\.400 <small>\(FIS-Sektor Süd/);
+  assert.doesNotMatch(f, /134\.625/);
   assert.match(f, /MÜNCHEN RADAR/);
   assert.match(f, /AIP ENR 2\.1\/2\.2/);
 });
@@ -52,4 +52,13 @@ test("Ausserhalb Österreichs und ohne Tabelleneintrag liefert der AIP-Auszug ni
   const a = app();
   const x = { ...box(a, "CTA X", 26, 12.0, 45.5, 0.1, 5000), country: "IT" };
   assert.equal(a.aipContact(x, null, { lat: 45.5, lon: 12.0 }), null);
+});
+
+test("Wien Information: Nord 134.625, Süd 124.400, Ost/Wien 118.525 je nach FIS-Sektor am Ort.", () => {
+  const a = app();
+  const at = (lat, lon) => a.aipContact({ ...box(a, "TMA X", 7, lon, lat, 0.02, 2000), name: "TEST AT" }, null, { lat, lon });
+  assert.match(at(48.3, 14.0), /WIEN INFORMATION<\/b> 134\.625 <small>\(FIS-Sektor Nord/);   // Linz
+  assert.match(at(46.75, 13.0), /WIEN INFORMATION<\/b> 124\.400 <small>\(FIS-Sektor Süd/);   // Oberkärnten
+  assert.match(at(47.8, 16.3), /WIEN INFORMATION<\/b> 118\.525 <small>\(FIS-Sektor Ost\/Wien/); // Wr. Neustadt
+  assert.match(at(46.7, 14.3), /KLAGENFURT RADAR/);   // im Anflugsektor Klagenfurt: zuerst Klagenfurt Radar
 });

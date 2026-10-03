@@ -365,9 +365,11 @@ function aipContact(as, G, p) {
   var fis = p && sectorAt(AIP_LO.fis, p, alt);
   if (fis) {
     var fu = ent && ent.filter(function (u) { return u.call === "WIEN INFORMATION"; })[0];
-    var fq = fis.n === "FIC WIEN APPROACH" ? AIP_LO.freq["APP WIEN|WIEN INFORMATION"] : AIP_LO.freq["FIC WIEN|WIEN INFORMATION"];
-    parts.push(fmtF("WIEN INFORMATION", (fq || []).join(" / ")) + " <small>(FIS-Sektor " + fis.n.replace("FIC WIEN ", "") +
-      (fu && hrsTxt(fu.h) ? ", " + hrsTxt(fu.h) : "") + (fis.n !== "FIC WIEN APPROACH" && (fq || []).length > 1 ? "; welche der Frequenzen laut ENR 6" : "") + ")</small>");
+    var one = AIP_LO.fisFreq && AIP_LO.fisFreq[fis.n];
+    var fq = one ? [one] : fis.n === "FIC WIEN APPROACH" ? AIP_LO.freq["APP WIEN|WIEN INFORMATION"] : AIP_LO.freq["FIC WIEN|WIEN INFORMATION"];
+    var sn = { "FIC WIEN NORTH": "Nord", "FIC WIEN SOUTH": "Süd", "FIC WIEN APPROACH": "Ost/Wien" }[fis.n] || fis.n.replace("FIC WIEN ", "");
+    parts.push(fmtF("WIEN INFORMATION", (fq || []).join(" / ")) + " <small>(FIS-Sektor " + sn +
+      (fu && hrsTxt(fu.h) ? ", " + hrsTxt(fu.h) : "") + (!one && (fq || []).length > 1 ? "; welche der Frequenzen laut ENR 6" : "") + ")</small>");
   }
   /* (4) Nachbarlaender laut ENR 2.1 (z. B. MÜNCHEN RADAR) nur nennen */
   var other = ent ? ent.filter(function (u) { return !/^(WIEN|GRAZ|INNSBRUCK|KLAGENFURT|LINZ|SALZBURG) /.test(u.call); }).map(function (u) { return u.call; }) : [];
