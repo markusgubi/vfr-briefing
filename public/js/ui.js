@@ -112,18 +112,20 @@ async function loadGafor() {
     GAFOR = [];
     j.features.forEach(function (f) {
       var g = f.geometry || {}, lines = g.type === "LineString" ? [g.coordinates] : g.type === "MultiLineString" ? g.coordinates : [];
-      lines.forEach(function (l) { GAFOR.push({ nr: (f.properties || {}).nr || "", name: (f.properties || {}).name || "", pts: l.map(function (c) { return { lat: c[1], lon: c[0] }; }) }); });
+      lines.forEach(function (l) { GAFOR.push({ nr: (f.properties || {}).nr || "", name: (f.properties || {}).name || "", bz: (f.properties || {}).bezugshoehe, pts: l.map(function (c) { return { lat: c[1], lon: c[0] }; }) }); });
     });
     GAFOR.forEach(function (r) {
       L.polyline(r.pts.map(function (q) { return [q.lat, q.lon]; }), { color: "#16A085", weight: 3, opacity: 0.7, dashArray: "2 6", interactive: true })
-        .bindTooltip("GAFOR " + esc(r.nr) + (r.name ? " " + esc(r.name) : "")).addTo(gaforLayer);
+        .bindTooltip("<b>GAFOR " + esc(r.nr) + "</b>" + (r.name ? " " + esc(r.name) : "") + (r.bz ? "<br>Bezugsh\u00f6he " + r.bz + " ft" : "") +
+          "<br><small>Linie ungef\u00e4hr (" + esc(j.genauigkeit || "") + ") \u2013 aktuelle Einstufung: GAFOR von Austro Control</small>").addTo(gaforLayer);
     });
-    var d = document.createElement("label"); d.className = "chk"; d.style.marginTop = "6px";
-    d.innerHTML = "<input type='checkbox' id='gaforOn' checked> GAFOR-Strecken (" + esc(j.stand || "Stand ?") + ")";
+    var d = document.createElement("div"); d.style.cssText = "margin-top:6px;display:flex;gap:6px;align-items:flex-start;cursor:pointer";
+    d.innerHTML = "<input type='checkbox' id='gaforOn' checked style='margin:3px 0 0;width:auto;height:auto;flex:none'><span onclick=\"document.getElementById('gaforOn').click()\">" +
+      "<i style='background:none;border-top:3px dotted #16A085;border-radius:0;height:0;width:16px;vertical-align:3px'></i>GAFOR-Strecken <small style='color:#61717F'>(Linien ungef\u00e4hr)</small></span>";
     $("legend").querySelector(".lg").appendChild(d);
     gaforLayer.addTo(map);
     $("prefGafor").disabled = false;
-    $("gaforInfo").textContent = "(nur bei gleicher Sicherheit, Stand " + (j.stand || "?") + ")";
+    $("gaforInfo").textContent = "(nur bei gleicher Sicherheit; Linien ungef\u00e4hr aus der GAFOR-Karte)";
     $("gaforOn").addEventListener("change", function () { if (this.checked) gaforLayer.addTo(map); else map.removeLayer(gaforLayer); });
   } catch (e) { GAFOR = null; }
 }

@@ -116,7 +116,7 @@ function edgeStatic(G, e, AIR) {
 /* GAFOR-Strecken (public/data/gafor.geojson, nur wenn als geprueft markiert): Teilstrecken innerhalb
    2,5 NM einer GAFOR-Strecke bekommen in der Routensuche einen Bonus, damit man bei
    Wetterverschlechterung ins Tal absinken kann */
-var GAFOR = null, GAFOR_NM = 2.5;
+var GAFOR = null, GAFOR_NM = 3;   /* Linien ungefaehr (ca. 1-3 NM) */
 var GAFOR_ON = false;   /* Option "GAFOR-Strecken bevorzugen" beim Planen; ohne Haken kein Einfluss */
 function nearGafor(p) {
   if (!GAFOR) return false;

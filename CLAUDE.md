@@ -113,13 +113,15 @@ zusammengefasst), 10 (Reiter-Ansicht für Handy und Touch-Tablets bis 1400 px mi
 Profil-Legende, Kartenseite repariert).
 
 Offen:
-6. GAFOR-Routen: Funktion fertig (Overlay, Option "bevorzugen" nur bei gleicher Sicherheit, Kennzahl), aber OHNE Daten.
-   public/data/gafor.geojson muss aus der aktuellen AIP Austria (GAFOR-Karte) befüllt und mit
-   "geprueft": true freigegeben werden. Nicht raten.
-   Recherche 10/2026: offizielle Liste "GAFOR © Austro Control, 25. April 2019" (Routen mit Bezugspunkten und
-   Bezugshöhen, beim DWD als gafor_oesterreich_download.pdf) und die GAFOR-Übersichtskarte der AIP Austria.
-   Aus der Cloud-Umgebung nicht abrufbar (Netz gesperrt); Suchmaschinen-Auszüge enthielten nachweislich falsche
-   (Schweizer) Routen. Nur aus dem Original-PDF bzw. der aktuellen AIP übernehmen.
+6. GAFOR-Routen (seit 8.7 MIT Daten, ungefähr): public/data/gafor.geojson enthält alle 48 Strecken der GAFOR-Karte
+   von Austro Control (Sichtflug-Streckenvorhersage vom 03.10.2026, vom Nutzer geliefert). Methode: Karte über 45
+   Flugplätze eingemessen (quadratische Anpassung, Restfehler ca. 1 Pixel = 0,3 NM), Linien per kürzestem Weg
+   entlang der gezeichneten Strecken nachgeführt, Zwischenorte aus der Austro-Control-Streckenliste (2019).
+   Kontrolle: Linien liegen im Median 0,2 NM, höchstens ca. 3 NM neben den Orten der Streckenbeschreibung.
+   Genauigkeit daher "ca. 1-3 NM" (in der Datei und der Oberfläche als ungefähr gekennzeichnet), GAFOR_NM = 3.
+   Bezugshöhen aus der Karte. Die Tages-Einstufung (O/D/M/X) ist NICHT enthalten (tagesaktuell bei Austro Control).
+   Nutzung nur für Anzeige und "bevorzugen bei gleicher Sicherheit". Mit der AIP (GAFOR-Übersichtskarte) bei
+   Gelegenheit abgleichen. Tests: tests/unit/gafor-daten.test.mjs, `node tests/e2e/gafor.mjs`.
 9. SkyDemon-Export: seit 8.5 Attribut für Attribut nach einer echten, in SkyDemon gespeicherten Datei des
    Nutzers (StartType/ToType="Unknown", Time als Windows-FILETIME UTC, LevelChange immer "B"). Vorher
    ignorierte SkyDemon die Höhen (zeigte "MSL"). Noch vom Nutzer in SkyDemon zu bestätigen
@@ -135,7 +137,7 @@ Offen:
   `node tests/e2e/run.mjs LOLW LOWZ gut`, `node tests/e2e/edit.mjs` und `node tests/e2e/lang.mjs` (> 250 NM). Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 8.6, nächste 8.7).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 8.7, nächste 8.8).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.
