@@ -109,11 +109,10 @@ Offen:
    Bezugshöhen, beim DWD als gafor_oesterreich_download.pdf) und die GAFOR-Übersichtskarte der AIP Austria.
    Aus der Cloud-Umgebung nicht abrufbar (Netz gesperrt); Suchmaschinen-Auszüge enthielten nachweislich falsche
    (Schweizer) Routen. Nur aus dem Original-PDF bzw. der aktuellen AIP übernehmen.
-9. SkyDemon-Export: nach dem Aufbau einer echten SkyDemon-Datei (Windy-Forum, Beispiel mit
-   Level="5000" LevelChange="B"/"F" je RhumbLineRoute) umgesetzt, Datei immer mit Endung .flightplan,
-   auf iPhone/iPad über das Teilen-Menü. Noch NICHT mit einer echten SkyDemon-Datei des Nutzers abgeglichen:
-   Übernimmt SkyDemon die Höhen nicht, eine in SkyDemon gespeicherte .flightplan-Datei mit Höhenänderungen
-   als Vorlage nehmen und skyDemonXml() exakt danach anpassen (Test: tests/unit/export.test.mjs).
+9. SkyDemon-Export: seit 8.5 Attribut für Attribut nach einer echten, in SkyDemon gespeicherten Datei des
+   Nutzers (StartType/ToType="Unknown", Time als Windows-FILETIME UTC, LevelChange immer "B"). Vorher
+   ignorierte SkyDemon die Höhen (zeigte "MSL"). Noch vom Nutzer in SkyDemon zu bestätigen
+   (Test: tests/unit/export.test.mjs).
 - Meldepunkte/Frequenzen/FIR-Grenzen nutzen openAIP-Felder (reporting-points: compulsory, airports;
   airports: frequencies; airspaces Typ 10 = FIR, Land aus "country"). Mit echten Daten prüfen (LOLW → LJPZ).
 - Beschriftungen in Grafiken dürfen sich nie überschneiden (lbl()-Kollisionsprüfung im Profil nutzen).

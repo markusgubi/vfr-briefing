@@ -40,19 +40,25 @@ function dmsTxt(v, pos, neg, degW) {
   if (sec >= 60) { sec = 0; m++; } if (m >= 60) { m = 0; d++; }
   return (v >= 0 ? pos : neg) + String(d).padStart(degW, "0") + p2(m) + (sec < 10 ? "0" : "") + sec.toFixed(2);
 }
-/* SkyDemon-Flugplan (.flightplan). Aufbau wie eine in SkyDemon gespeicherte Datei:
-   PrimaryRoute (Start + Standardhoehe) und je Teilstrecke ein RhumbLineRoute mit Level = Reiseflughoehe
-   dieser Teilstrecke in ft. LevelChange "B" = Hoehe vor Beginn der Teilstrecke erreichen (Steigen, z. B.
-   wegen Gelaende), "F" = Hoehenwechsel mit Beginn der Teilstrecke (Sinken). */
+/* SkyDemon-Flugplan (.flightplan). Aufbau Attribut fuer Attribut wie eine in SkyDemon gespeicherte Datei
+   (Vorlage des Nutzers, 10/2026): PrimaryRoute mit Start, StartType, Level, Time, Rules; je Teilstrecke ein
+   RhumbLineRoute mit To, ToType, Level (Reiseflughoehe dieser Teilstrecke in ft) und LevelChange="B" -
+   SkyDemon schreibt fuer selbst gesetzte Hoehen immer "B" (auch beim Sinken). Time = Abflugzeit als
+   Windows-FILETIME (100-ns-Schritte seit 1601, UTC). */
+function sdTime(R) {
+  var P = RES && RES.P, d = P && P.date ? new Date(P.date + "T00:00:00") : null;
+  if (!d || isNaN(d.getTime())) return null;
+  var ms = d.getTime() + Math.round(R.depMin) * 60000;
+  return (BigInt(ms) + 11644473600000n) * 10000n + "";
+}
 function skyDemonXml(R) {
-  var alts = wpAlts(R);
+  var alts = wpAlts(R), tm = sdTime(R);
   function pos(w) { return dmsTxt(w.lat, "N", "S", 2) + " " + dmsTxt(w.lon, "E", "W", 3); }
   function lv(a) { return String(Math.max(0, Math.round(a / 100) * 100)); }
   var s = '<?xml version="1.0" encoding="utf-8"?>\n<DivelementsFlightPlanner>\n  <PrimaryRoute CourseType="GreatCircle" Start="' + pos(R.wps[0]) +
-    '" Level="' + lv(alts[0]) + '" Rules="Vfr">\n';
+    '" StartType="Unknown" Level="' + lv(alts[0]) + '"' + (tm ? ' Time="' + tm + '"' : "") + ' Rules="Vfr">\n';
   for (var k = 1; k < R.wps.length; k++) {
-    var cur = alts[k - 1], prev = k > 1 ? alts[k - 2] : cur;
-    s += '    <RhumbLineRoute To="' + pos(R.wps[k]) + '" Level="' + lv(cur) + '" LevelChange="' + (cur < prev ? "F" : "B") + '" />\n';
+    s += '    <RhumbLineRoute To="' + pos(R.wps[k]) + '" ToType="Unknown" Level="' + lv(alts[k - 1]) + '" LevelChange="B" />\n';
   }
   return s + "  </PrimaryRoute>\n</DivelementsFlightPlanner>\n";
 }

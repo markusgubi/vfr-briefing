@@ -17,11 +17,11 @@ test("Die SkyDemon-Datei enthält je Teilstrecke die Reiseflughöhe.", () => {
   const { R } = plan(app);
   const xml = app.skyDemonXml(R);
   assert.match(xml, /^<\?xml version="1.0" encoding="utf-8"\?>\n<DivelementsFlightPlanner>/);
-  assert.match(xml, /<PrimaryRoute CourseType="GreatCircle" Start="N470000\.00 E0130000\.00" Level="8500" Rules="Vfr">/);
-  const legs = [...xml.matchAll(/<RhumbLineRoute To="([NS]\d{6}\.\d{2} [EW]\d{7}\.\d{2})" Level="(\d+)" LevelChange="([BF])" \/>/g)];
+  assert.match(xml, /<PrimaryRoute CourseType="GreatCircle" Start="N470000\.00 E0130000\.00" StartType="Unknown" Level="8500" Time="\d{18}" Rules="Vfr">/);
+  const legs = [...xml.matchAll(/<RhumbLineRoute To="([NS]\d{6}\.\d{2} [EW]\d{7}\.\d{2})" ToType="Unknown" Level="(\d+)" LevelChange="([BF])" \/>/g)];
   assert.equal(legs.length, R.wps.length - 1);
   assert.deepEqual(legs.map(l => l[2]), ["8500", "4500"]);
-  assert.deepEqual(legs.map(l => l[3]), ["B", "F"], "Steigen = B, Sinken = F");
+  assert.deepEqual(legs.map(l => l[3]), ["B", "B"], "wie SkyDemon: immer B");
 });
 
 test("Die Höhenliste im Export stimmt mit dem Navigationslog überein.", () => {
@@ -29,4 +29,14 @@ test("Die Höhenliste im Export stimmt mit dem Navigationslog überein.", () => 
   const { R } = plan(app);
   const alts = app.wpAlts(R);
   R.legs.forEach((l, k) => assert.equal(alts[k], l.alt));
+});
+
+test("Die Abflugzeit steht wie bei SkyDemon als FILETIME (UTC) in der Datei.", () => {
+  const app = loadApp();
+  const { R } = plan(app);
+  app.RES.P.date = "2026-10-03"; R.depMin = 9 * 60;
+  const t = BigInt(app.skyDemonXml(R).match(/Time="(\d+)"/)[1]);
+  const ms = Number(t / 10000n - 11644473600000n);
+  const d = new Date(ms);
+  assert.equal(d.getHours() * 60 + d.getMinutes(), 9 * 60, "Ortszeit 09:00");
 });
