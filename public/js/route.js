@@ -117,6 +117,7 @@ function edgeStatic(G, e, AIR) {
    2,5 NM einer GAFOR-Strecke bekommen in der Routensuche einen Bonus, damit man bei
    Wetterverschlechterung ins Tal absinken kann */
 var GAFOR = null, GAFOR_NM = 2.5;
+var GAFOR_ON = false;   /* Option "GAFOR-Strecken bevorzugen" beim Planen; ohne Haken kein Einfluss */
 function nearGafor(p) {
   if (!GAFOR) return false;
   for (var k = 0; k < GAFOR.length; k++) {
@@ -204,7 +205,7 @@ function ceilFromBase(base, P) {
   if (c < 3000) c = Math.min(Math.max(c, base - 500), Math.max(c, 3000));
   return c;
 }
-function makeMode(P, lambda) { return { lambda: lambda, clrPen: P.avoidClr ? 400 : 2, dangerPen: 150 }; }
+function makeMode(P, lambda, gafor) { return { lambda: lambda, clrPen: P.avoidClr ? 400 : 2, dangerPen: 150, gafor: !!gafor }; }
 function edgeCost(r, mode) {
   var c = r.e.len * (1 + mode.lambda * r.risk);
   if (r.terrainHigh) c += 1e5;
@@ -215,7 +216,8 @@ function edgeCost(r, mode) {
   /* Gelaende nicht mit normalem Steigflug erreichbar: im Abflugbereich stark (dort wird nie gekreist),
      unterwegs schwaecher bestraft (Kreisen moeglich, aber Nachteil) */
   if (r.climbDef > 0) c += (r.noCirc ? 4 : 1) * r.e.len * Math.min(3, r.climbDef / 500) + (r.noCirc && r.climbDef > 500 ? 300 : 0);
-  if (r.e.gafor) c -= r.e.len * 0.15;
+  /* GAFOR-Bonus nur in der eigenen GAFOR-Suche (zusaetzlicher Kandidat), nie in der normalen Suche */
+  if (mode.gafor && r.e.gafor) c -= r.e.len * 0.15;
   return c;
 }
 function bestPath(G, P, depH, mode, extra) {
@@ -332,6 +334,8 @@ function evalRoute(G, P, depH, path, id, name, opt) {
   });
   var D = cum, depElev = G.depElev, destElev = G.destElev;
   var gC = climbGrad(P), gD = descGrad(P), full = P.terrClr + DEM.buf, ramp = rampNm(P);
+  /* Automatische Sinkflugplanung zum Ziel erst nach der letzten selbst gesetzten Hoehe */
+  var lastUserX = rs.reduce(function (m, r) { return r.user ? Math.max(m, r.x1) : m; }, -1);
   /* Stichproben alle 0,5 NM */
   var sm = [];
   rs.forEach(function (r, ri) {
@@ -356,7 +360,8 @@ function evalRoute(G, P, depH, path, id, name, opt) {
       /* Geplant wird mit 300 ft Reserve ueber dem Mindestabstand, soweit Wolken/Luftraum Platz lassen */
       var aim = Math.max(req, Math.min(req + 300 * Math.min(1, dF / ramp), hi));
       var lo = (r.iv[0] > r.floor + 1 && dF >= 5) ? Math.max(aim, r.iv[0]) : aim;
-      var T = Math.min(r.alt, destElev + 1000 + gD * Math.max(0, D - xx - 2));
+      /* Eigene Hoehe wird so geflogen, wie eingestellt; nur automatische Hoehen planen den Sinkflug zum Ziel ein */
+      var T = r.user || xx < lastUserX ? r.alt : Math.min(r.alt, destElev + 1000 + gD * Math.max(0, D - xx - 2));
       sm.push({ x: xx, ri: ri, f: f, lat: c.lat, lon: c.lon, tc: tc, tm: tm, ter: ter, base: base, fz: fz, dF: dF,
         req: req, hard: hard, lo: lo, hi: hi, T: T, user: r.user, nod: nod });
     }
@@ -368,7 +373,9 @@ function evalRoute(G, P, depH, path, id, name, opt) {
     for (var b = 1; b < n; b++) v[b] = Math.max(v[b], v[b - 1] - gD * sm[b].dx);
     return v;
   }
-  var Lr = hull(sm.map(function (q) { return q.user ? -Infinity : q.lo; }));
+  /* Eigene Hoehen gehen in die Vorausschau ein: Eine hoehere eigene Hoehe wird schon VOR Beginn ihrer
+     Teilstrecke erreicht (wie SkyDemon LevelChange "B"), gesunken wird ab Beginn der Teilstrecke ("F"). */
+  var Lr = hull(sm.map(function (q) { return q.user ? q.T : q.lo; }));
   var LT = hull(sm.map(function (q) { return q.user ? -Infinity : q.req; }));   /* nur Gelaende */
   var Ur = sm.map(function (q) { return q.hi; });
   for (i = n - 2; i >= 0; i--) Ur[i] = Math.min(Ur[i], Ur[i + 1] + gD * sm[i + 1].dx);
@@ -376,7 +383,7 @@ function evalRoute(G, P, depH, path, id, name, opt) {
   p[0] = depElev;   /* Start immer in Platzhoehe */
   for (i = 1; i < n; i++) {
     var q = sm[i], reach = p[i - 1] + gC * q.dx;
-    var t = q.user ? q.T : Math.max(Lr[i], Math.min(Math.max(Ur[i], Lr[i]), q.T));
+    var t = q.user ? Math.max(q.T, Lr[i]) : Math.max(Lr[i], Math.min(Math.max(Ur[i], Lr[i]), q.T));
     t = Math.max(t, p[i - 1] - gD * q.dx);
     if (t > reach + 1) {
       if (!q.user && q.x >= NO_CIRC_NM && LT[i] > reach + 1 && reach >= q.hard - 1 && q.hi >= LT[i] - 1) { circ[i] = LT[i] - reach; t = LT[i]; }
@@ -394,7 +401,7 @@ function evalRoute(G, P, depH, path, id, name, opt) {
       else circles.push({ x: sm[i].x, from: p[i] - circ[i], to: p[i], min: cm });
       tm0 += cm;
     }
-    sm[i].t = tm0;
+    sm[i].t = tm0; sm[i].circ = circ[i] > 150 ? circ[i] : 0;
   }
   var circMin = circles.reduce(function (s, c) { return s + c.min; }, 0);
   var excess = p[n - 1] - (destElev + 1000), spiralMin = excess > 300 ? excess / P.desc : 0;
@@ -571,12 +578,19 @@ function similar(a, b, G) {
   Object.keys(ma).forEach(function (i) { n++; if (mb[i] != null && Math.abs(ma[i] - mb[i]) <= 1) k++; });
   return n ? k / n : 1;
 }
-function rankCmp(x, y) { return x.cat - y.cat || x.confLen - y.confLen || y.rawScore - x.rawScore || x.ete - y.ete; }
+/* Rangfolge streng nach Sicherheit: Einstufung, Konfliktlaenge, Sicherheitswert. Erst bei GLEICHER Sicherheit
+   entscheidet die Naehe zu GAFOR-Strecken, danach die Flugzeit. */
+function gaforShare(R) { return R.rs.reduce(function (a, r) { return a + (r.e.gafor ? r.e.len : 0); }, 0) / Math.max(1, R.D); }
+function rankCmp(x, y) {
+  return x.cat - y.cat || x.confLen - y.confLen || Math.round(y.rawScore) - Math.round(x.rawScore) ||
+    (GAFOR && GAFOR_ON ? Math.round(10 * (gaforShare(y) - gaforShare(x))) : 0) || x.ete - y.ete;
+}
 function candidatePaths(G, P, depH, quick) {
   var out = [];
   function add(p) { if (p && !out.some(function (q) { return q.join() === p.join(); })) out.push(p); }
   var p1 = bestPath(G, P, depH, makeMode(P, 5)); add(p1);
   add(bestPath(G, P, depH, makeMode(P, 12)));
+  if (GAFOR && GAFOR_ON) add(bestPath(G, P, depH, makeMode(P, 5, true)));   /* GAFOR-Variante, gewinnt nur bei gleicher Sicherheit */
   if (!quick) {
     add(bestPath(G, P, depH, makeMode(P, 2)));
     if (p1) {

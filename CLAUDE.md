@@ -11,7 +11,7 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
 - Cloudflare Access schützt die ganze Seite (Policy "Cloudflare account members", 7 Tage Session).
 - Lokal testen: npm run dev (für /cfg wird OPENAIP_KEY in .dev.vars benötigt, nie committen).
 
-## Architektur (Stand 8.1)
+## Architektur (Stand 8.2)
 - Oberfläche als Workers Static Assets in public/ (index.html, css/app.css, js/*.js, data/gafor.geojson,
   img/ und manifest.webmanifest für den iPhone-Startbildschirm; Manifest mit crossorigin="use-credentials"
   wegen Cloudflare Access).
@@ -50,6 +50,15 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
   polyGraph, Wetter höchstens alle 5 NM). Dieselbe Strecke ergibt so immer dieselbe Einstufung; vorher konnten
   lange Netzkanten schlechtes Wetter in der Mitte übersehen. Formpunkte (pts[k].shape) halten die Linie exakt,
   ziehbar sind nur Wegpunkte; beim Ziehen werden die beiden Nachbar-Teilstrecken gerade.
+- Eigene Höhen (seit 8.2): werden wie eingestellt geflogen; eine höhere Höhe wird VOR Beginn ihrer Teilstrecke
+  erreicht, gesunken wird ab Beginn der Teilstrecke. Die automatische Sinkflugplanung zum Ziel greift erst nach
+  der letzten eigenen Höhe. Ist ein früheres Sinken nicht möglich, wird über dem Platz im Vollkreis gesunken
+  (im Profil als Spirale gezeichnet, nie als senkrechter Strich).
+- Bearbeiten ohne Änderung (Stift an/aus) legt keine "Eigene Route" an. Nur wirklich geänderte eigene Routen
+  bleiben beim Neuberechnen erhalten und werden mit der neu geplanten Abflugzeit bewertet.
+- GAFOR (seit 8.2): nur mit Haken "GAFOR-Strecken bevorzugen" (P.preferGafor/GAFOR_ON). Dann zusätzliche
+  GAFOR-Variante in der Suche; in der Rangfolge zählt GAFOR-Nähe NUR bei gleicher Sicherheit (Einstufung,
+  Konfliktlänge, Sicherheitswert). Die normale Suche bleibt ohne GAFOR-Einfluss. Sicherheit geht immer vor.
 - Eigene Routen: routeFromPoints/polyGraph bewerten beliebige Wegpunktfolgen; eigene Höhen je Teilstrecke
   (opt.userAlt) werden wie geplante Höhen geprüft. Fehlen Luftraumdaten für einen Teil, ist die Route KRITISCH.
 
@@ -70,7 +79,7 @@ zusammengefasst), 10 (Reiter-Ansicht für Handy und Touch-Tablets bis 1400 px mi
 Profil-Legende, Kartenseite repariert).
 
 Offen:
-6. GAFOR-Routen: Funktion fertig (Overlay, Bonus in der Routensuche, Kennzahl), aber OHNE Daten.
+6. GAFOR-Routen: Funktion fertig (Overlay, Option "bevorzugen" nur bei gleicher Sicherheit, Kennzahl), aber OHNE Daten.
    public/data/gafor.geojson muss aus der aktuellen AIP Austria (GAFOR-Karte) befüllt und mit
    "geprueft": true freigegeben werden. Nicht raten.
 9. SkyDemon-Export: nach dem Aufbau einer echten SkyDemon-Datei (Windy-Forum, Beispiel mit
@@ -89,7 +98,7 @@ Offen:
   `node tests/e2e/run.mjs LOLW LOWZ gut` und `node tests/e2e/edit.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 8.1, nächste 8.2).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 8.2, nächste 8.3).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.

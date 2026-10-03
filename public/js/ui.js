@@ -88,6 +88,8 @@ async function loadGafor() {
     d.innerHTML = "<input type='checkbox' id='gaforOn' checked> GAFOR-Strecken (" + esc(j.stand || "Stand ?") + ")";
     $("legend").querySelector(".lg").appendChild(d);
     gaforLayer.addTo(map);
+    $("prefGafor").disabled = false;
+    $("gaforInfo").textContent = "(nur bei gleicher Sicherheit, Stand " + (j.stand || "?") + ")";
     $("gaforOn").addEventListener("change", function () { if (this.checked) gaforLayer.addTo(map); else map.removeLayer(gaforLayer); });
   } catch (e) { GAFOR = null; }
 }
@@ -134,7 +136,7 @@ function setupAc(inpId, boxId, key) {
 var KEEP = ["tas", "maxAlt", "terrClr", "cloudClr", "prefAgl", "climb", "desc"];
 function saveSettings() {
   try {
-    var o = { v74: true, from: S.from, to: S.to, avoidClr: $("avoidClr").checked, asFilter: $("asFilter").value };
+    var o = { v74: true, from: S.from, to: S.to, avoidClr: $("avoidClr").checked, prefGafor: $("prefGafor").checked, asFilter: $("asFilter").value };
     KEEP.forEach(function (f) { o[f] = $(f).value; });
     localStorage.setItem("vfr72", JSON.stringify(o));
   } catch (e) {}
@@ -145,6 +147,7 @@ function loadSettings() {
     KEEP.forEach(function (f) { if (o[f]) $(f).value = o[f]; });
     if (!o.v74 && o.maxAlt === "10000") $("maxAlt").value = 12500;
     $("avoidClr").checked = !!o.avoidClr;
+    $("prefGafor").checked = !!o.prefGafor;
     if (o.asFilter != null) $("asFilter").value = o.asFilter;
     if (o.from) { S.from = o.from; showSel("fIn", o.from); }
     if (o.to) { S.to = o.to; showSel("tIn", o.to); }
@@ -163,7 +166,8 @@ function readP() {
     tas: clampNum($("tas").value, 50, 250, 100), maxAlt: clampNum($("maxAlt").value, 3000, 13000, 12500),
     terrClr: clampNum($("terrClr").value, 500, 3000, 1000), cloudClr: clampNum($("cloudClr").value, 500, 3000, 1000),
     prefAgl: clampNum($("prefAgl").value, 1000, 5000, 2000), climb: clampNum($("climb").value, 200, 2000, 500),
-    desc: clampNum($("desc").value, 200, 2000, 500), avoidClr: $("avoidClr").checked
+    desc: clampNum($("desc").value, 200, 2000, 500), avoidClr: $("avoidClr").checked,
+    preferGafor: !!GAFOR && $("prefGafor").checked
   };
   P.prefAgl = Math.max(P.prefAgl, P.terrClr);
   return P;
@@ -210,6 +214,7 @@ async function plan() {
   if (!A || !B) { setSts("Bitte Start und Ziel aus der Vorschlagsliste wählen.", "err"); return; }
   A = S.from = freshApt(A); B = S.to = freshApt(B);
   var P = readP(); saveSettings();
+  GAFOR_ON = P.preferGafor;
   var d = distNm(A, B);
   if (d < 3) { setSts("Start und Ziel liegen zu nah beieinander.", "err"); return; }
   if (d > 250) { setSts("Strecke " + Math.round(d) + " NM – maximal 250 NM. Bitte mit Zwischenlandung planen.", "err"); return; }
@@ -267,9 +272,9 @@ async function plan() {
     await adjustRoutes(RES.routes, G, P);
     /* Eigene Route bleibt bei Neuberechnung (z. B. andere Abflugzeit) erhalten, wenn Start/Ziel gleich sind */
     var keepSel = 0;
-    if (EDIT.pts && EDIT.A && EDIT.B && EDIT.A.lat === A.lat && EDIT.A.lon === A.lon && EDIT.B.lat === B.lat && EDIT.B.lon === B.lon) {
+    if (EDIT.pts && EDIT.dirty && EDIT.A && EDIT.B && EDIT.A.lat === A.lat && EDIT.A.lon === A.lon && EDIT.B.lat === B.lat && EDIT.B.lon === B.lon) {
       try { await ensureArea(EDIT.pts); var ku = evalUser(); if (EDIT.on) keepSel = ku; } catch (e) { EDIT.on = false; }
-    } else { EDIT.on = false; EDIT.pts = null; EDIT.ua = {}; }
+    } else { EDIT.on = false; EDIT.pts = null; EDIT.ua = {}; EDIT.dirty = false; editLayer.clearLayers(); }
     progSet("route", 1, "ok", RES.routes.length + " Varianten");
     RES.opt = await optimizer(G, P, function (k, t, h) { progSet("opt", k / t, null, p2(h) + ":00"); });
     progSet("opt", 1, "ok", RES.opt.length + " Stunden");
@@ -331,7 +336,7 @@ function render(sel) {
     ? "<button class='btn2 on' id='bEditEnd'>\u2713 Bearbeiten beenden</button>" + (uaN ? "<button class='btn2' id='bAltAuto'>H\u00f6hen automatisch</button>" : "")
     : "<button class='btn2' id='bEdit'>\u270e Route &amp; H\u00f6hen bearbeiten</button>") +
     (hasUser ? "<button class='btn2' id='bUserDel'>Eigene Route verwerfen</button>" : "") + "</div>";
-  if (EDIT.on && R.custom) h += "<div class='note' style='margin-top:6px'><b>Karte:</b> Wegpunkt ziehen \u00b7 Linie anklicken = Punkt einf\u00fcgen \u00b7 Punkt anklicken/Rechtsklick = l\u00f6schen. " +
+  if (EDIT.on && R.custom) h += "<div class='note' style='margin-top:6px'>Bewertet f\u00fcr Abflug <b>" + fmtH(P.depH * 60) + "</b> am " + esc(P.date.split("-").reverse().join(".")) + ". <b>Karte:</b> Wegpunkt ziehen \u00b7 Linie anklicken = Punkt einf\u00fcgen \u00b7 Punkt anklicken/Rechtsklick = l\u00f6schen. " +
     "<b>Profil:</b> Griff \u2195 ziehen = Reiseh\u00f6he der Teilstrecke, Doppelklick = wieder automatisch. Bewertung rechnet live mit.</div>";
   h += "</div>";
   h += "<div class='card'><h3>Hinweise &amp; Freigaben <span style='text-transform:none;letter-spacing:0;font-weight:400'>(anklicken = auf Karte zeigen)</span></h3>" +
@@ -482,7 +487,7 @@ function onOutClick(e) {
   var R = RES.routes[RES.sel];
   if (e.target.id === "bEdit") { startEdit(); if (MOB.on) showPane("main"); return; }
   if (e.target.id === "bEditEnd") { stopEdit(); return; }
-  if (e.target.id === "bAltAuto") { EDIT.ua = {}; render(evalUser()); return; }
+  if (e.target.id === "bAltAuto") { EDIT.ua = {}; EDIT.dirty = true; render(evalUser()); return; }
   if (e.target.id === "bUserDel") { discardUser(); return; }
 }
 function drawMap(sel) {
@@ -555,7 +560,7 @@ function profLegend() {
   (f.kinds || []).forEach(function (k) { if (seen[k] || !KIND[k]) return; seen[k] = 1;
     sw("<rect x='1' y='1' width='24' height='10' fill='" + KIND[k].c + "' fill-opacity='0.12' stroke='" + KIND[k].c + "' stroke-dasharray='4 3'/>", "Luftraum: " + KIND[k].t); });
   if (f.conf) sw("<rect x='0' y='0' width='26' height='12' fill='#C0392B' fill-opacity='0.25'/>", "Kein sicherer H\u00f6henkorridor");
-  if (f.circ) sw("<text x='4' y='11' font-size='12' fill='#B02E7A' font-weight='700'>\u21bb</text>", "Kreisend steigen");
+  if (f.circ) sw("<path d='M13 1 C 6 1 6 4 13 4 C 6 4 6 7 13 7 C 6 7 6 10 13 10' fill='none' stroke='#B02E7A' stroke-width='1.8'/>", "Vollkreise: H\u00f6he im Kreis \u00e4ndern (Tal/Platz)");
   if (f.hl) sw("<rect x='0' y='0' width='26' height='12' fill='#FFD400' fill-opacity='0.4'/>", "Gew\u00e4hlter Hinweis");
   if (f.edit) sw("<circle cx='13' cy='6' r='4.5' fill='#fff' stroke='#B02E7A' stroke-width='2'/>", "Griff ziehen = Reiseh\u00f6he \u00e4ndern");
   return it.join("");
@@ -664,15 +669,31 @@ function profSvg(R) {
   sm.forEach(function (q) { if (q.fz != null && isFinite(q.fz) && q.fz < yMax) { fl += (pen ? " L " : " M ") + X(q.x) + " " + Y(q.fz); pen = true; } else pen = false; });
   if (fl) s += "<path d='" + fl + "' fill='none' stroke='#2E86C9' stroke-width='1.2' stroke-dasharray='2 4'/>";
   if (P.maxAlt < yMax) s += "<line x1='" + Lp + "' x2='" + (W - Rp) + "' y1='" + Y(P.maxAlt) + "' y2='" + Y(P.maxAlt) + "' stroke='#9AA7B0' stroke-dasharray='8 6'/>";
+  /* Kreisflug (Steigen unterwegs, Sinken ueber dem Platz) als Schleifenlinie statt senkrechtem Strich */
+  function coil(x, y0, y1) {
+    var hh = y1 - y0, n = Math.max(2, Math.round(Math.abs(hh) / (mob ? 14 : 10))), w = mob ? 13 : 10, d = "";
+    for (var k = 1; k <= n; k++) {
+      var ya = y0 + hh * (k - 1) / n, yb = y0 + hh * k / n;
+      d += " C " + (x - w).toFixed(1) + " " + ya.toFixed(1) + " " + (x - w).toFixed(1) + " " + yb.toFixed(1) + " " + x.toFixed(1) + " " + yb.toFixed(1);
+    }
+    return d;
+  }
   var pl = "M " + X(0) + " " + Y(G.depElev) + " L " + X(0) + " " + Y(sm[0].p);
-  sm.forEach(function (q) { pl += " L " + X(q.x) + " " + Y(q.p); });
-  pl += " L " + X(D) + " " + Y(G.destElev);
+  sm.forEach(function (q) {
+    if (q.circ) pl += " L " + X(q.x) + " " + Y(q.p - q.circ) + coil(X(q.x), Y(q.p - q.circ), Y(q.p));
+    else pl += " L " + X(q.x) + " " + Y(q.p);
+  });
+  var pEnd = sm[sm.length - 1].p;
+  if (R.spiralMin > 0 && pEnd - G.destElev > 300) pl += coil(X(D), Y(pEnd), Y(G.destElev));
+  else pl += " L " + X(D) + " " + Y(G.destElev);
   s += "<path d='" + pl + "' fill='none' stroke='#B02E7A' stroke-width='" + (mob ? 3.2 : 2.6) + "' stroke-linejoin='round'/>";
   /* Beschriftungen nach Prioritaet: Achsen, Plaetze, Hoehen, Kreisen, Max-Hoehe, Luftraumnamen */
   [0, 0.25, 0.5, 0.75, 1].forEach(function (f) {
     txts += lbl(X(D * f), H - Bp + f2 + 6, Math.round(D * f) + " NM", f2, "#61717F", f === 0 ? "start" : f === 1 ? "end" : "middle", false, [0]);
   });
   txts += lbl(Lp + 4, Tp + f1 * 0.2, G.A.icao || G.A.name, f1, "#0F1D2A", "start", true, [0, f1 * 1.2]);
+  var ed = EDIT.on && R.custom ? editSvg(R, X, Y, f2, lbl) : { g: "", t: "" };
+  txts += ed.t;
   txts += lbl(W - Rp - 4, Tp + f1 * 0.2, G.B.icao || G.B.name, f1, "#0F1D2A", "end", true, [0, f1 * 1.2]);
   if (!(EDIT.on && R.custom)) R.legs.forEach(function (l, k) {   /* im Bearbeiten-Modus zeigen die Griffe die Hoehen */
     var xm = (R.wps[k].x + R.wps[k + 1].x) / 2;
@@ -681,21 +702,23 @@ function profSvg(R) {
     txts += lbl(X(xm), Y(sampleAt(R, xm).p) - 7, String(l.alt), f2, "#B02E7A", "middle", true, [0, -f2 * 1.2, f2 * 1.6, -f2 * 2.4]);
   });
   R.circles.forEach(function (c) { txts += lbl(X(c.x) + 6, Y(c.to) + f2 + 4, "\u21bb " + fmtFt(c.to), f2, "#B02E7A", "start", true); });
-  if (R.spiralMin > 0) txts += lbl(X(D) - 6, Y(sm[sm.length - 1].p) + f2 + 4, "\u21ba Sinken im Tal", f2, "#B02E7A", "end", true);
+  if (R.spiralMin > 0) txts += lbl(X(D) - 16, Y(sm[sm.length - 1].p) + f2 + 4, "\u21ba Sinken im Vollkreis \u00fcber dem Platz (~" + Math.max(1, Math.round(R.spiralMin)) + " min)", f2, "#B02E7A", "end", true,
+    [0, f2 * 1.3, f2 * 2.6, -f2 * 1.3]);
   if (P.maxAlt < yMax) txts += lbl(W - Rp - 4, Y(P.maxAlt) - 4, "max. " + P.maxAlt + " ft", f2, "#61717F", "end", false, [0, f2 * 1.4]);
   bandLbl.forEach(function (b) { txts += lbl(b.x, b.y, b.t, f2, b.c, "start", false, [0, f2 * 1.2, f2 * 2.4].filter(function (o) { return o + f2 < b.hgt; })); });
   /* Legende als HTML unter dem Bild: nur was im Profil vorkommt */
   RES.pvLeg = { cloud: !!bl, fz: !!fl, maxAlt: P.maxAlt < yMax, kinds: R.bands.filter(function (b) { return b.lo < yMax; }).map(function (b) { return b.as.kind; }),
-    conf: R.conflicts.length > 0, hl: !!RES.hl, circ: R.circles.length > 0, edit: EDIT.on && R.custom };
+    conf: R.conflicts.length > 0, hl: !!RES.hl, circ: R.circles.length > 0 || R.spiralMin > 0, edit: EDIT.on && R.custom };
   txts += "<text x='" + (Lp - 6) + "' y='" + (Tp - 6) + "' text-anchor='end' font-size='" + (f2 - 1) + "' fill='#61717F'>ft MSL</text>";
-  return s + txts + "<g id='pedit'>" + (EDIT.on && R.custom ? editSvg(R, X, Y, f2) : "") + "</g><g id='pcur'></g></svg>";
+  return s + txts + "<g id='pedit'>" + ed.g + "</g><g id='pcur'></g></svg>";
 }
 
 /* ==================== 14a. Route und Hoehen bearbeiten ==================== */
 /* Bearbeiten macht aus der gewaehlten Route eine "Eigene Route": Wegpunkte auf der Karte ziehen,
    per Klick auf die Linie einfuegen, per Popup/Rechtsklick loeschen; Reiseflughoehe je Teilstrecke im
    Profil ziehen (Doppelklick = wieder automatisch). Alles wird live neu bewertet. */
-var EDIT = { on: false, drag: null, dragging: false, pts: null, ua: {}, raf: 0, A: null, B: null };
+/* dirty = Nutzer hat wirklich etwas geaendert. Nur dann bleibt eine "Eigene Route" als Variante bestehen. */
+var EDIT = { on: false, drag: null, dragging: false, pts: null, ua: {}, raf: 0, A: null, B: null, dirty: false, baseName: null };
 function userIdx() { for (var k = 0; k < RES.routes.length; k++) if (RES.routes[k].id === "user") return k; return -1; }
 function evalUser() {
   var R = routeFromPoints(RES.G, RES.P, EDIT.pts, EDIT.ua, "user", "Eigene Route"), k = userIdx();
@@ -712,12 +735,22 @@ function startEdit() {
   EDIT.ua = base.custom ? Object.assign({}, base.userAlt || {}) : {};
   if (!base.custom) base.wps.forEach(function (w) { if (w.pi != null && EDIT.pts[w.pi]) EDIT.pts[w.pi].shape = false; });
   EDIT.on = true; EDIT.A = RES.G.A; EDIT.B = RES.G.B;
+  if (!base.custom) { EDIT.dirty = false; EDIT.baseName = base.name; }
   render(evalUser());
   setSts("Bearbeiten: Wegpunkte ziehen, Linie anklicken = Punkt einfügen, Punkt antippen = löschen. Höhen im Profil ziehen.");
 }
-function stopEdit() { EDIT.on = false; editLayer.clearLayers(); render(RES.sel); setSts(""); }
+function stopEdit() {
+  EDIT.on = false; editLayer.clearLayers(); setSts("");
+  if (!EDIT.dirty) {   /* nichts geaendert: zurueck zur urspruenglichen Route, keine "Eigene Route" anlegen */
+    var k = userIdx(); if (k >= 0) RES.routes.splice(k, 1);
+    EDIT.pts = null; EDIT.ua = {};
+    var b = RES.routes.map(function (r) { return r.name; }).indexOf(EDIT.baseName);
+    render(b >= 0 ? b : 0); return;
+  }
+  render(RES.sel);
+}
 function discardUser() {
-  var k = userIdx(); EDIT.on = false; EDIT.pts = null; EDIT.ua = {};
+  var k = userIdx(); EDIT.on = false; EDIT.pts = null; EDIT.ua = {}; EDIT.dirty = false;
   if (k >= 0) RES.routes.splice(k, 1);
   editLayer.clearLayers(); render(0); setSts("");
 }
@@ -760,7 +793,7 @@ function drawEditMarkers(R) {
     var lbl = pt.name ? esc(pt.name) : String(num);
     var mk = L.marker([pt.lat, pt.lon], { draggable: true, autoPan: true,
       icon: L.divIcon({ className: "wpk" + (pt.rp ? " rp" : ""), html: "<b>" + lbl + "</b>", iconSize: null, iconAnchor: [12, 12] }) });
-    mk.on("dragstart", function () { EDIT.dragging = true; hideCursor(); k = straighten(k); });
+    mk.on("dragstart", function () { EDIT.dragging = true; EDIT.dirty = true; hideCursor(); k = straighten(k); });
     mk.on("drag", function (ev) {
       var ll = ev.target.getLatLng();
       EDIT.pts[k] = { lat: ll.lat, lon: ll.lng, name: null };   /* verschoben = kein Meldepunkt mehr */
@@ -774,7 +807,7 @@ function drawEditMarkers(R) {
 }
 function deleteWp(k) {
   if (k <= 0 || k >= EDIT.pts.length - 1 || EDIT.pts[k].shape) return;
-  map.closePopup();
+  map.closePopup(); EDIT.dirty = true;
   var L0 = legOfSeg(k);   /* Teilstrecken L0 und L0+1 werden zu L0 */
   k = straighten(k); EDIT.pts.splice(k, 1);
   var ua = {}; Object.keys(EDIT.ua).forEach(function (l) { l = +l; if (l <= L0) ua[l] = EDIT.ua[l]; else if (l > L0 + 1) ua[l - 1] = EDIT.ua[l]; });
@@ -785,6 +818,7 @@ function routeLineClick(R, ev) {
   if (!EDIT.on || !R.custom) { showCursor(nearestX(R, ev.latlng), "map"); return; }
   var p = { lat: ev.latlng.lat, lon: ev.latlng.lng }, best = null;
   for (var k = 0; k < EDIT.pts.length - 1; k++) { var d = segDist(p, EDIT.pts[k], EDIT.pts[k + 1]).d; if (!best || d < best.d) best = { d: d, k: k }; }
+  EDIT.dirty = true;
   var L0 = legOfSeg(best.k + 1);   /* Teilstrecke L0 wird in L0 und L0+1 geteilt */
   EDIT.pts.splice(best.k + 1, 0, { lat: p.lat, lon: p.lon, name: null });
   var ua = {}; Object.keys(EDIT.ua).forEach(function (l) { l = +l; ua[l > L0 ? l + 1 : l] = EDIT.ua[l]; if (l === L0) ua[l + 1] = EDIT.ua[l]; });
@@ -826,8 +860,8 @@ async function addWxPoints(G, far) {
   res.forEach(function (d, mi) { if (G.wx[mi]) G.wx[mi] = G.wx[mi].concat(d || add.map(function () { return null; })); });
 }
 /* Hoehen-Griffe im Profil */
-function editSvg(R, X, Y, f2) {
-  var legs = {}, out = "";
+function editSvg(R, X, Y, f2, lbl) {
+  var legs = {}, out = "", txt = "";
   R.rs.forEach(function (r) {
     var l = legs[r.e.leg] || (legs[r.e.leg] = { leg: r.e.leg, x0: r.x0, x1: r.x1, alt: r.alt, user: r.user });
     l.x1 = r.x1;
@@ -838,12 +872,11 @@ function editSvg(R, X, Y, f2) {
     if (x1 - x0 < 6) return;
     out += "<line x1='" + x0 + "' x2='" + x1 + "' y1='" + y + "' y2='" + y + "' stroke='#B02E7A' stroke-width='9' stroke-opacity='0.18' stroke-linecap='round'/>" +
       "<circle cx='" + xm.toFixed(1) + "' cy='" + y + "' r='8' fill='#fff' stroke='#B02E7A' stroke-width='2.5' style='cursor:ns-resize'/>" +
-      "<path d='M " + (xm - 3).toFixed(1) + " " + (y - 2) + " l 3 -3 l 3 3 M " + (xm - 3).toFixed(1) + " " + (y + 2) + " l 3 3 l 3 -3' stroke='#B02E7A' stroke-width='1.5' fill='none'/>" +
-      "<text x='" + (xm + (xm > RES.pv.W - 140 ? -12 : 12)).toFixed(1) + "' y='" + (y - 6) + "'" + (xm > RES.pv.W - 140 ? " text-anchor='end'" : "") +
-      " font-size='" + f2 + "' font-weight='700' fill='#B02E7A' style='paint-order:stroke;stroke:#fff;stroke-width:3px'>" +
-      l.alt + " ft" + (l.user ? " \u270e" : " auto") + "</text>";
+      "<path d='M " + (xm - 3).toFixed(1) + " " + (y - 2) + " l 3 -3 l 3 3 M " + (xm - 3).toFixed(1) + " " + (y + 2) + " l 3 3 l 3 -3' stroke='#B02E7A' stroke-width='1.5' fill='none'/>";
+    var right = xm > RES.pv.W - 140;
+    txt += lbl(xm + (right ? -12 : 12), y - 6, l.alt + " ft" + (l.user ? " \u270e" : " auto"), f2, "#B02E7A", right ? "end" : "start", true, [0, -f2 * 1.2, f2 * 2.2, -f2 * 2.4]);
   });
-  return out;
+  return { g: out, t: txt };
 }
 function legAt(c) {
   var R = RES.routes[RES.sel], pv = RES.pv; if (!R || !R.legX) return null;
@@ -923,7 +956,7 @@ function setupCursor() {
        zwischen den Klicks neu gezeichnet wird und der Browser dann kein dblclick meldet) */
     var now = Date.now();
     if (EDIT.lastTap && EDIT.lastTap.leg === l.leg && now - EDIT.lastTap.t < 450) {
-      EDIT.lastTap = null; delete EDIT.ua[l.leg]; render(evalUser()); return;
+      EDIT.lastTap = null; EDIT.dirty = true; delete EDIT.ua[l.leg]; render(evalUser()); return;
     }
     EDIT.lastTap = { leg: l.leg, t: now };
     EDIT.drag = { leg: l.leg, moved: false }; RES.pvFreeze = RES.pv.yMax;
@@ -936,7 +969,7 @@ function setupCursor() {
       var a = altFromY(cd.y);
       var curA = EDIT.ua[EDIT.drag.leg];
       if (!EDIT.drag.moved && curA == null) { var lg = legAt({ x: cd.x, y: RES.pv.Y(a) }) || {}; curA = lg.alt; }
-      if (curA !== a && (EDIT.drag.moved || Math.abs(a - curA) >= 200)) { EDIT.drag.moved = true; EDIT.lastTap = null; EDIT.ua[EDIT.drag.leg] = a; scheduleQuick(); }
+      if (curA !== a && (EDIT.drag.moved || Math.abs(a - curA) >= 200)) { EDIT.drag.moved = true; EDIT.dirty = true; EDIT.lastTap = null; EDIT.ua[EDIT.drag.leg] = a; scheduleQuick(); }
       ev.preventDefault(); return;
     }
     var c = svgX(ev); if (!c) return;
@@ -974,6 +1007,7 @@ function setupCursor() {
   $("exp").addEventListener("click", onExpClick);
   $("asFilter").addEventListener("change", function () { drawAir(); saveSettings(); });
   $("avoidClr").addEventListener("change", saveSettings);
+  $("prefGafor").addEventListener("change", saveSettings);
   if (isMob()) setupMobile();
   $("lgT").addEventListener("click", function () { var l = $("legend"); l.classList.toggle("col"); $("lgA").innerHTML = l.classList.contains("col") ? "&#9656;" : "&#9662;"; });
   setupCursor();

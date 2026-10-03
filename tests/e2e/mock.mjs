@@ -106,10 +106,17 @@ export function openmeteo(url, scenario) {
       temperature_2m: 15, dew_point_2m: scenario === "tief" && alpine ? 12 : 5, cloud_cover_low: low, cloud_cover_mid: 10,
       visibility: 30000, precipitation: 0, cape: 50, wind_gusts_10m: 12, wind_speed_850hPa: 15, wind_direction_850hPa: 270
     };
+    // Szenario "zeit": vor 11 Uhr wie "tief" (Wolken im Gebirge), ab 11 Uhr wie "gut"
+    const badRh = { 950: 80, 925: 85, 850: 96, 800: 98, 700: 90 };
     for (const v of vars) {
       const m = v.match(/^(relative_humidity|geopotential_height)_(\d+)hPa$/);
       const x = m ? (m[1] === "relative_humidity" ? rh[m[2]] : gh[m[2]]) : val[v];
       hourly[v] = Array(24).fill(x ?? 0);
+      if (scenario === "zeit" && alpine) for (let h = 0; h < 11; h++) {
+        if (m && m[1] === "relative_humidity") hourly[v][h] = badRh[m[2]];
+        if (v === "cloud_cover_low") hourly[v][h] = 80;
+        if (v === "dew_point_2m") hourly[v][h] = 12;
+      }
     }
     return { latitude: lat, longitude: lon, elevation: elevM, hourly };
   });
