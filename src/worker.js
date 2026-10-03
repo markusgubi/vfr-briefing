@@ -1,4 +1,4 @@
-// VFR-Briefing 8.2 - Cloudflare Worker
+// VFR-Briefing 8.3 - Cloudflare Worker
 // Die Oberflaeche (public/) liefert Cloudflare als Static Assets aus; dieser Worker
 // beantwortet nur die API-Routen: /test | /cfg | GET /awx?bbox= | GET /dem/z/x/y.png
 // openAIP und Open-Meteo fragt der Browser direkt ab (eigene IP -> kein Rate-Limit durch geteilte Cloudflare-IPs)
@@ -63,7 +63,7 @@ async function handleTest(env) {
   await probe("AviationWeather METAR (Raum Linz)", () => fetch(AWX + "metar?bbox=48.0,13.8,48.5,14.5&format=json"));
   const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
   const allOk = rows.every(r => r.ok) && !!key;
-  let html = "<!DOCTYPE html><html lang=\"de\"><meta charset=\"utf-8\"><title>VFR 8.2 Diagnose</title><body style=\"font-family:monospace;max-width:900px;margin:40px auto;line-height:1.6\">";
+  let html = "<!DOCTYPE html><html lang=\"de\"><meta charset=\"utf-8\"><title>VFR 8.3 Diagnose</title><body style=\"font-family:monospace;max-width:900px;margin:40px auto;line-height:1.6\">";
   html += "<h2>VFR 8.1 &middot; Diagnose</h2>";
   html += "<p>Secret OPENAIP_KEY: <b style=\"color:" + (key ? "green" : "crimson") + "\">" + (key ? "gesetzt (" + key.length + " Zeichen)" : "FEHLT") + "</b></p>";
   html += "<p>openAIP und Open-Meteo werden direkt im Browser abgefragt und hier nicht getestet.</p>";

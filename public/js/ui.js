@@ -538,10 +538,17 @@ function drawMap(sel) {
 }
 function drawRouteLines(R) {
   lineLayer.clearLayers();
+  /* weisser Rand als EINE Linie (sonst ueberlappen die runden Enden zu einer "Perlenkette") */
+  var all = [[R.G.nodes[R.rs[0].e.a].lat, R.G.nodes[R.rs[0].e.a].lon]].concat(R.rs.map(function (r) { var b = R.G.nodes[r.e.b]; return [b.lat, b.lon]; }));
+  L.polyline(all, { color: "#fff", weight: EDIT.on && R.custom ? 11 : 9, opacity: 0.9, interactive: false, lineJoin: "round" }).addTo(lineLayer);
+  /* gleichfarbige Abschnitte zusammenfassen */
+  var runs = [];
   R.rs.forEach(function (r) {
-    var a = R.G.nodes[r.e.a], b = R.G.nodes[r.e.b];
-    L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color: "#fff", weight: 9, opacity: 0.85, interactive: false }).addTo(lineLayer);
-    L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color: CAT_COL[r.cat], weight: EDIT.on && R.custom ? 7 : 5.5, bubblingMouseEvents: false })
+    var a = R.G.nodes[r.e.a], b = R.G.nodes[r.e.b], last = runs[runs.length - 1];
+    if (last && last.cat === r.cat) last.pts.push([b.lat, b.lon]); else runs.push({ cat: r.cat, pts: [[a.lat, a.lon], [b.lat, b.lon]] });
+  });
+  runs.forEach(function (run) {
+    L.polyline(run.pts, { color: CAT_COL[run.cat], weight: EDIT.on && R.custom ? 7 : 5.5, lineJoin: "round", bubblingMouseEvents: false })
       .on("mousemove", function (ev) { if (!EDIT.dragging) showCursor(nearestX(R, ev.latlng), "map"); })
       .on("mouseout", function () { hideCursor(); })
       .on("click", function (ev) { routeLineClick(R, ev); })
@@ -692,7 +699,8 @@ function profSvg(R) {
     txts += lbl(X(D * f), H - Bp + f2 + 6, Math.round(D * f) + " NM", f2, "#61717F", f === 0 ? "start" : f === 1 ? "end" : "middle", false, [0]);
   });
   txts += lbl(Lp + 4, Tp + f1 * 0.2, G.A.icao || G.A.name, f1, "#0F1D2A", "start", true, [0, f1 * 1.2]);
-  var ed = EDIT.on && R.custom ? editSvg(R, X, Y, f2, lbl) : { g: "", t: "" };
+  function reserve(x0, y0, x1, y1) { boxes.push({ x0: x0, x1: x1, y0: y0, y1: y1 }); }
+  var ed = EDIT.on && R.custom ? editSvg(R, X, Y, f2, lbl, reserve) : { g: "", t: "" };
   txts += ed.t;
   txts += lbl(W - Rp - 4, Tp + f1 * 0.2, G.B.icao || G.B.name, f1, "#0F1D2A", "end", true, [0, f1 * 1.2]);
   if (!(EDIT.on && R.custom)) R.legs.forEach(function (l, k) {   /* im Bearbeiten-Modus zeigen die Griffe die Hoehen */
@@ -733,7 +741,16 @@ function startEdit() {
      Ziehbar werden die Wegpunkte des Navigationslogs (Knicke, Hoehenwechsel, Meldepunkte). */
   EDIT.pts = base.pts.map(function (p) { return Object.assign({}, p); });
   EDIT.ua = base.custom ? Object.assign({}, base.userAlt || {}) : {};
-  if (!base.custom) base.wps.forEach(function (w) { if (w.pi != null && EDIT.pts[w.pi]) EDIT.pts[w.pi].shape = false; });
+  /* Ziehbar sind nur markante Punkte: echte Richtungswechsel (> 0,75 NM Abweichung von der Geraden),
+     Meldepunkte und Grenzuebertritte. Die Linie bleibt exakt gleich (uebrige Punkte = Formpunkte). */
+  if (!base.custom) {
+    EDIT.pts.forEach(function (p, i) { if (i > 0 && i < EDIT.pts.length - 1) p.shape = !(p.rp || p.border); });
+    (function dp(i0, i1) {
+      var md = 0, mi = -1;
+      for (var i = i0 + 1; i < i1; i++) { var d = segDist(EDIT.pts[i], EDIT.pts[i0], EDIT.pts[i1]).d; if (d > md) { md = d; mi = i; } }
+      if (md > 0.75) { EDIT.pts[mi].shape = false; dp(i0, mi); dp(mi, i1); }
+    })(0, EDIT.pts.length - 1);
+  }
   EDIT.on = true; EDIT.A = RES.G.A; EDIT.B = RES.G.B;
   if (!base.custom) { EDIT.dirty = false; EDIT.baseName = base.name; }
   render(evalUser());
@@ -860,13 +877,18 @@ async function addWxPoints(G, far) {
   res.forEach(function (d, mi) { if (G.wx[mi]) G.wx[mi] = G.wx[mi].concat(d || add.map(function () { return null; })); });
 }
 /* Hoehen-Griffe im Profil */
-function editSvg(R, X, Y, f2, lbl) {
+function editSvg(R, X, Y, f2, lbl, reserve) {
   var legs = {}, out = "", txt = "";
   R.rs.forEach(function (r) {
     var l = legs[r.e.leg] || (legs[r.e.leg] = { leg: r.e.leg, x0: r.x0, x1: r.x1, alt: r.alt, user: r.user });
     l.x1 = r.x1;
   });
   R.legX = Object.keys(legs).map(function (k) { return legs[k]; });
+  /* zuerst alle Griffe reservieren, damit keine Beschriftung darauf landet */
+  R.legX.forEach(function (l) {
+    var x0 = X(l.x0) + 3, x1 = X(l.x1) - 3, y = Y(l.alt), xm = (x0 + x1) / 2;
+    if (x1 - x0 >= 6) reserve(xm - 11, y - 11, xm + 11, y + 11);
+  });
   R.legX.forEach(function (l) {
     var x0 = X(l.x0) + 3, x1 = X(l.x1) - 3, y = Y(l.alt), xm = (x0 + x1) / 2;
     if (x1 - x0 < 6) return;

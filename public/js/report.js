@@ -45,6 +45,16 @@ function finalize(R, G, P) {
   });
   if (!(R.tight || []).length && R.minTerr < R.terrReserve) add("warn", "<b>Geringe Gel\u00e4ndereserve:</b> ~" + Math.floor(R.minTerr / 50) * 50 + " ft \u00fcber Gel\u00e4nde bei NM " +
     Math.round(R.minTerrX) + " \u2013 weniger als 300 ft Reserve \u00fcber dem eingestellten Mindestabstand (" + P.terrClr + " ft). Fr\u00fch steigen oder Strecke anpassen.", R.minTerrX - 1, R.minTerrX + 1);
+  /* Eigene Hoehen: ueber Max. Hoehe? Mit der Steigrate (rechtzeitig) erreichbar? */
+  if (R.userAlt) Object.keys(R.userAlt).forEach(function (l) {
+    var a = R.userAlt[l], rs = R.rs.filter(function (r) { return r.e.leg === +l; });
+    if (!rs.length) return;
+    var x0 = rs[0].x0, x1 = rs[rs.length - 1].x1, n = +l + 1;
+    if (a > P.maxAlt) add("warn", "<b>Eigene H\u00f6he " + a + " ft</b> (Teilstrecke " + n + ") liegt \u00fcber der eingestellten Max. H\u00f6he von " + P.maxAlt + " ft.", x0, x1);
+    var hit = R.samples.filter(function (q) { return q.x >= x0 - 1e-6 && q.x <= x1 + 1e-6 && Math.abs(q.p - a) <= 1; })[0];
+    if (!hit) add("warn", "<b>Eigene H\u00f6he " + a + " ft</b> (Teilstrecke " + n + ") wird mit " + P.climb + " ft/min nicht erreicht \u2013 Teilstrecke zu kurz oder H\u00f6he zu hoch.", x0, x1);
+    else if (hit.x > x0 + 1) add("info", "Eigene H\u00f6he " + a + " ft (Teilstrecke " + n + ") wird erst bei NM " + Math.round(hit.x) + " erreicht (Steigrate " + P.climb + " ft/min).", x0, hit.x);
+  });
   (R.tight || []).forEach(function (t) {
     add("warn", "<b>" + (t.climb ? "Steigflug knapp" : "Gel\u00e4ndeabstand knapp") + ":</b> nur ~" + fmtFt(Math.max(0, t.clr)) + " ft \u00fcber Gel\u00e4nde (Soll " + P.terrClr +
       " ft)" + (t.climb ? " bei " + P.climb + " ft/min \u2013 fr\u00fch und z\u00fcgig steigen, Talmitte fliegen" : "") +

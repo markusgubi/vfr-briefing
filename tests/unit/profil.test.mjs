@@ -81,3 +81,12 @@ test("Nach dem Gebirge sinkt das Profil über flachem Gelände rechtzeitig, stat
   assert.ok(R.spiralMin < 1, "spiralMin=" + R.spiralMin);
 });
 
+
+test("Zwischen zwei nahen Gebirgsrücken sinkt das Profil nicht ab, um gleich wieder zu steigen.", () => {
+  const app = loadApp();
+  // Ruecken bei NM 15-20 und 28-33 (je 7000 ft), dazwischen ein 8 NM breites Tal auf 2000 ft
+  const { R } = direkt(app, x => ((x > 15 && x < 20) || (x > 28 && x < 33) ? 7000 : 2000));
+  const zwischen = R.samples.filter(q => q.x > 20 && q.x < 28).map(q => q.p);
+  const vorher = R.samples.find(q => q.x > 19).p;
+  assert.ok(Math.min(...zwischen) > vorher - 50, "Senke im Tal: min " + Math.round(Math.min(...zwischen)) + " vs " + Math.round(vorher));
+});

@@ -391,6 +391,19 @@ function evalRoute(G, P, depH, path, id, name, opt) {
     }
     p[i] = t;
   }
+  /* Keine "Achterbahn": Senken im automatischen Profil (sinken und kurz danach wieder steigen, innerhalb
+     15 NM) werden aufgefuellt - die Hoehe wird gehalten, soweit Wolken/Luftraum (Ur) es erlauben.
+     Eigene Hoehen werden nicht veraendert. */
+  (function () {
+    var WIN = 15, lm = new Array(n), rmx = new Array(n), a, b;
+    for (a = 0; a < n; a++) { lm[a] = p[a]; for (b = a - 1; b >= 0 && sm[a].x - sm[b].x <= WIN; b--) lm[a] = Math.max(lm[a], p[b]); }
+    for (a = 0; a < n; a++) { rmx[a] = p[a]; for (b = a + 1; b < n && sm[b].x - sm[a].x <= WIN; b++) rmx[a] = Math.max(rmx[a], p[b]); }
+    for (a = 1; a < n - 1; a++) {
+      if (sm[a].user || circ[a]) continue;
+      var fill = Math.min(lm[a], rmx[a], Ur[a]);
+      if (fill > p[a] + 1) p[a] = fill;
+    }
+  })();
   /* Zeiten inkl. Kreisen unterwegs und Sinken ueber dem Ziel */
   var tm0 = depH * 60, circles = [];
   for (i = 0; i < n; i++) {
@@ -637,6 +650,7 @@ function issueOf(R) {
   if (R.conflicts.length) {
     var c = R.conflicts.slice().sort(function (a, b) { return (b.x1 - b.x0) - (a.x1 - a.x0); })[0];
     var where = Math.round(c.x1) > Math.round(c.x0) ? "zwischen NM " + Math.round(c.x0) + " und " + Math.round(c.x1) : "bei NM " + Math.round(c.x0);
+    if (c.cause === "low" || c.cause === "cloud") return where + ": " + CAUSE[c.cause].replace("geplante", "eigene");
     return where + " kein sicherer H\u00f6henkorridor (" + CAUSE[c.cause] + ")";
   }
   var f = R.entries.filter(function (x) { return x.inside && x.as.kind === "forbidden"; })[0];
