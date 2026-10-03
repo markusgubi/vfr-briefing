@@ -406,7 +406,10 @@ function evalRoute(G, P, depH, path, id, name, opt) {
      verlangt (hoechste Anforderung bis zum Ziel), nie ueber dem steilen Anflugweg (capS). Zum Ziel hin
      nie steigend, damit das Profil im Anflug keine Wellen schlaegt. */
   var capT = new Array(n), ltRun = -Infinity;
-  for (i = n - 1; i >= 0; i--) { ltRun = Math.max(ltRun, LT[i]); capT[i] = Math.max(sm[i].cap, Math.min(ltRun, sm[i].capS)); }
+  /* Gelaendeanforderung fuer ALLE Stichproben (auch eigene Hoehen), sonst wuerde der Anflugweg eine
+     eigene Hoehe durch das Gelaende nach unten ziehen */
+  var LTa = hull(sm.map(function (q) { return q.req; }));
+  for (i = n - 1; i >= 0; i--) { ltRun = Math.max(ltRun, LTa[i]); capT[i] = Math.max(sm[i].cap, Math.min(ltRun, sm[i].capS)); }
   var Uc = Ur.map(function (u, k) { return Math.min(u, capT[k]); });
   var p = new Array(n), circ = new Array(n).fill(0), atMax = new Array(n).fill(false), atCap = new Array(n).fill(false);
   p[0] = depElev;   /* Start immer in Platzhoehe */

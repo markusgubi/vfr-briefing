@@ -89,3 +89,13 @@ test("Eine selbst gesetzte Höhe wird nach dem Steigflug erreicht und gehalten."
   assert.ok(leg1.length > 3);
   assert.ok(leg1.every(q => Math.abs(q.p - 6500) < 1), leg1.map(q => Math.round(q.p)).join(","));
 });
+
+test("Vor dem Ziel zieht der Anflugweg eine eigene Höhe nie unter das Gelände.", () => {
+  const app = loadApp();
+  const { G, P, A, B } = setup(app, x => (x > 44 && x < 47 ? 5000 : 1000));
+  const M = { lat: 47.0, lon: 13.7, name: "MITTE" };
+  const R = app.routeFromPoints(G, P, [A, M, B], { 1: 6700 });
+  assert.ok(!R.conflicts.some(c => c.cause === "low"), JSON.stringify(R.conflicts));
+  const berg = R.samples.filter(q => q.x > 44 && q.x < 47);
+  assert.ok(berg.every(q => q.p >= q.hard - 1), berg.map(q => Math.round(q.p) + "/" + Math.round(q.hard)).join(" "));
+});

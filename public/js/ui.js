@@ -21,6 +21,38 @@ L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
   maxZoom: 15, subdomains: "abc",
   attribution: "Karte: &copy; OpenStreetMap, SRTM | Stil: &copy; OpenTopoMap (CC-BY-SA) | Luftraum: openAIP"
 }).addTo(map);
+/* Wetterbild als Ueberlagerung (nur Anzeige, fliesst NICHT in die Bewertung ein):
+   Radar von RainViewer (letztes Bild), Satellit Infrarot 10,8 um von EUMETSAT (Meteosat, WMS). */
+var wxOverlay = null, wxTimer = null;
+async function setWxLayer(v) {
+  if (wxOverlay) { map.removeLayer(wxOverlay); wxOverlay = null; }
+  clearTimeout(wxTimer); $("wxInfo").textContent = "";
+  try { localStorage.setItem("vfrWxLayer", v); } catch (e) {}
+  if (!v) return;
+  var fails = 0, info = "";
+  function watch(l) {
+    l.on("tileerror", function () { if (++fails === 4) $("wxInfo").textContent = info + " \u2013 Bilder nicht erreichbar."; });
+    l.addTo(map); wxOverlay = l;
+  }
+  try {
+    if (v === "radar") {
+      var j = await fetchJSON("https://api.rainviewer.com/public/weather-maps.json");
+      var fr = j.radar && j.radar.past && j.radar.past[j.radar.past.length - 1];
+      if (!fr) throw new Error("keine Radardaten");
+      if ($("wxLayer").value !== v) return;
+      info = "Radar " + fmtH(new Date(fr.time * 1000).getHours() * 60 + new Date(fr.time * 1000).getMinutes()) + " (RainViewer)";
+      watch(L.tileLayer(j.host + fr.path + "/256/{z}/{x}/{y}/2/1_1.png", { opacity: 0.6, maxNativeZoom: 7, maxZoom: 15, zIndex: 5,
+        attribution: "Radar: <a href='https://www.rainviewer.com' target='_blank' rel='noopener'>RainViewer</a>" }));
+      wxTimer = setTimeout(function () { if ($("wxLayer").value === "radar") setWxLayer("radar"); }, 10 * 60000);
+    } else if (v === "ir") {
+      info = "Meteosat Infrarot, neuestes Bild (EUMETSAT)";
+      watch(L.tileLayer.wms("https://view.eumetsat.int/geoserver/ows", { layers: "msg_fes:ir108", format: "image/png", transparent: true,
+        version: "1.3.0", opacity: 0.55, zIndex: 5, attribution: "Satellit: &copy; EUMETSAT" }));
+      wxTimer = setTimeout(function () { if ($("wxLayer").value === "ir") setWxLayer("ir"); }, 15 * 60000);
+    }
+    $("wxInfo").textContent = info + " \u2013 nur Orientierung, keine Bewertung.";
+  } catch (e) { $("wxInfo").textContent = "Wetterbild nicht verf\u00fcgbar (" + e.message + ")."; }
+}
 var cvs = L.canvas({ padding: 0.3 });
 var airLayer = L.layerGroup().addTo(map), routeLayer = L.layerGroup().addTo(map), lineLayer = L.layerGroup().addTo(map);
 var hlLayer = L.layerGroup().addTo(map), editLayer = L.layerGroup().addTo(map);
@@ -581,7 +613,8 @@ function profLegend() {
 }
 function drawProfile(R) {
   $("profBody").innerHTML = profSvg(R); $("prof").style.display = "block";
-  $("profLeg").innerHTML = profLegend();
+  /* waehrend des Ziehens keine Legende aendern: sonst verschiebt sich das Profil unter dem Finger */
+  if (!EDIT.drag) $("profLeg").innerHTML = profLegend();
   $("prof").classList.toggle("editing", !!(EDIT.on && R.custom));
   if (CUR.x != null) showCursor(CUR.x);
 }
@@ -959,6 +992,11 @@ function editSvg(R, X, Y, f2, lbl, reserve) {
     out += "<line x1='" + x0 + "' x2='" + x1 + "' y1='" + y + "' y2='" + y + "' stroke='#B02E7A' stroke-width='9' stroke-opacity='0.18' stroke-linecap='round'/>" +
       "<circle cx='" + xm.toFixed(1) + "' cy='" + y + "' r='8' fill='#fff' stroke='#B02E7A' stroke-width='2.5' style='cursor:ns-resize'/>" +
       "<path d='M " + (xm - 3).toFixed(1) + " " + (y - 2) + " l 3 -3 l 3 3 M " + (xm - 3).toFixed(1) + " " + (y + 2) + " l 3 3 l 3 -3' stroke='#B02E7A' stroke-width='1.5' fill='none'/>";
+    if (EDIT.drag && EDIT.drag.leg === l.leg && EDIT.drag.minA) {   /* waehrend des Ziehens: Mindesthoehe zeigen */
+      var ym = Y(EDIT.drag.minA);
+      out += "<line x1='" + x0 + "' x2='" + x1 + "' y1='" + ym + "' y2='" + ym + "' stroke='#C0392B' stroke-width='2' stroke-dasharray='5 4'/>";
+      txt += lbl(x0 + 2, ym + f2 + 3, "min. " + EDIT.drag.minA + " ft", f2, "#C0392B", "start", true, [0, f2 * 1.2, -f2 * 1.6]);
+    }
     var right = xm > RES.pv.W - 140;
     txt += lbl(xm + (right ? -12 : 12), y - 6, l.alt + " ft" + (l.user ? " \u270e" : " auto"), f2, "#B02E7A", right ? "end" : "start", true, [0, -f2 * 1.2, f2 * 2.2, -f2 * 2.4]);
   });
@@ -971,6 +1009,13 @@ function legAt(c) {
     if (c.x >= l.x0 - 0.3 && c.x <= l.x1 + 0.3 && Math.abs(pv.Y(l.alt) - c.y) <= 16) return l;
   }
   return null;
+}
+/* Mindesthoehe einer Teilstrecke beim Ziehen: harte Grenze (Gelaende +-1 NM + 500 ft + DEM-Puffer,
+   im Ab-/Anflugbereich von der Platzhoehe ansteigend), auf 100 ft aufgerundet */
+function legMinAlt(R, leg) {
+  var m = 0;
+  R.samples.forEach(function (q) { if (R.rs[q.ri].e.leg === leg && isFinite(q.hard)) m = Math.max(m, q.hard); });
+  return Math.ceil(m / 100) * 100;
 }
 function altFromY(y) {
   var pv = RES.pv, f = 1 - (y - pv.Tp) / (pv.H - pv.Tp - pv.Bp);
@@ -1044,7 +1089,7 @@ function setupCursor() {
     if (EDIT.lastTap && EDIT.lastTap.leg === l.leg && now - EDIT.lastTap.t < 450) {
       EDIT.lastTap = null; EDIT.dirty = true; delete EDIT.ua[l.leg]; render(evalUser()); return;
     }
-    EDIT.drag = { leg: l.leg, moved: false, a0: l.alt, y0: c.y }; RES.pvFreeze = RES.pv.yMax;
+    EDIT.drag = { leg: l.leg, moved: false, a0: l.alt, y0: c.y, minA: legMinAlt(RES.routes[RES.sel], l.leg) }; RES.pvFreeze = RES.pv.yMax;
     try { pb.setPointerCapture(ev.pointerId); } catch (e) {}
     hideCursor();
   }, true);
@@ -1054,7 +1099,8 @@ function setupCursor() {
       /* Ziehen beginnt erst nach 4 Einheiten senkrecht (kein versehentliches Verstellen beim Tippen);
          danach folgt die Hoehe direkt der Fingerposition */
       if (!EDIT.drag.moved && Math.abs(cd.y - EDIT.drag.y0) < 4) { ev.preventDefault(); return; }
-      var a = altFromY(cd.y);
+      /* nie ins Gelaende: hoechstens bis zur Mindesthoehe der Teilstrecke (Konfliktgrenze) */
+      var a = Math.max(altFromY(cd.y), EDIT.drag.minA);
       EDIT.drag.moved = true; EDIT.dirty = true; EDIT.lastTap = null;
       if (EDIT.ua[EDIT.drag.leg] !== a) { EDIT.ua[EDIT.drag.leg] = a; scheduleQuick(); }
       ev.preventDefault(); return;
@@ -1112,6 +1158,8 @@ function setupCursor() {
   $("out").addEventListener("click", onOutClick);
   $("exp").addEventListener("click", onExpClick);
   $("asFilter").addEventListener("change", function () { drawAir(); saveSettings(); });
+  $("wxLayer").addEventListener("change", function () { setWxLayer(this.value); });
+  try { var wl = localStorage.getItem("vfrWxLayer"); if (wl) { $("wxLayer").value = wl; setWxLayer(wl); } } catch (e) {}
   $("avoidClr").addEventListener("change", saveSettings);
   $("prefGafor").addEventListener("change", saveSettings);
   if (isMob()) setupMobile();

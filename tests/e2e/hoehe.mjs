@@ -53,7 +53,8 @@ async function run(mob) {
   let n = 0;
   for (const round of [0, 1]) for (const l of [legs[0], ...mid, legs[legs.length - 1]]) {
     const before = await handle(page, l.leg);
-    const want = Math.max(1500, Math.min(12000, before.alt + (round ? -1500 : 2000)));
+    const minA = await page.evaluate(leg => legMinAlt(RES.routes[RES.sel], leg), l.leg);
+    const want = Math.max(minA, Math.min(12000, before.alt + (round ? -1500 : 2000)));
     const dy = -(want - before.alt) * before.pxPerFt;
     await dragTo(l.leg, dy, { wiggle: n % 3 === 1, fast: n % 3 === 2, pause: n % 2 ? 120 : 400 });
     await page.waitForTimeout(350);
@@ -75,7 +76,15 @@ async function run(mob) {
   await dragTo(l0, -(hTop.y + 200), {});
   let s = await state(page);
   ok(!s.drag && !s.freeze && s.ua[l0] <= 15000 && s.ua[l0] > hTop.alt, `${tag} Zug ueber den Rand: ${hTop.alt} -> ${s.ua[l0]}`);
+  // tief ins Gelaende ziehen: bleibt an der Mindesthoehe stehen, kein Konflikt "zu tief"
+  for (const l of legs) {
+    const minA = await page.evaluate(leg => legMinAlt(RES.routes[RES.sel], leg), l.leg), hG = await handle(page, l.leg);
+    await dragTo(l.leg, (hG.alt + 3000) * hG.pxPerFt, {});
+    const sg = await state(page), conf = await page.evaluate(() => RES.routes[RES.sel].conflicts.map(c => c.cause));
+    ok(sg.ua[l.leg] === minA && !conf.includes("low"), `${tag} Teilstrecke ${l.leg} ins Gelaende gezogen: stoppt bei ${sg.ua[l.leg]} (min. ${minA}), Konflikte: ${conf.join(",") || "-"}`);
+  }
   // Doppeltipp setzt zurueck
+  if (mob) { const hs = await handle(page, l0); await page.evaluate(x => { document.getElementById("profBody").scrollLeft += x - 195; }, hs.x); await page.waitForTimeout(150); }
   const hD = await handle(page, l0);
   if (mob) { await touch("touchStart", hD.x, hD.y); await touch("touchEnd"); await page.waitForTimeout(80); await touch("touchStart", hD.x, hD.y); await touch("touchEnd"); }
   else await page.mouse.dblclick(hD.x, hD.y);
@@ -99,8 +108,8 @@ async function run(mob) {
   ok(Math.abs(aft.D - before.D) < 0.05 && aft.cat === before.cat, `${tag} Strecke und Bewertung bleiben gleich (D ${before.D.toFixed(1)} -> ${aft.D.toFixed(1)}, Kat. ${before.cat} -> ${aft.cat})`);
   if (mob) ok(aft.pane === "pProf", `${tag} bleibt im Profil (${aft.pane})`);
   const newLeg = await page.evaluate(([x]) => RES.routes[RES.sel].legX.find(l => l.x0 <= x + 0.2 && l.x1 >= x + 0.2).leg, [xIns]);
-  const hN = await handle(page, newLeg), wantN = hN.alt - 1000;
-  await dragTo(newLeg, 1000 * hN.pxPerFt, {});
+  const hN = await handle(page, newLeg), wantN = hN.alt + 1000;
+  await dragTo(newLeg, -1000 * hN.pxPerFt, {});
   s = await state(page);
   ok(s.ua[newLeg] != null && Math.abs(s.ua[newLeg] - wantN) <= 150, `${tag} neuer Abschnitt ${newLeg}: Hoehe ${hN.alt} -> ${s.ua[newLeg]} (Ziel ${wantN})`);
   const labels = await page.evaluate(() => { const nsp = EDIT.pts.filter((p, i) => i > 0 && i < EDIT.pts.length - 1 && !p.shape).length;

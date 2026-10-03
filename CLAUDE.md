@@ -64,12 +64,18 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
   Nur wo das Gelände davor es verlangt, bis zur doppelten Sinkrate (STEEP_F) mit Hinweis "Steiler Sinkflug"
   (über 1,5-fach = EINGESCHR.). Reicht auch das nicht: Konflikt "desc" (KRITISCH). Kein Kreisen über dem Ziel.
   Anflugbereich (rampArrNm) analog zum Abflugbereich; die Routensuche bestraft Kanten mit descDef/descDefS.
+  Die Obergrenze vor dem Ziel berücksichtigt das Gelände auch bei eigenen Höhen (LTa), seit 8.6.
 - Wegpunkte erscheinen im Höhenprofil als senkrechte Linien mit Nummer/Name (wie Navlog). Beim Bearbeiten
   (seit 8.6) zeigt das Profil genau die ziehbaren Wegpunkte mit denselben Nummern wie die Karte (Teilstrecken-
   grenzen, ohne Knick-Punkte des Navlogs). Tipp/Klick ins Profil neben die Griffe fügt dort einen Wegpunkt ein
   (Teilstrecke wird geteilt, Linie und Bewertung bleiben gleich), danach eigene Höhe für das Stück setzbar.
   Höhen-Ziehen: startet nach 4 Einheiten senkrecht, Höhe folgt direkt dem Finger; Doppeltipp (nur Tipps ohne
-  Ziehen) = automatisch. Belastungstest: `node tests/e2e/hoehe.mjs` (echte Maus-/Touch-Eingaben).
+  Ziehen) = automatisch. Nie ins Gelände: Ziehen stoppt an der Mindesthöhe der Teilstrecke (legMinAlt = höchste
+  harte Grenze der Stichproben, rote Linie "min." beim Ziehen). Während des Ziehens wird die Profil-Legende nicht
+  neu gezeichnet (sonst verschiebt sich das Profil unter dem Finger). Belastungstest: `node tests/e2e/hoehe.mjs`.
+- Wetterbild (seit 8.6, nur Anzeige, NIE in der Bewertung): Radar RainViewer (weather-maps.json, letztes Bild,
+  maxNativeZoom 7) oder Satellit Infrarot EUMETSAT WMS (view.eumetsat.int, Layer msg_fes:ir108). Aus der Cloud-
+  Umgebung nicht erreichbar, nur mit simulierten Quellen getestet (`node tests/e2e/wetterbild.mjs`).
 - Lange Strecken (seit 8.5): keine 250-NM-Grenze mehr, Hinweis "Lange Strecke" (Kraftstoff, Zwischenlandung
   entscheidet der Pilot). Gelände-Zoom adaptiv (demZoom: 10/9/8, DEM-Puffer 150/300/450 ft), Netz bis 70 Schritte,
   Wetterraster bis 20 Schritte, /awx bis 12° × 16°. Luftraum gilt nur in den Länderrechtecken (CTRY) geladener

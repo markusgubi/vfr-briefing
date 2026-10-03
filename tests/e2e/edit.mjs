@@ -53,7 +53,8 @@ for (let i = 1; i <= 10; i++) { await page.mouse.move(h.x, h.y + (h.y2 - h.y) * 
 await page.mouse.up(); await page.waitForTimeout(400);
 const r4 = await cur();
 ok(r4.ua[h.leg] != null && r4.ua[h.leg] < h.alt, "Profil-Griff setzt Hoehe " + h.alt + " -> " + r4.ua[h.leg]);
-ok(r4.cat === 2 && r4.conf.includes("low"), "Zu tiefe Hoehe ist KRITISCH mit Konflikt: " + r4.conf.join(","));
+const minA = await page.evaluate(leg => legMinAlt(RES.routes[RES.sel], leg), h.leg);
+ok(r4.ua[h.leg] >= minA - 1 && !r4.conf.includes("low"), "Ziehen ins Gelaende wird an der Mindesthoehe " + minA + " gestoppt (" + r4.ua[h.leg] + ", Konflikte: " + r4.conf.join(",") + ")");
 await page.screenshot({ path: OUT + "/e2e-edit-tief.png" });
 
 // 5) Doppelklick = wieder automatisch
