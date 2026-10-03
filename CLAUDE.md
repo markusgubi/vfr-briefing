@@ -157,6 +157,14 @@ Offen:
    Nutzers (StartType/ToType="Unknown", Time als Windows-FILETIME UTC, LevelChange immer "B"). Vorher
    ignorierte SkyDemon die Höhen (zeigte "MSL"). Noch vom Nutzer in SkyDemon zu bestätigen
    (Test: tests/unit/export.test.mjs).
+- Grenzen & Orte (seit 9.3): Grenzübertritt auch erkannt, wenn das Nachbarland keine FIR in openAIP hat (Verlassen
+  der letzten FIR Richtung Auslandsziel, c.noFir). Übertrittspunkt: (1) VFR-Meldepunkt ≤ 15 NM, (2) markanter Ort
+  ≤ 6 NM (borderTown, Größe stark gewichtet: 10× größer = bis 2 NM weiter), (3) Grenzpunkt mit nächstem Ortsnamen.
+  Orte aus OpenStreetMap/Overpass (loadPlaces: city/town + village ≥ 1000 Einw., 30 Tage Cache, 12 s Zeitlimit,
+  Ausfall = keine Orte). Wegpunkte bekommen den nächsten Ort ≤ 3 NM (w.town, Navlog "WP3 · Gmunden"), auf der
+  Karte werden Orte ≤ 3 NM neben der Route beschriftet (drawTowns, mind. 7 NM Abstand). Orte nur zur Benennung/
+  Navigation, nie für Sicherheitsentscheidungen. Overpass aus der Cloud-Umgebung nicht erreichbar, nur simuliert
+  getestet (tests/e2e/grenze.mjs, Mock-Orte in mock.mjs).
 - Meldepunkte/Frequenzen/FIR-Grenzen nutzen openAIP-Felder (reporting-points: compulsory, airports;
   airports: frequencies; airspaces Typ 10 = FIR, Land aus "country"). Mit echten Daten prüfen (LOLW → LJPZ).
 - Beschriftungen in Grafiken dürfen sich nie überschneiden (lbl()-Kollisionsprüfung im Profil nutzen).
@@ -165,10 +173,11 @@ Offen:
 - Vor jedem Commit: `npm run check` (node --check auf Server- und Client-Code) und `npm test` (Unit-Tests der
   Rechenlogik mit künstlichem Gelände, ohne Netz). Lokal mit `npm run dev` testen.
 - Browser-Tests mit simulierten Datenquellen (tests/e2e, brauchen Playwright und laufendes `npm run dev`):
-  `node tests/e2e/run.mjs LOLW LOWZ gut`, `node tests/e2e/edit.mjs` und `node tests/e2e/lang.mjs` (> 250 NM). Die Mock-Daten in tests/e2e/mock.mjs sind
+  `node tests/e2e/run.mjs LOLW LOWZ gut`, `node tests/e2e/edit.mjs`, `node tests/e2e/lang.mjs` (> 250 NM),
+  `node tests/e2e/grenze.mjs` (AT→IT ohne Meldepunkt/FIR), `rueckflug.mjs`, `hoehe.mjs`, `gafor.mjs`, `wetterbild.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.2, nächste 9.3).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.3, nächste 9.4).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.

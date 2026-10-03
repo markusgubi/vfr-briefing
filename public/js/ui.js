@@ -257,7 +257,7 @@ async function plan() {
   if (d < 3) { setSts("Start und Ziel liegen zu nah beieinander.", "err"); return; }
   if (!P.date) { setSts("Bitte Datum wählen.", "err"); return; }
   $("go").disabled = true; hlLayer.clearLayers(); setSts("");
-  progStart([["dem", "Gelände", 14], ["asp", "Luftraum", 9], ["apt", "Flugplätze", 3], ["awx", "METAR/TAF", 3]]
+  progStart([["dem", "Gelände", 14], ["asp", "Luftraum", 9], ["apt", "Flugplätze", 3], ["awx", "METAR/TAF", 3], ["plc", "Orte", 2]]
     .concat(MODELS.map(function (m, mi) { return ["wx" + mi, m.l.replace(/ \(.*\)/, ""), 6]; }))
     .concat([["net", "Streckennetz", 10], ["route", "Routensuche", 12], ["opt", "Abflugzeit-Optimierer", 19]])
     .concat(P.ret ? [["ret", "R\u00fcckflug", 8]] : []));
@@ -284,6 +284,11 @@ async function plan() {
       return fetchModel(mi, G.wpts, P.date).then(function (x) { progSet("wx" + mi, 1, "ok"); return x; }, function (er) { progSet("wx" + mi, 1, "err", er.message); return null; });
     }));
     var pSun = Promise.resolve(sunFor(A, B, P.date));
+    /* Orte (OpenStreetMap) fuer Ortsnamen und Grenzpunkte: optional, hoechstens 12 s warten */
+    progSet("plc", 0.1);
+    var pPlaces = Promise.race([loadPlaces(bw, bs, be, bn), new Promise(function (r) { setTimeout(function () { r(null); }, 12000); })])
+      .then(function (l) { progSet("plc", 1, l ? "ok" : "err", l ? l.length + " Orte" : "nicht erreichbar"); return l || []; },
+        function () { progSet("plc", 1, "err", "nicht erreichbar"); return []; });
     await pDem;
     G.depElev = A.elevFt != null ? A.elevFt : (elevFt(A.lat, A.lon) || 0);
     G.destElev = B.elevFt != null ? B.elevFt : (elevFt(B.lat, B.lon) || 0);
@@ -308,6 +313,7 @@ async function plan() {
     progSet("route", 0.2); await yieldUi();
     RES = { G: G, P: P, apts: got[1].list || [], routes: [], hl: null };
     RES.routes = computeRoutes(G, P);
+    G.PLACES = await pPlaces;
     await adjustRoutes(RES.routes, G, P);
     /* Eigene Route bleibt bei Neuberechnung (z. B. andere Abflugzeit) erhalten, wenn Start/Ziel gleich sind */
     var keepSel = 0;
@@ -565,6 +571,25 @@ function onOutClick(e) {
   if (e.target.id === "bAltAuto") { EDIT.ua = {}; EDIT.dirty = true; render(evalUser()); return; }
   if (e.target.id === "bUserDel") { discardUser(); return; }
 }
+/* Orte entlang der Route beschriften (OpenStreetMap): hoechstens 3 NM neben der Linie, groessere zuerst,
+   mindestens 7 NM Abstand entlang der Route - zum Navigieren "von Ort zu Ort" und fuer Positionsmeldungen */
+function drawTowns(R) {
+  var pl = RES.G.PLACES || []; if (!pl.length) return;
+  var cand = [];
+  pl.forEach(function (q) {
+    var best = null;
+    for (var i = 0; i < R.samples.length; i += 2) { var d = distNm(q, R.samples[i]); if (!best || d < best.d) best = { d: d, x: R.samples[i].x }; }
+    if (best && best.d <= 3 && best.x > 2 && best.x < R.D - 2) cand.push({ q: q, x: best.x });
+  });
+  cand.sort(function (a, b) { return b.q.pop - a.q.pop; });
+  var used = [];
+  cand.forEach(function (c) {
+    if (used.some(function (u) { return Math.abs(u.x - c.x) < 7; })) return;
+    used.push(c);
+    L.marker([c.q.lat, c.q.lon], { interactive: false, keyboard: false,
+      icon: L.divIcon({ className: "town", html: "<i></i>" + esc(c.q.name), iconSize: null, iconAnchor: [4, 4] }) }).addTo(routeLayer);
+  });
+}
 function drawMap(sel) {
   var G = RES.G, R = RES.routes[sel], nb = { bubblingMouseEvents: false };
   routeLayer.clearLayers();
@@ -579,16 +604,17 @@ function drawMap(sel) {
     L.marker([c.lat, c.lon], { interactive: true, icon: L.divIcon({ className: "brd", html: "\u2691 " + esc(c.fromC) + "/" + esc(c.toC), iconSize: null, iconAnchor: [-6, 24] }) })
       .bindTooltip("Grenz\u00fcbertritt " + esc(c.fromC) + " \u2192 " + esc(c.toC) + " bei NM " + Math.round(c.x) + " (~" + fmtH(c.t) + ")").addTo(routeLayer);
   });
+  drawTowns(R);
   R.wps.forEach(function (w, k) {
     if (k === 0 || k === R.wps.length - 1) return;
-    if (w.rp && !(EDIT.on && R.custom)) {
+    if ((w.rp || (w.border && w.town)) && !(EDIT.on && R.custom)) {
       L.circleMarker([w.lat, w.lon], { radius: 6, color: "#fff", weight: 2, fillColor: "#1F5FA8", fillOpacity: 1, bubblingMouseEvents: false })
         .bindTooltip(esc(w.name), { permanent: true, direction: "right", offset: [8, 0], className: "rptip" }).addTo(routeLayer);
       return;
     }
     var q = sampleAt(R, w.x), r = R.rs[q.ri];
     L.circleMarker([w.lat, w.lon], { radius: 5.5, color: "#fff", weight: 1.5, fillColor: CAT_COL[r.cat], fillOpacity: 1, bubblingMouseEvents: false })
-      .bindPopup(nodePopup(r.wa, w.x, w.t, w.name), { maxWidth: 380 }).addTo(routeLayer);
+      .bindPopup(nodePopup(r.wa, w.x, w.t, w.name + (w.town && w.town !== w.name ? " \u00b7 " + w.town : "")), { maxWidth: 380 }).addTo(routeLayer);
   });
   [[G.A, R.rs[0].wa, 0, R.depMin], [G.B, R.rs[R.rs.length - 1].wb, R.D, R.arrMin]].forEach(function (q) {
     L.circleMarker([q[0].lat, q[0].lon], { radius: 8, color: "#fff", weight: 2.5, fillColor: "#0F1D2A", fillOpacity: 1, bubblingMouseEvents: false })

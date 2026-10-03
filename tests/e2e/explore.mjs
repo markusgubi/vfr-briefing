@@ -35,7 +35,8 @@ async function check(page, tag) {
     if (R.userAlt) Object.keys(R.userAlt).forEach(l => {
       const rs = R.rs.filter(r => r.e.leg === +l); if (!rs.length) return;
       const x0 = rs[0].x0, x1 = rs[rs.length - 1].x1, a = R.userAlt[l];
-      const qs = R.samples.filter(q => q.x > x0 + (x1 - x0) * 0.5 && q.x < x1 - 0.5 && q.x < R.D - 2);
+      /* ab Sinkflugbeginn (R.tod) wird zum Ziel gesunken - dort gilt die eigene Hoehe bewusst nicht mehr */
+      const qs = R.samples.filter(q => q.x > x0 + (x1 - x0) * 0.5 && q.x < x1 - 0.5 && q.x < R.D - 2 && (!R.tod || q.x < R.tod.x));
       /* nicht gehalten = weder auf der Hoehe noch im Steig-/Sinkflug dorthin unterwegs */
       const off = qs.filter((q, k) => { if (Math.abs(q.p - a) <= 1) return false; const prev = R.samples[R.samples.indexOf(q) - 1]; return !prev || (q.p < a ? q.p <= prev.p + 1 : q.p >= prev.p - 1); }).length;
       const hinted = (R.hints || []).some(h => /Eigene H.he/.test(h.t) && h.t.indexOf(String(a)) >= 0);

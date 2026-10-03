@@ -171,6 +171,35 @@ async function cachePut(url, data) {
     await c.put(url, new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", "x-t": String(Date.now()) } }));
   } catch (e) {}
 }
+/* Orte (Staedte, Orte ab 1000 Einwohnern) aus OpenStreetMap (Overpass) - fuer Ortsnamen an Wegpunkten, auf der
+   Karte und als markante Grenzuebertrittspunkte. Nur Anzeige/Benennung, nie fuer Sicherheitsentscheidungen.
+   Fehler = keine Orte (Planung laeuft weiter). 30 Tage Cache je 0,5-Grad-Raster. */
+var OVERPASS = "https://overpass-api.de/api/interpreter";
+async function loadPlaces(w, s, e, n) {
+  var r = function (v, up) { return (up ? Math.ceil(v * 2) : Math.floor(v * 2)) / 2; };
+  w = r(w); s = r(s); e = r(e, true); n = r(n, true);
+  var key = "https://cache.local/osm/places/" + [s, w, n, e].join(",");
+  var hit = await cacheGet(key, 30 * 86400000);
+  if (hit) return hit;
+  var bb = "(" + s + "," + w + "," + n + "," + e + ")";
+  var q = "[out:json][timeout:25];(node[\"place\"~\"^(city|town)$\"]" + bb + ";node[\"place\"=\"village\"][\"population\"~\"^[0-9]{4,}$\"]" + bb + ";);out qt;";
+  var j = await fetchJSON(OVERPASS + "?data=" + encodeURIComponent(q), 2);
+  var out = (j.elements || []).filter(function (x) { return x.tags && x.tags.name; }).map(function (x) {
+    return { name: x.tags["name:de"] || x.tags.name, lat: x.lat, lon: x.lon, kind: x.tags.place, pop: +(x.tags.population || 0) || (x.tags.place === "city" ? 100000 : x.tags.place === "town" ? 10000 : 1000) };
+  });
+  await cachePut(key, out);
+  return out;
+}
+/* naechster Ort zu einem Punkt (hoechstens maxNm), bei Gleichstand der groessere */
+function nearestPlace(places, p, maxNm) {
+  var best = null;
+  (places || []).forEach(function (q) {
+    var d = distNm(p, q); if (d > maxNm) return;
+    var sc = d - Math.log10(Math.max(1000, q.pop)) * 0.3;
+    if (!best || sc < best.sc) best = { sc: sc, d: d, pl: q };
+  });
+  return best ? Object.assign({ d: best.d }, best.pl) : null;
+}
 /* VFR-Melde-/Pflichtmeldepunkte (openAIP reporting points). airports: IDs der zugehoerigen Flugplaetze */
 function normRp(a) {
   if (!a || !a.geometry || !Array.isArray(a.geometry.coordinates)) return null;

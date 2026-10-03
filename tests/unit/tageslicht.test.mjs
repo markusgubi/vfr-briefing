@@ -62,3 +62,15 @@ test("Rückflug: Kommt der Hinflug zu spät an, gibt es keinen Rückflug vor ECE
   assert.equal(X.latest, null);
   assert.equal(X.reason, "late");
 });
+
+test("Rückflug: Ist nur das Gelände nach dem Start das Problem, heißt es 'unabhängig von der Uhrzeit'.", async () => {
+  const app = loadApp();
+  /* Ruecken 6000 ft direkt hinter dem Zielplatz (Rueckflug startet dort) */
+  const { G, P, A, B } = sunSetup(app, x => (x > 52 && x < 55.5 ? 6000 : 1000));
+  const R = app.routeFromPoints(G, Object.assign({}, P, { depH: 9 }), [A, B], null);
+  const X = await app.returnPlan(G, P, R, 30);
+  assert.equal(X.latest, null);
+  assert.equal(X.reason, "wx");
+  assert.ok(X.structural, JSON.stringify(X.causes));
+  assert.ok(X.causes.includes("climb"));
+});

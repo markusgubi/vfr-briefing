@@ -13,10 +13,15 @@ function finalize(R, G, P) {
     var nn = G.nodes[b.e.a];
     if (nn.uw != null || turn >= 4 || a.alt !== b.alt) {
       var up = nn.uw != null && R.pts ? R.pts[nn.uw] : null;
-      wps.push({ lat: nn.lat, lon: nn.lon, name: up && up.name ? up.name : "WP" + wps.length, x: b.x0, t: b.tStart, uw: nn.uw, pi: nn.pi, rp: up ? up.rp : null, border: up ? up.border : null });
+      wps.push({ lat: nn.lat, lon: nn.lon, name: up && up.name ? up.name : "WP" + wps.length, x: b.x0, t: b.tStart, uw: nn.uw, pi: nn.pi, rp: up ? up.rp : null, border: up ? up.border : null, town: up ? up.town : null });
     }
   }
   wps.push({ lat: G.B.lat, lon: G.B.lon, name: G.B.icao || "ZIEL", x: D, t: R.arrMin });
+  /* Ortsnamen (OpenStreetMap) an Wegpunkten: erleichtert Positionsmeldungen ("ueber Gmunden") */
+  wps.forEach(function (w, k) {
+    if (k === 0 || k === wps.length - 1 || w.rp || w.town) return;
+    var t = nearestPlace(G.PLACES, w, 3); if (t) w.town = t.name;
+  });
   R.wps = wps;
   R.legs = [];
   for (k = 1; k < wps.length; k++) {
@@ -25,7 +30,8 @@ function finalize(R, G, P) {
     var tc = courseDeg(w0, w1), wind = vecMean(es.map(function (r) { return r.wind; })), g = gsCalc(P.tas, tc, wind);
     var dist = es.reduce(function (s, r) { return s + r.e.len; }, 0);
     var mins = es.length ? es[es.length - 1].tEnd - es[0].tStart : 0;
-    R.legs.push({ from: (w0.border ? "\u2691 " : "") + w0.name, to: (w1.border ? "\u2691 " : "") + w1.name, tc: tc, mc: tc - MAGVAR, mh: tc + g.wca - MAGVAR, dist: dist, alt: es.length ? es[0].alt : 0,
+    R.legs.push({ from: (w0.border ? "\u2691 " : "") + w0.name + (w0.town && w0.town !== w0.name ? " \u00b7 " + w0.town : ""),
+      to: (w1.border ? "\u2691 " : "") + w1.name + (w1.town && w1.town !== w1.name ? " \u00b7 " + w1.town : ""), tc: tc, mc: tc - MAGVAR, mh: tc + g.wca - MAGVAR, dist: dist, alt: es.length ? es[0].alt : 0,
       wind: wind, gs: mins > 0 ? dist / (mins / 60) : g.gs, mins: mins, eto: k === wps.length - 1 ? R.arrMin : w1.t,
       cat: Math.max.apply(null, es.map(function (r) { return r.cat; }).concat([0])) });
   }
@@ -136,7 +142,8 @@ function finalize(R, G, P) {
     if (w.rp && !w.border) add("info", "Anflug über Meldepunkt <b>" + esc(w.name) + "</b>" + (w.rp.compulsory ? " (Pflichtmeldepunkt)" : "") + " bei NM " + Math.round(w.x) + " – Verfahren laut Sichtanflugkarte (AIP AD 2).", w.x, w.x);
   });
   (R.rpNotes || []).forEach(function (n) {
-    if (n === "norp") add("warn", "Kein veröffentlichter Meldepunkt (openAIP) innerhalb " + BORDER_RP_NM + " NM vom Grenzübertritt – Übertrittspunkt laut AIP/VFR-Karte wählen.");
+    if (n === "norp") add("warn", "Kein veröffentlichter Meldepunkt (openAIP) innerhalb " + BORDER_RP_NM + " NM und kein Ort innerhalb " + BORDER_TOWN_NM + " NM vom Grenzübertritt – Übertrittspunkt laut AIP/VFR-Karte wählen.");
+    if (n.indexOf("town:") === 0) add("info", "Grenzübertritt über den Ort <b>" + esc(n.slice(5)) + "</b> (kein veröffentlichter VFR-Meldepunkt innerhalb " + BORDER_RP_NM + " NM in openAIP) – Positionsmeldung an FIS mit Ortsangabe, Übertritt laut AIP prüfen.");
     if (n === "nodest") add("warn", "Kein Meldepunkt für " + esc(G.B.icao || G.B.name) + " in openAIP gefunden – Anflug laut Sichtanflugkarte (AIP AD 2) planen.");
   });
   if (G.rpFailed && G.rpFailed.length) add("warn", "Meldepunkte für " + G.rpFailed.join(", ") + " nicht geladen – Grenzübertritt/Anflug laut AIP planen.");

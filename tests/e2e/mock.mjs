@@ -18,6 +18,9 @@ const AIRPORTS = {
   ],
   HR: [
     { icaoCode: "LDSP", name: "Split", lat: 43.5389, lon: 16.2980, elev: 79, type: 3 }
+  ],
+  IT: [
+    { icaoCode: "LIPV", name: "Venezia Lido", lat: 45.4283, lon: 12.3878, elev: 13, type: 2 }
   ]
 };
 const FREQ = {
@@ -124,4 +127,16 @@ export function openmeteo(url, scenario) {
     return { latitude: lat, longitude: lon, elevation: elevM, hourly };
   });
   return out.length === 1 ? out[0] : out;
+}
+
+// Orte (OpenStreetMap/Overpass) - frei erfunden, nur fuer Tests
+export const PLACES = [
+  { name: "Teststadt Nord", lat: 47.95, lon: 13.80, place: "town", population: "12000" },
+  { name: "Talort", lat: 47.45, lon: 13.20, place: "town", population: "5000" },
+  { name: "Grenzort Test", lat: 46.57, lon: 13.10, place: "village", population: "6500" },
+  { name: "Weiler", lat: 46.60, lon: 13.25, place: "village", population: "1100" },
+  { name: "Suedstadt", lat: 46.00, lon: 12.80, place: "city", population: "80000" }
+];
+export function overpass() {
+  return { elements: PLACES.map((p, i) => ({ type: "node", id: i + 1, lat: p.lat, lon: p.lon, tags: { name: p.name, place: p.place, population: p.population } })) };
 }

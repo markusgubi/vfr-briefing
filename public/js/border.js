@@ -3,7 +3,8 @@
 /* Grenzen kommen aus den FIR-Luftraeumen von openAIP (Typ 10), Meldepunkte aus den openAIP
    reporting points. Es wird nichts erfunden: Fehlen Daten, bleibt die Route unveraendert und ein
    Hinweis sagt, was zu pruefen ist. */
-var BORDER_RP_NM = 12;   /* Meldepunkt fuer den Grenzuebertritt hoechstens so weit vom Schnittpunkt */
+var BORDER_RP_NM = 15;   /* Meldepunkt fuer den Grenzuebertritt hoechstens so weit vom Schnittpunkt */
+var BORDER_TOWN_NM = 6;  /* sonst markanter Ort (OpenStreetMap) hoechstens so weit vom Schnittpunkt */
 var DEST_RP_NM = 20;     /* Meldepunkt fuer den Zielplatz hoechstens so weit vom Platz */
 
 function firAt(G, p) {
@@ -31,6 +32,19 @@ function detectCrossings(R, G) {
     }
     prev = cur; prevI = i;
   }
+  /* Nachbarland ohne FIR in openAIP: Verlassen der letzten bekannten FIR Richtung auslaendischem Ziel zaehlt
+     als Grenzuebertritt (Schnittpunkt auf ~0,1 NM genau) */
+  var lastC = firCountry(prev);
+  if (!out.length && prev && G.B && G.B.country && lastC && G.B.country !== lastC && prevI < sm.length - 1) {
+    var a2 = sm[prevI], b2 = sm[prevI + 1], lo2 = 0, hi2 = 1;
+    for (var k2 = 0; k2 < 8; k2++) {
+      var m2 = (lo2 + hi2) / 2, f2 = firAt(G, { lat: a2.lat + (b2.lat - a2.lat) * m2, lon: a2.lon + (b2.lon - a2.lon) * m2 });
+      if (f2 && firCountry(f2) === lastC) lo2 = m2; else hi2 = m2;
+    }
+    var g2 = (lo2 + hi2) / 2;
+    out.push({ x: a2.x + (b2.x - a2.x) * g2, lat: a2.lat + (b2.lat - a2.lat) * g2, lon: a2.lon + (b2.lon - a2.lon) * g2, t: a2.t + (b2.t - a2.t) * g2,
+      from: prev, to: null, fromC: lastC, toC: G.B.country, noFir: true });
+  }
   return out;
 }
 /* Meldepunkte fuer die betroffenen Laender laden (Fehler = keine Meldepunkte, kein Abbruch) */
@@ -40,6 +54,16 @@ async function rpsFor(G, countries) {
     return loadCountry(c, "rp").then(function (l) { list = list.concat(l); }, function () { failed.push(c); });
   }));
   return { list: list, failed: failed };
+}
+/* Markanter Ort nahe am Grenzuebertritt: groesster/naechster Ort innerhalb BORDER_TOWN_NM (OpenStreetMap) */
+function borderTown(G, c) {
+  var best = null;
+  (G.PLACES || []).forEach(function (q) {
+    var d = distNm(q, c); if (d > BORDER_TOWN_NM) return;
+    var sc = d - 2 * Math.log10(Math.max(1000, q.pop));   /* 10x groesser = bis 2 NM weiter */
+    if (!best || sc < best.sc) best = { sc: sc, q: q };
+  });
+  return best ? best.q : null;
 }
 /* Vereinfacht ein Profil zu Wegpunkten (Douglas-Peucker, 1 NM Toleranz) */
 function simplifyPts(sm, tol) {
@@ -77,8 +101,14 @@ async function adjustRoutes(routes, G, P) {
       var cand = rp.list.filter(function (q) { return distNm(q, c) <= BORDER_RP_NM; })
         .sort(function (a, b) { return (b.compulsory - a.compulsory) || (distNm(a, c) - distNm(b, c)); });
       simp.forEach(function (q) { if (q.x > lastX + 0.5 && q.x < c.x - 3) pts.push({ lat: q.lat, lon: q.lon }); });
+      /* Reihenfolge: (1) VFR-Meldepunkt, (2) markanter Ort an der Grenze (z. B. Arnoldstein), (3) Grenzpunkt */
+      var town = cand.length ? null : borderTown(G, c);
       if (cand.length) pts.push(rpPoint(cand[0], { border: { from: c.fromC, to: c.toC } }));
-      else { pts.push({ lat: c.lat, lon: c.lon, name: "GRENZE " + c.fromC + "/" + c.toC, border: { from: c.fromC, to: c.toC } }); notes.push("norp"); }
+      else if (town) { pts.push({ lat: town.lat, lon: town.lon, name: town.name, town: town.name, border: { from: c.fromC, to: c.toC } }); notes.push("town:" + town.name); }
+      else {
+        var nt = nearestPlace(G.PLACES, c, 8);
+        pts.push({ lat: c.lat, lon: c.lon, name: "GRENZE " + c.fromC + "/" + c.toC + (nt ? " (" + nt.name + ")" : ""), border: { from: c.fromC, to: c.toC } }); notes.push("norp");
+      }
       lastX = c.x + 3;
     });
     /* Zielplatz im Ausland: Meldepunkt des Platzes (laut openAIP zugeordnet), sonst Pflichtmeldepunkt in der Naehe */
@@ -97,6 +127,9 @@ async function adjustRoutes(routes, G, P) {
     pts.push({ lat: G.B.lat, lon: G.B.lon, name: G.B.icao || "ZIEL" });
     var R2 = routeFromPoints(G, P, pts, null, R.id, R.name);
     R2.custom = false; R2.viaRp = true; R2.rpNotes = notes;
+    /* Bezeichnung: ueber Meldepunkte, sonst ueber den Grenzort */
+    var usedRp = pts.some(function (p) { return p.rp; }), tn = notes.filter(function (n) { return n.indexOf("town:") === 0; }).map(function (n) { return n.slice(5); });
+    R2.viaLabel = usedRp ? " über Meldepunkte" : tn.length ? " über " + tn.join(", ") : "";
     routes[k] = R2;
   }
   /* Varianten, die durch die Meldepunkte gleich geworden sind, nur einmal behalten (die besser bewertete) */
@@ -110,7 +143,7 @@ async function adjustRoutes(routes, G, P) {
   routes.sort(rankCmp);
   routes.forEach(function (R, i) {
     var base = i === 0 ? (R.id === "direct" ? "Sicherste Route (= Direktstrecke)" : "Sicherste Route") : R.id === "direct" ? "Direktstrecke" : "Alternative";
-    R.name = base + (R.viaRp ? " über Meldepunkte" : "");
+    R.name = base + (R.viaRp ? (R.viaLabel != null ? R.viaLabel : " über Meldepunkte") : "");
   });
   return routes;
 }

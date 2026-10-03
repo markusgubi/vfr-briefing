@@ -1,6 +1,6 @@
 // Gemeinsame Einrichtung fuer Browser-Tests mit simulierten Datenquellen.
 import { createRequire } from "node:module";
-import { openaip, openmeteo } from "./mock.mjs";
+import { openaip, openmeteo, overpass } from "./mock.mjs";
 
 const require = createRequire(import.meta.url);
 let pw;
@@ -18,6 +18,7 @@ export async function openApp({ mob = false, tablet = false, scenario = "gut", u
   await page.route("https://api.core.openaip.net/**", r => json(r, openaip(r.request().url())));
   await page.route("https://api.open-meteo.com/**", r => json(r, openmeteo(r.request().url(), scenario)));
   await page.route("**/awx?**", r => json(r, { metar: [], taf: [] }));
+  await page.route("https://overpass-api.de/**", r => json(r, overpass()));
   if (process.env.LEAFLET_DIR) await page.route("https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/**", r =>
     r.fulfill({ path: process.env.LEAFLET_DIR + "/" + r.request().url().split("/").pop().replace(".min", "") }));
   await page.route("https://*.tile.opentopomap.org/**", r => r.fulfill({ status: 404, body: "" }));
@@ -36,6 +37,7 @@ export async function planRoute(page, from, to, time = "10:00") {
   await page.evaluate(async ([f, t, tm]) => {
     await loadCountry("SI", "apt").catch(() => {});
     await loadCountry("HR", "apt").catch(() => {});
+    await loadCountry("IT", "apt").catch(() => {});
     const all = Object.values(APTDB).flat();
     S.from = all.find(a => a.icao === f); S.to = all.find(a => a.icao === t);
     showSel("fIn", S.from); showSel("tIn", S.to);

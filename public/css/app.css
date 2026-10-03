@@ -193,3 +193,7 @@ body.editmode .editctl a{background:#B02E7A!important;color:#fff!important}
 .retbox.warn{border-color:#C1810B;background:#FFF6E5}
 .retbox.bad{border-color:#C0392B;background:#FDEDEC}
 .retbox small{display:block;margin-top:4px;color:#61717F;font-size:11px}
+
+/* Orte entlang der Route (OpenStreetMap) */
+.town{white-space:nowrap;font-size:11.5px;font-weight:700;color:#0F1D2A;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff;pointer-events:none}
+.town i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#0F1D2A;border:1.5px solid #fff;margin-right:4px;vertical-align:0}
