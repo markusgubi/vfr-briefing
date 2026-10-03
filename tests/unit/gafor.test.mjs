@@ -52,6 +52,8 @@ test("Ist die GAFOR-Strecke weniger sicher, wird sie auch mit Haken nicht gewäh
   G.polyCache = {};
   app.RES = { G, P, apts: [] };
   const best = app.computeRoutes(G, P)[0];
-  assert.ok(app.gaforShare(best) < 0.2, "Anteil " + app.gaforShare(best).toFixed(2));
+  /* die Route bleibt im flachen Teil (Talflug neben dem Gebirge ist erlaubt, nie darueber) */
+  assert.ok(best.samples.every(q => q.tc < 2000), "ueber dem Gebirge: " + best.samples.filter(q => q.tc >= 2000).length);
+  assert.ok(best.maxAlt < 7000, "Hoehe " + best.maxAlt);
   assert.equal(best.cat, 0);
 });

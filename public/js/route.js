@@ -80,17 +80,19 @@ function buildGraph(A, B, d) {
 function edgeStatic(G, e, AIR) {
   var na = G.nodes[e.a], nb = G.nodes[e.b];
   e.len = distNm(na, nb); e.crs = courseDeg(na, nb);
-  var n = Math.max(4, Math.ceil(e.len / 0.25)), tmax = -1e9, tmaxC = -1e9, k, o;
+  var n = Math.max(4, Math.ceil(e.len / 0.25)), tmax = -1e9, tmaxC = -1e9, t05 = -1e9, k, o;
   for (k = 0; k <= n; k++) {
     var c = lerp(na, nb, k / n);
     for (o = -1; o <= 1.001; o += 0.5) {
       var p = Math.abs(o) < 1e-6 ? c : offsetPt(c, e.crs + 90, o), h = elevFt(p.lat, p.lon);
       if (h != null && h > tmax) tmax = h;
+      if (h != null && Math.abs(o) < 0.6 && h > t05) t05 = h;
       if (h != null && Math.abs(o) < 1e-6 && h > tmaxC) tmaxC = h;
     }
   }
   e.tmax = tmax > -1e8 ? tmax : 0;
   e.tmaxC = tmaxC > -1e8 ? tmaxC : e.tmax;
+  e.t05 = t05 > -1e8 ? t05 : e.tmax;   /* hoechstes Gelaende bis 0,5 NM seitlich (Talflanken) */
   e.gafor = !!GAFOR && nearGafor(lerp(na, nb, 0.5)) && nearGafor(na) && nearGafor(nb);
   var bb = [Math.min(na.lon, nb.lon) - 0.04, Math.min(na.lat, nb.lat) - 0.03, Math.max(na.lon, nb.lon) + 0.04, Math.max(na.lat, nb.lat) + 0.03];
   var cand = AIR.filter(function (as) { return bbOverlap(bb, as.bb); });
@@ -169,15 +171,22 @@ function nodeWx(G, ni, h) {
   G.nw[key] = w;
   return w;
 }
+/* Talflug: massgebliches Gelaende ist das guenstigere von (a) hoechstem Gelaende +-1 NM und (b) Talboden
+   (Mittellinie), wobei die Flanken bis 0,5 NM seitlich unter der Flughoehe (inkl. DEM-Puffer) bleiben muessen.
+   Gibt die "aequivalente" Gelaendehoehe zurueck: geforderte Hoehe = Ergebnis + Sollabstand + DEM-Puffer. */
+function effTerr(tm, tc, t05, P) {
+  var full = P.terrClr + DEM.buf;
+  return Math.min(tm, Math.max(tc, t05 + DEM.buf - full));
+}
 function edgeDyn(G, ei, depH, P) {
   var key = ei + "|" + depH.toFixed(3);
   if (G.dyn[key]) return G.dyn[key];
   var e = G.edges[ei], na = G.nodes[e.a], nb = G.nodes[e.b];
   var wa = nodeWx(G, e.a, depH + na.along / P.tas), wb = nodeWx(G, e.b, depH + nb.along / P.tas);
-  var floor = e.tmax + DEM.buf + P.terrClr;
+  var te = effTerr(e.tmax, e.tmaxC, e.t05, P), floor = te + DEM.buf + P.terrClr;
   var base = Math.min(wa ? wa.base : Infinity, wb ? wb.base : Infinity);
   var ceilWx = ceilFromBase(base, P), top = Math.min(ceilWx, P.maxAlt);
-  var r = { e: e, wa: wa, wb: wb, floor: floor, base: base, ceilWx: ceilWx, room: top - floor };
+  var r = { e: e, te: te, wa: wa, wb: wb, floor: floor, base: base, ceilWx: ceilWx, room: top - floor };
   r.terrainHigh = floor > P.maxAlt;
   r.wxFail = !r.terrainHigh && floor > top;
   var work = (r.terrainHigh || r.wxFail) ? [[floor, Math.max(floor, P.maxAlt)]] : [[floor, top]];
@@ -193,13 +202,13 @@ function edgeDyn(G, ei, depH, P) {
   r.nogo = !wa || !wb || wa.nogo || wb.nogo;
   /* Steigfaehigkeit: erreichbare Hoehe bei normalem Steigflug ab Platzhoehe (ohne Kreisen) */
   var ramp = rampNm(P), xb = nb.along, full = P.terrClr + DEM.buf;
-  var need = xb < ramp ? e.tmaxC + full * xb / ramp : e.tmax + full;
+  var need = xb < ramp ? e.tmaxC + full * xb / ramp : te + full;
   r.climbDef = Math.max(0, need - (G.depElev + climbGrad(P) * xb));
   r.noCirc = na.along < NO_CIRC_NM;
   /* Sinkfaehigkeit: Hoehe, die mit normalem Sinkflug bis zur Platzhoehe am Ziel noch erlaubt ist
      (kein Sinken im Vollkreis ueber dem Platz) */
   var rampA = rampArrNm(P), xa = Math.max(0, (G.poly ? G.polyLen : G.d) - na.along);
-  var needA = xa < rampA ? e.tmaxC + full * xa / rampA : e.tmax + full;
+  var needA = xa < rampA ? e.tmaxC + full * xa / rampA : te + full;
   r.descDef = Math.max(0, needA - (G.destElev + descGrad(P) * xa));
   r.descDefS = Math.max(0, needA - (G.destElev + STEEP_F * descGrad(P) * xa));
   G.dyn[key] = r;
@@ -304,7 +313,7 @@ function assignAlts(rs, P, userAlt) {
     var u = ua(rs[i]);
     if (u != null) {
       j = i + 1; while (j < rs.length && rs[j].e.leg === rs[i].e.leg) j++;
-      tmax = -1e9; for (k = i; k < j; k++) tmax = Math.max(tmax, rs[k].e.tmax);
+      tmax = -1e9; for (k = i; k < j; k++) tmax = Math.max(tmax, rs[k].te);
       var sm = u - tmax > 3000 ? (semiOk(u, rs[i].mc) ? "ok" : "no") : null;
       for (k = i; k < j; k++) { rs[k].alt = u; rs[k].user = true; rs[k].semi = sm; rs[k].iv = [-Infinity, Infinity]; }
       i = j; continue;
@@ -313,7 +322,7 @@ function assignAlts(rs, P, userAlt) {
     j = i + 1;
     while (j < rs.length && ua(rs[j]) == null && (rs[j].mc < 180) === hemi) { var x = intersect(cur, rs[j].set); if (!x.length) break; cur = x; j++; }
     tmax = -1e9;
-    for (k = i; k < j; k++) tmax = Math.max(tmax, rs[k].e.tmax);
+    for (k = i; k < j; k++) tmax = Math.max(tmax, rs[k].te);
     var pk = pickAlt(cur, tmax, P, rs[i].mc);
     /* Hoehenband je Abschnitt aus dessen EIGENEN Grenzen (nicht die der ganzen Gruppe),
        sonst wird z. B. die Gelaendeuntergrenze vom Gebirge bis ins Flachland mitgeschleppt */
@@ -357,8 +366,11 @@ function evalRoute(G, P, depH, path, id, name, opt) {
     for (var kk = (ri === 0 ? 0 : 1); kk <= n; kk++) {
       var f = kk / n, c = lerp(na, nb, f), xx = r.x0 + f * r.e.len;
       var tc = elevFt(c.lat, c.lon), nod = tc == null; if (nod) tc = 0;
-      var tm = tc;
-      [-1, -0.5, 0.5, 1].forEach(function (o) { var q = offsetPt(c, r.e.crs + 90, o), hh = elevFt(q.lat, q.lon); if (hh == null) nod = true; else if (hh > tm) tm = hh; });
+      var tm = tc, t05 = tc;
+      [-1, -0.5, 0.5, 1].forEach(function (o) {
+        var q = offsetPt(c, r.e.crs + 90, o), hh = elevFt(q.lat, q.lon);
+        if (hh == null) nod = true; else { if (hh > tm) tm = hh; if (Math.abs(o) < 0.6 && hh > t05) t05 = hh; }
+      });
       var bA = r.wa ? r.wa.base : Infinity, bB = r.wb ? r.wb.base : Infinity;
       var base = (isFinite(bA) && isFinite(bB)) ? bA + (bB - bA) * f : Math.min(bA, bB);
       var fA = r.wa ? r.wa.fz : null, fB = r.wb ? r.wb.fz : null;
@@ -370,9 +382,13 @@ function evalRoute(G, P, depH, path, id, name, opt) {
       /* am Platz selbst zaehlt die Platzhoehe (DEM-Kachel kann neben der Piste hoeher liegen) */
       if (xx < 1) tc = Math.min(tc, Math.max(depElev, tc - DEM.buf));
       if (D - xx < 1) tc = Math.min(tc, Math.max(destElev, tc - DEM.buf));
-      var ter = near ? tc : tm;
-      var req = near ? tc + full * fr : tm + full;
-      var hard = Math.min(req, near ? tc + (DEM.buf + 500) * fr : tm + DEM.buf + 500);
+      /* Talflug: Sollabstand ueber dem Talboden, Flanken bis 0,5 NM unter der Flughoehe - wenn das guenstiger ist
+         als der volle Abstand ueber dem hoechsten Gelaende +-1 NM (effTerr). Konfliktgrenze: 500 ft ueber dem
+         Talboden bzw. ueber dem hoechsten Gelaende +-1 NM. */
+      var te = effTerr(tm, tc, t05, P);
+      var ter = near ? tc : te;
+      var req = near ? tc + full * fr : te + full;
+      var hard = Math.min(req, near ? tc + (DEM.buf + 500) * fr : Math.min(tm + DEM.buf + 500, Math.max(tc + DEM.buf + 500, t05 + DEM.buf)));
       var hi = Math.min(r.iv[1], P.maxAlt);
       if (r.wxFail) hi = Math.min(hi, Math.max(r.ceilWx, r.floor));
       /* Geplant wird mit 300 ft Reserve ueber dem Mindestabstand, soweit Wolken/Luftraum Platz lassen */
@@ -383,7 +399,7 @@ function evalRoute(G, P, depH, path, id, name, opt) {
          Sinkflugbeginn gehalten). Kein Sinken im Vollkreis ueber dem Platz. */
       var cap = destElev + gD * (D - xx), capS = destElev + gS * (D - xx);
       var T = r.user || xx < lastUserX ? r.alt : Math.min(r.alt, cap);
-      sm.push({ x: xx, ri: ri, f: f, lat: c.lat, lon: c.lon, tc: tc, tm: tm, ter: ter, base: base, fz: fz, dF: dF, fr: fr, cap: cap, capS: capS,
+      sm.push({ x: xx, ri: ri, f: f, lat: c.lat, lon: c.lon, tc: tc, tm: tm, t05: t05, te: te, ter: ter, base: base, fz: fz, dF: dF, fr: fr, cap: cap, capS: capS,
         req: req, hard: hard, lo: lo, hi: hi, T: T, user: r.user, nod: nod });
     }
   });
@@ -498,7 +514,7 @@ function evalRoute(G, P, depH, path, id, name, opt) {
       else { curT = { x0: s.x, x1: s.x, clr: clr, climb: atMax[i] || (p[i] > p[i - 1] + 1), desc: s.p >= s.capS - 1 && p[i] < p[i - 1] - 1 }; tight.push(curT); }
       r.soft = true;
     } else curT = null;
-    if (s.fr >= 1) { if (s.p - s.tm < minTerr) { minTerr = s.p - s.tm; minTerrX = s.x; } r.minTerr = Math.min(r.minTerr, s.p - s.tm); }
+    if (s.fr >= 1) { if (s.p - s.te < minTerr) { minTerr = s.p - s.te; minTerrX = s.x; } r.minTerr = Math.min(r.minTerr, s.p - s.te); }
     if (isFinite(s.base)) { minCloud = Math.min(minCloud, s.base - s.p); r.minCloud = Math.min(r.minCloud, s.base - s.p); }
   }
   var cat = 0, maxRisk = 0, rsum = 0, worstReason = null;
@@ -552,6 +568,10 @@ function evalRoute(G, P, depH, path, id, name, opt) {
   if (minTerr < 1500) score -= Math.min(15, Math.max(0, (1500 - minTerr) / 1500 * 15));
   tight.forEach(function (t) { score -= Math.min(15, 3 + Math.max(0, P.terrClr - t.clr) / 100); });
   score -= Math.min(20, circMin * 2);
+  /* Anteil ueber hohem Gelaende (mehr als 3000 ft ueber dem tieferen Platz): weniger Notlandemoeglichkeiten */
+  var hiTer = Math.min(depElev, destElev) + 3000, expo = 0;
+  for (i = 1; i < n; i++) if (sm[i].te > hiTer) expo += sm[i].dx;
+  score -= D ? 8 * expo / D : 0;
   var rawScore = score, confLen = conflicts.reduce(function (s, c) { return s + c.x1 - c.x0 + 0.5; }, 0);
   if (cat === 2) score = Math.min(score, 30); else if (cat === 1) score = Math.min(score, 70);
   return { rawScore: rawScore, confLen: Math.round(confLen * 2) / 2, circles: circles, tight: tight, id: id, name: name, rs: rs, path: path, key: path.join(","),

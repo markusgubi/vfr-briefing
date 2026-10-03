@@ -51,6 +51,13 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
   Start immer in Platzhöhe; im Abflugbereich (8 NM) nie Kreisen. Im Abflug-/Anflugbereich steigt der geforderte
   Geländeabstand von der Platzhöhe aus an. Konflikt (KRITISCH) unter 500 ft Abstand, knapp (EINGESCHR.) unter
   dem eingestellten Abstand. Geplant wird mit 300 ft Reserve. Jeder Abschnitt hat sein eigenes Höhenband.
+- Talflug (seit 9.2, mit dem Nutzer abgestimmt): massgebliches Gelände je Stelle = das günstigere von (a) höchstem
+  Gelände ±1 NM und (b) Talboden (Mittellinie), wobei die Flanken bis ±0,5 NM unter der Flughöhe (inkl. DEM-Puffer)
+  bleiben müssen (effTerr, auch im Suchnetz: edgeStatic e.t05, edgeDyn r.te). Sollabstand gilt über dem Talboden;
+  Konflikt unter 500 ft über dem Talboden. Talflug ohne Wetterproblem ist NICHT eingeschränkt (Nutzer). Wolken
+  unter der nötigen Talflughöhe → KRITISCH. Kein Kreisen im Abflugbereich (Nutzer: nicht normal; man steigt im Tal
+  heraus). Sicherheitswert: −8 × Anteil der Strecke über hohem Gelände (> 3000 ft über dem tieferen Platz).
+  Tests: tests/unit/talflug.test.mjs.
 - Einheitliche Bewertung (seit 8.1): Das Suchnetz dient nur zum Finden der Wege. JEDE Route (berechnet,
   Direktstrecke, Optimierer, Meldepunkte, Bearbeiten) wird über dieselbe Polylinie bewertet (evalPath →
   polyGraph, Wetter höchstens alle 5 NM). Dieselbe Strecke ergibt so immer dieselbe Einstufung; vorher konnten
@@ -161,7 +168,7 @@ Offen:
   `node tests/e2e/run.mjs LOLW LOWZ gut`, `node tests/e2e/edit.mjs` und `node tests/e2e/lang.mjs` (> 250 NM). Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.1, nächste 9.2).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.2, nächste 9.3).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.
