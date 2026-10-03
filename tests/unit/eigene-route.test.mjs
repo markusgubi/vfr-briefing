@@ -99,3 +99,16 @@ test("Vor dem Ziel zieht der Anflugweg eine eigene Höhe nie unter das Gelände.
   const berg = R.samples.filter(q => q.x > 44 && q.x < 47);
   assert.ok(berg.every(q => q.p >= q.hard - 1), berg.map(q => Math.round(q.p) + "/" + Math.round(q.hard)).join(" "));
 });
+
+test("Eine zu tiefe eigene Höhe vor einem Berg wird nicht geflogen und mit Grund erklärt.", () => {
+  const app = loadApp();
+  const { G, P, A, B } = setup(app, x => (x > 26 && x < 29 ? 6000 : 1000));
+  const M1 = { lat: 47.0, lon: 13.45, name: "M1" }, M2 = { lat: 47.0, lon: 13.6, name: "M2" };
+  const R = app.routeFromPoints(G, P, [A, M1, M2, B], { 1: 2500 });
+  app.RES = { G, P, apts: [] };
+  app.finalize(R, G, P);
+  const leg1 = R.samples.filter(q => R.rs[q.ri].e.leg === 1);
+  assert.ok(leg1.every(q => q.p > 2501), "kurz vor dem Berg wird nicht auf 2500 ft gesunken: " + leg1.map(q => Math.round(q.p)).join(","));
+  assert.ok(R.hints.some(h => /2500 ft<\/b> \(Teilstrecke 2\) wird nicht erreicht: Mit 500 ft\/min Sinken/.test(h.t)), R.hints.map(h => h.t).join("\n"));
+  assert.ok(!R.conflicts.length, JSON.stringify(R.conflicts));
+});

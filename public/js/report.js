@@ -57,7 +57,12 @@ function finalize(R, G, P) {
     var x0 = rs[0].x0, x1 = rs[rs.length - 1].x1, n = +l + 1;
     if (a > P.maxAlt) add("warn", "<b>Eigene H\u00f6he " + a + " ft</b> (Teilstrecke " + n + ") liegt \u00fcber der eingestellten Max. H\u00f6he von " + P.maxAlt + " ft.", x0, x1);
     var hit = R.samples.filter(function (q) { return q.x >= x0 - 1e-6 && q.x <= x1 + 1e-6 && Math.abs(q.p - a) <= 1; })[0];
-    if (!hit) add("warn", "<b>Eigene H\u00f6he " + a + " ft</b> (Teilstrecke " + n + ") wird mit " + P.climb + " ft/min nicht erreicht \u2013 Teilstrecke zu kurz oder H\u00f6he zu hoch.", x0, x1);
+    var inLeg = R.samples.filter(function (q) { return q.x >= x0 - 1e-6 && q.x <= x1 + 1e-6; });
+    var above = inLeg.length && inLeg.every(function (q) { return q.p > a + 1; });
+    if (!hit && above) add("warn", "<b>Eigene H\u00f6he " + a + " ft</b> (Teilstrecke " + n + ") wird nicht erreicht: Mit " + P.desc + " ft/min Sinken und " + P.climb +
+      " ft/min Steigen geht das hier nicht \u2013 f\u00fcr das Gel\u00e4nde bzw. die H\u00f6he danach muss rechtzeitig wieder gestiegen werden. Geflogen wird mindestens ~" +
+      fmtFt(Math.min.apply(null, inLeg.map(function (q) { return q.p; }))) + " ft.", x0, x1);
+    else if (!hit) add("warn", "<b>Eigene H\u00f6he " + a + " ft</b> (Teilstrecke " + n + ") wird mit " + P.climb + " ft/min nicht erreicht \u2013 Teilstrecke zu kurz oder H\u00f6he zu hoch.", x0, x1);
     else if (hit.x > x0 + 1) add("info", "Eigene H\u00f6he " + a + " ft (Teilstrecke " + n + ") wird erst bei NM " + Math.round(hit.x) + " erreicht (Steigrate " + P.climb + " ft/min).", x0, hit.x);
   });
   (R.tight || []).forEach(function (t) {

@@ -1001,6 +1001,8 @@ function editSvg(R, X, Y, f2, lbl, reserve) {
     l.x1 = r.x1;
   });
   R.legX = Object.keys(legs).map(function (k) { return legs[k]; });
+  /* wird die Hoehe der Teilstrecke irgendwo tatsaechlich geflogen? (sonst Griff gestrichelt + Hinweis) */
+  R.samples.forEach(function (q) { var l = legs[R.rs[q.ri].e.leg]; if (l && Math.abs(q.p - l.alt) <= 1) l.reach = true; });
   /* zuerst alle Griffe reservieren, damit keine Beschriftung darauf landet */
   R.legX.forEach(function (l) {
     var x0 = X(l.x0) + 3, x1 = X(l.x1) - 3, y = Y(l.alt), xm = (x0 + x1) / 2;
@@ -1009,7 +1011,9 @@ function editSvg(R, X, Y, f2, lbl, reserve) {
   R.legX.forEach(function (l) {
     var x0 = X(l.x0) + 3, x1 = X(l.x1) - 3, y = Y(l.alt), xm = (x0 + x1) / 2;
     if (x1 - x0 < 6) return;
-    out += "<line x1='" + x0 + "' x2='" + x1 + "' y1='" + y + "' y2='" + y + "' stroke='#B02E7A' stroke-width='9' stroke-opacity='0.18' stroke-linecap='round'/>" +
+    var miss = l.user && !l.reach && !(EDIT.drag && EDIT.drag.leg === l.leg);
+    out += "<line x1='" + x0 + "' x2='" + x1 + "' y1='" + y + "' y2='" + y + "' stroke='" + (miss ? "#C0392B" : "#B02E7A") + "' stroke-width='" + (miss ? 3 : 9) + "'" +
+      (miss ? " stroke-dasharray='6 5' stroke-opacity='0.7'" : " stroke-opacity='0.18'") + " stroke-linecap='round'/>" +
       "<circle cx='" + xm.toFixed(1) + "' cy='" + y + "' r='8' fill='#fff' stroke='#B02E7A' stroke-width='2.5' style='cursor:ns-resize'/>" +
       "<path d='M " + (xm - 3).toFixed(1) + " " + (y - 2) + " l 3 -3 l 3 3 M " + (xm - 3).toFixed(1) + " " + (y + 2) + " l 3 3 l 3 -3' stroke='#B02E7A' stroke-width='1.5' fill='none'/>";
     if (EDIT.drag && EDIT.drag.leg === l.leg && EDIT.drag.minA) {   /* waehrend des Ziehens: Mindesthoehe zeigen */
@@ -1018,7 +1022,8 @@ function editSvg(R, X, Y, f2, lbl, reserve) {
       txt += lbl(x0 + 2, ym + f2 + 3, "min. " + EDIT.drag.minA + " ft", f2, "#C0392B", "start", true, [0, f2 * 1.2, -f2 * 1.6]);
     }
     var right = xm > RES.pv.W - 140;
-    txt += lbl(xm + (right ? -12 : 12), y - 6, l.alt + " ft" + (l.user ? " \u270e" : " auto"), f2, "#B02E7A", right ? "end" : "start", true, [0, -f2 * 1.2, f2 * 2.2, -f2 * 2.4]);
+    txt += lbl(xm + (right ? -12 : 12), y - 6, l.alt + " ft" + (l.user ? " \u270e" : " auto") + (miss ? " nicht erreichbar" : ""), f2, miss ? "#C0392B" : "#B02E7A",
+      right ? "end" : "start", true, [0, -f2 * 1.2, f2 * 2.2, -f2 * 2.4]);
   });
   return { g: out, t: txt };
 }

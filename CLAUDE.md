@@ -72,7 +72,9 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
   Höhen-Ziehen: startet nach 2 Einheiten senkrecht, Höhe folgt direkt dem Finger; Doppeltipp (nur Tipps ohne
   Ziehen) = automatisch. Im Profil eingefügte Punkte (pt.fromProf) sind magenta hervorgehoben; Tipp auf ihr ✕ bzw.
   ihre Linie = Einfügen rückgängig (seit 8.8). Bearbeiten-Modus deutlich markiert (body.editmode: Rahmen um
-  Karte/Profil, Leiste mit "✓ Fertig", Stift aktiv). Nie ins Gelände: Ziehen stoppt an der Mindesthöhe der Teilstrecke (legMinAlt = höchste
+  Karte/Profil, Leiste mit "✓ Fertig", Stift aktiv). Eigene Höhen, die nirgends in ihrer Teilstrecke geflogen werden
+  (z. B. zu tief vor einem Berg, weil vorher gestiegen werden muss), zeigt das Profil rot gestrichelt mit
+  "nicht erreichbar"; der Hinweis nennt den Grund (seit 8.9). Nie ins Gelände: Ziehen stoppt an der Mindesthöhe der Teilstrecke (legMinAlt = höchste
   harte Grenze der Stichproben, rote Linie "min." beim Ziehen). Während des Ziehens wird die Profil-Legende nicht
   neu gezeichnet (sonst verschiebt sich das Profil unter dem Finger). Belastungstest: `node tests/e2e/hoehe.mjs`.
 - Wetterbild (seit 8.6, nur Anzeige, NIE in der Bewertung): Radar RainViewer (weather-maps.json, letztes Bild,
@@ -139,7 +141,7 @@ Offen:
   `node tests/e2e/run.mjs LOLW LOWZ gut`, `node tests/e2e/edit.mjs` und `node tests/e2e/lang.mjs` (> 250 NM). Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 8.8, nächste 8.9).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 8.9, nächste 9.0).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.
