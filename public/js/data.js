@@ -9,6 +9,10 @@ var KIND = {
   tra: { c: "#E67E22", t: "TRA/TSA (zeitweise aktiv)" }, clearance: { c: "#1F5FA8", t: "freigabepflichtig" }, tmz: { c: "#8E44AD", t: "TMZ" }, rmz: { c: "#8E44AD", t: "RMZ" },
   info: { c: "#7F8C8D", t: "Info" }
 };
+/* Natur-/Nationalparks und Tiefflugbeschraenkungen: nur fuer die Kartendarstellung (eigene Farbe), die Bewertung
+   bleibt unveraendert (Hinweis "Auflagen/Mindesthoehen laut AIP"). */
+var NATURE_C = "#2E8B3E";
+function isNature(a) { return a.type === 19 || a.type === 29 || /NATIONALPARK|NATURSCHUTZ|NATURPARK|SCHUTZGEBIET|NATURE RESERVE|NATIONAL PARK|PARCO/i.test(a.name || ""); }
 function classify(a) {
   var t = a.type, c = a.icaoClass;
   if (t === 10) return "fir";   /* FIR = Landesgrenze fuer Grenzuebertritte, nicht gezeichnet */

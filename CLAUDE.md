@@ -184,6 +184,11 @@ Offen:
   (Maus 18 px / Finger 28 px, max. 3 NM), Ring mit Namen während des Ziehens (showSnap).
 - Kartenausschnitt im Profil (seit 9.5, drawViewBand): beim Hineinzoomen wird der in der Karte sichtbare Teil der
   Route (ohne Fläche unter dem Profilfenster) im Profil blau hinterlegt (#pview).
+- Luftraum-Karte (seit 9.9): Natur-/Nationalparks und Tiefflugbeschränkungen (Typ 19/29 oder Name mit
+  NATIONALPARK/NATURSCHUTZ …, isNature) grün und gut sichtbar gezeichnet – nur Darstellung, kind bleibt "info",
+  Bewertung unverändert. Klick in die Karte: alle Lufträume am Punkt; Antippen eines Eintrags hebt dessen Umriss
+  hervor (asSelLayer, erneut antippen = aus, Fenster zu = aus), ragt er aus dem Bild, Knopf "ganzen Umriss zeigen"
+  im Fensterfuß (nicht in der Zeile, sonst trifft ein zweiter Tipp ihn). Test: `node tests/e2e/luftraum.mjs`.
 - Knopf "tauschen" (seit 9.6, swapFromTo): Von/Nach mit einem Klick tauschen, wird gespeichert; Test tests/e2e/tauschen.mjs.
 - orte.json: englische Exonyme durch Landesnamen ersetzt (Wien, München, Venezia …), Stadtteile ≤ 5,5 km um
   Großstädte entfernt. GAFOR-Linien seit 9.5 dicker (6 px, weißer Unterstrich).
@@ -202,10 +207,10 @@ Offen:
   Rechenlogik mit künstlichem Gelände, ohne Netz). Lokal mit `npm run dev` testen.
 - Browser-Tests mit simulierten Datenquellen (tests/e2e, brauchen Playwright und laufendes `npm run dev`):
   `node tests/e2e/run.mjs LOLW LOWZ gut`, `node tests/e2e/edit.mjs`, `node tests/e2e/lang.mjs` (> 250 NM),
-  `node tests/e2e/grenze.mjs` (AT→IT ohne Meldepunkt/FIR), `rueckflug.mjs`, `hoehe.mjs`, `gafor.mjs`, `wetterbild.mjs`, `tauschen.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
+  `node tests/e2e/grenze.mjs` (AT→IT ohne Meldepunkt/FIR), `rueckflug.mjs`, `hoehe.mjs`, `gafor.mjs`, `wetterbild.mjs`, `tauschen.mjs`, `luftraum.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.8, nächste 9.9).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.9, nächste 9.10).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.

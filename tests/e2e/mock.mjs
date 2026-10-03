@@ -54,6 +54,7 @@ const AIRSPACES = {
     asp("TMA LOWL 2", 7, 3, ft(5500), ft(9500), box(13.2, 47.9, 14.0, 48.4)),
     asp("SALZBURG CTR", 4, 3, gnd, ft(4500), circle(13.0043, 47.7933, 7)),
     asp("LO R 16 TEST", 1, 8, gnd, ft(7000), circle(13.55, 47.75, 4)),
+    asp("NATIONALPARK TEST S1", 29, 8, gnd, ft(5000, 0), box(13.3, 47.95, 13.6, 48.15)),
     asp("LOVV FIR", 10, 8, gnd, { value: 660, unit: 6, referenceDatum: 2 }, box(9.5, 46.55, 17.2, 49.1))
   ],
   SI: [

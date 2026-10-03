@@ -117,11 +117,11 @@ function drawAir() {
   var lim = +$("asFilter").value;
   VIEW_AIR.forEach(function (a) {
     if (lim && a.loFt > lim) return;
-    var col = KIND[a.kind].c;
+    var nat = a.kind === "info" && isNature(a), col = nat ? NATURE_C : KIND[a.kind].c;
     L.geoJSON({ type: "Feature", geometry: a.geometry, properties: {} }, {
       renderer: cvs, interactive: false,
-      style: { color: col, weight: a.temp ? 1.8 : 1.2, fillColor: col, fillOpacity: a.kind === "info" ? 0.03 : 0.07,
-        dashArray: a.temp ? "3 5" : ((a.kind === "tmz" || a.kind === "rmz") ? "8 4" : null) }
+      style: { color: col, weight: nat ? 2 : a.temp ? 1.8 : 1.2, fillColor: col, fillOpacity: nat ? 0.12 : a.kind === "info" ? 0.03 : 0.07,
+        dashArray: a.temp ? "3 5" : ((a.kind === "tmz" || a.kind === "rmz") ? "8 4" : nat ? "10 3 2 3" : null) }
     }).addTo(airLayer);
   });
 }
@@ -132,20 +132,49 @@ map.on("click", function (ev) {
   if (Date.now() < MAP_CLICK_OFF) return;
   var lat = ev.latlng.lat, lon = ev.latlng.lng;
   var hits = VIEW_AIR.filter(function (a) { return lon >= a.bb[0] && lon <= a.bb[2] && lat >= a.bb[1] && lat <= a.bb[3] && inGeom(a.geometry, lon, lat); });
-  if (!hits.length) return;
+  if (!hits.length) { showAsOutline(null); return; }
   hits.sort(function (x, y) { return x.loFt - y.loFt; });
   var lim = +$("asFilter").value, hidden = lim ? hits.filter(function (a) { return a.loFt > lim; }).length : 0;
-  var h = "<div class='pop'><b class='h'>" + hits.length + " Luftr\u00e4um" + (hits.length > 1 ? "e" : "") + " an diesem Punkt</b>";
-  hits.forEach(function (a) {
-    var at = actTxt(a);
-    h += "<div class='asr'><i style='background:" + KIND[a.kind].c + "'></i><b>" + esc(a.name) + "</b><br><small>" +
+  CLICK_HITS = hits;
+  var h = "<div class='pop'><b class='h'>" + hits.length + " Luftr\u00e4um" + (hits.length > 1 ? "e" : "") + " an diesem Punkt</b>" +
+    "<div class='note' style='margin:2px 0 3px'>Antippen = Umriss auf der Karte zeigen</div>";
+  hits.forEach(function (a, i) {
+    var at = actTxt(a), col = a.kind === "info" && isNature(a) ? NATURE_C : KIND[a.kind].c;
+    h += "<div class='asr asel' data-asi='" + i + "'><i style='background:" + col + "'></i><b>" + esc(a.name) + "</b><br><small>" +
       (TYPE_TXT[a.type] || "?") + " (Nr. " + a.type + ") \u00b7 " + clsTxt(a) + " \u00b7 " + fmtLimit(a.lower) + " \u2013 " + fmtLimit(a.upper) +
       (at ? " \u00b7 <b style='color:#C1810B'>" + at + "</b>" : "") + "</small></div>";
   });
   if (hidden) h += "<div class='note' style='margin-top:4px'>" + hidden + " davon wegen H\u00f6henfilter nicht gezeichnet.</div>";
-  h += "</div>";
-  L.popup({ maxWidth: 400 }).setLatLng(ev.latlng).setContent(h).openOn(map);
+  h += "<div class='asfoot'></div></div>";
+  var pop = L.popup({ maxWidth: Math.min(400, map.getSize().x - 60), autoPanPadding: [12, 12] }).setLatLng(ev.latlng).setContent(h).openOn(map);
+  pop.on("remove", function () { if (!AS_KEEP) showAsOutline(null); });
+  /* Klicks im Fenster erreichen das Dokument nicht (Leaflet stoppt sie) - daher direkt am Fenster */
+  pop.getElement().addEventListener("click", function (e) {
+    var r = e.target.closest(".asel"); if (!r) return;
+    var i = +r.getAttribute("data-asi"); showAsOutline(asSelIdx === i ? null : i);
+  });
+  if (hits.length === 1) showAsOutline(0);   /* nur einer: gleich zeigen */
 });
+/* Umriss eines Luftraums aus dem Klick-Fenster hervorheben (weisser Rand + kraeftige Linie) */
+var AS_KEEP = false, CLICK_HITS = [], asSelLayer = L.layerGroup().addTo(map), asSelIdx = null;
+function showAsOutline(i) {
+  asSelLayer.clearLayers(); asSelIdx = i;
+  var ft0 = document.querySelector(".leaflet-popup .asfoot"); if (ft0) ft0.innerHTML = "";
+  document.querySelectorAll(".asel").forEach(function (e) { e.classList.toggle("on", i != null && +e.getAttribute("data-asi") === i); });
+  if (i == null || !CLICK_HITS[i]) return;
+  var a = CLICK_HITS[i], col = a.kind === "info" && isNature(a) ? NATURE_C : KIND[a.kind].c, gj = { type: "Feature", geometry: a.geometry, properties: {} };
+  L.geoJSON(gj, { interactive: false, style: { color: "#fff", weight: 7, opacity: 0.9, fill: false } }).addTo(asSelLayer);
+  L.geoJSON(gj, { interactive: false, style: { color: col, weight: 3.5, opacity: 1, fillColor: col, fillOpacity: 0.18 } }).addTo(asSelLayer);
+  /* ragt der Umriss aus dem Bild: Knopf im Fensterfuss (nicht in der Zeile - sonst trifft ein zweiter Tipp ihn) */
+  var b = L.geoJSON(gj).getBounds(), ft = document.querySelector(".leaflet-popup .asfoot");
+  if (ft && !map.getBounds().contains(b)) {
+    ft.innerHTML = "<a href='#' class='asfit'>\u2922 ganzen Umriss von " + esc(a.name) + " zeigen</a>";
+    ft.firstChild.addEventListener("click", function (e) {   /* Fenster zu, Umriss bleibt (naechster Klick in die Karte loescht ihn) */
+      e.preventDefault(); e.stopPropagation(); AS_KEEP = true; map.closePopup(); AS_KEEP = false; map.fitBounds(b, { padding: [30, 30] });
+    });
+  }
+}
+
 
 /* GAFOR-Strecken laden: nur verwenden, wenn die Datei als geprueft markiert ist und Strecken enthaelt */
 var gaforLayer = L.layerGroup();

@@ -203,3 +203,9 @@ body.editmode .editctl a{background:#B02E7A!important;color:#fff!important}
 .swapBtn{margin:6px 0 3px;padding:4px 10px;min-height:30px;border:1px solid #C9D3DC;border-radius:15px;background:#fff;color:#1F5FA8;font-size:12.5px;font-weight:600;cursor:pointer;line-height:1}
 .swapBtn:hover{background:#EEF4FB}
 .swapBtn:active{background:#DCE8F6}
+
+/* Luftraum im Klick-Fenster antippen = Umriss zeigen */
+.asel{cursor:pointer;border-radius:4px;padding:5px 4px;margin:0 -4px}
+.asel:hover{background:#F2F6FA}
+.asel.on{background:#E6EFF9;box-shadow:inset 3px 0 0 #1F5FA8}
+.asfoot .asfit{display:block;margin-top:6px;padding:6px 0 2px;border-top:1px solid #EEF2F5;font-size:12.5px;color:#1F5FA8}
