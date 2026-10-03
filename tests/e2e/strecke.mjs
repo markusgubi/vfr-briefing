@@ -62,6 +62,19 @@ for (const mob of [false, true]) {
   ok(/Hinweise zu diesem Abschnitt|Keine besonderen Hinweise/.test(pop), `${tag} Klick auf Strecke zeigt Abschnitt-Hinweise: ${pop.slice(0, 120)}`);
   ok(!R.hint || pop.includes(R.hint.slice(0, 20)), `${tag} enthaelt den Hinweis an dieser Stelle (${R.hint})`);
   await page.screenshot({ path: `${OUT}/strecke-${tag}.png` });
+  // Tipp knapp neben die Strecke in einem Luftraum (TMA LOWL bei NM 8): trotzdem der Streckenabschnitt, nicht der Luftraum
+  const off = mob ? 18 : 9;
+  const nb = await page.evaluate(([off]) => { map.closePopup(); const R = RES.routes[RES.sel], q = sampleAt(R, 8), q2 = sampleAt(R, 9);
+    map.setView([q.lat, q.lon], 10, { animate: false });
+    const a = map.latLngToContainerPoint([q.lat, q.lon]), b = map.latLngToContainerPoint([q2.lat, q2.lon]), dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1;
+    const r = $("map").getBoundingClientRect(); return { x: r.x + a.x - dy / l * off, y: r.y + a.y + dx / l * off,
+      air: VIEW_AIR.some(A => inGeom(A.geometry, q.lon, q.lat)) }; }, [off]);
+  await page.waitForTimeout(400);
+  if (mob) await page.touchscreen.tap(nb.x, nb.y); else await page.mouse.click(nb.x, nb.y);
+  await page.waitForTimeout(500);
+  const pop2 = await page.evaluate(() => ({ seg: !!document.querySelector(".leaflet-popup .seghints"), air: !!document.querySelector(".leaflet-popup .asel") }));
+  ok(pop2.seg && !pop2.air, `${tag} Tipp ${off} px neben die Strecke (Luftraum darunter: ${nb.air}) zeigt den Abschnitt: ${JSON.stringify(pop2)}`);
+  await page.evaluate(() => map.closePopup());
   // Bearbeiten: bei Platzmangel Nummer statt Name, beim Hineinzoomen der Name
   if (mob) { await page.click("#mnav button[data-p='main']"); await page.waitForTimeout(300); }
   await page.evaluate(() => { map.closePopup(); startEdit(); EDIT.pts.forEach((p, i) => { if (i > 0 && i < EDIT.pts.length - 1 && !p.shape && !p.name) p.name = "Langer Ortsname " + i; }); drawEditMarkers(RES.routes[RES.sel]); });

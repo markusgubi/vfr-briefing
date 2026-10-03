@@ -103,7 +103,12 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
   Wetterraster bis 20 Schritte, /awx bis 12° × 16°. Luftraum gilt nur in den Länderrechtecken (CTRY) geladener
   Länder als abgedeckt (coverBoxes); außerhalb ist die Route KRITISCH.
 - Keine "Achterbahn" (seit 8.3): Senken im automatischen Profil (sinken und innerhalb 15 NM wieder steigen)
-  werden aufgefüllt, soweit Wolken/Luftraum es erlauben. Eigene Höhen bleiben unverändert; ist eine eigene
+  werden aufgefüllt, soweit Wolken/Luftraum es erlauben. Seit 9.17 (Nutzer: "Höhen eher konstant"): kurze Abschnitte
+  ≤ SHORT_NM (5 NM, z. B. Haken in Gegenrichtung) behalten in assignAlts die Höhe davor, wenn ihr Band es erlaubt
+  (semi "short" – Halbkreisregel gilt für den Reiseflug, nicht für kurze Haken); kurze Buckel (≤ 1000 ft, ≤ 15 NM)
+  werden geglättet und nach einem erzwungenen kurzen Tal wird die tiefere Höhe gehalten – beides nie unter Lr
+  (Gelände + Reserve) und nie gegen eine vorgeschriebene Halbkreisflughöhe (semi "ok") auf längeren Abschnitten.
+  Test: tests/unit/konstant.test.mjs. Eigene Höhen bleiben unverändert; ist eine eigene
   Höhe über der Max. Höhe oder mit der Steigrate (rechtzeitig) nicht erreichbar, steht ein Hinweis dabei.
 - Bearbeiten macht nur markante Punkte ziehbar (Douglas-Peucker 0,75 NM, Meldepunkte, Grenzübertritte);
   die Linie selbst bleibt exakt gleich. Einfügen über "+"-Griffe in der Mitte jeder Teilstrecke (antippen oder
@@ -226,7 +231,9 @@ Offen:
   um die Stelle liegt (wie im Ergebnis, sortiert bad/warn/info), Wetter der Stelle zum Aufklappen. Routen-Linien
   liegen in eigenen Kartenebenen über dem Luftraum-Canvas (Pane routeP z 450, Alternativen altP z 440 – vorher fing
   das Canvas Klicks ab bzw. lag die Alternative oben), breite unsichtbare Tippfläche (Maus 16 / Finger 26 px).
-  Kartenfenster halten Abstand zu Kopfzeile und Knöpfen (popOpts). Windy-Link (windyUrl) als <a> auch am Handy im
+  Kartenfenster halten Abstand zu Kopfzeile und Knöpfen (popOpts). Seit 9.17 zählt jeder Kartenklick, der näher als
+  24 px (Finger) / 12 px (Maus) an der gewählten Route liegt, als Klick auf die Strecke (routeNear) – unabhängig vom
+  SVG-Treffer, der auf manchen Geräten ein paar Pixel daneben lag (sonst kam das Luftraum-Fenster). Windy-Link (windyUrl) als <a> auch am Handy im
   Export-Reiter. Test: `node tests/e2e/strecke.mjs`.
 - Knopf "tauschen" (seit 9.6, swapFromTo): Von/Nach mit einem Klick tauschen, wird gespeichert; Test tests/e2e/tauschen.mjs.
 - orte.json: englische Exonyme durch Landesnamen ersetzt (Wien, München, Venezia …), Stadtteile ≤ 5,5 km um
@@ -249,7 +256,7 @@ Offen:
   `node tests/e2e/grenze.mjs` (AT→IT ohne Meldepunkt/FIR), `rueckflug.mjs`, `hoehe.mjs`, `gafor.mjs`, `wetterbild.mjs`, `tauschen.mjs`, `luftraum.mjs`, `layout.mjs`, `strecke.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.16, nächste 9.17).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.17, nächste 9.18).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.

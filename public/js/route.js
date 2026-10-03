@@ -332,7 +332,24 @@ function assignAlts(rs, P, userAlt) {
     }
     i = j;
   }
+  /* Kurze Abschnitte (<= SHORT_NM, z. B. ein Haken in Gegenrichtung) behalten die Hoehe davor, wenn ihr erlaubtes
+     Band das zulaesst – kein kurzes Hoch/Runter nur wegen der Halbkreisregel (die gilt fuer den Reiseflug). */
+  var g0 = 0;
+  while (g0 < rs.length) {
+    var g1 = g0; while (g1 + 1 < rs.length && rs[g1 + 1].alt === rs[g0].alt && !!rs[g1 + 1].user === !!rs[g0].user) g1++;
+    var len = 0; for (k = g0; k <= g1; k++) len += rs[k].e.len;
+    if (g0 > 0 && g1 < rs.length - 1 && len <= SHORT_NM && !rs[g0].user && !rs[g0 - 1].user && rs[g0].alt !== rs[g0 - 1].alt) {
+      var keep = rs[g0 - 1].alt, ok = true;
+      for (k = g0; k <= g1; k++) if (!rs[k].set.some(function (iv) { return iv[0] <= keep + 1 && iv[1] >= keep - 1; })) ok = false;
+      if (ok) for (k = g0; k <= g1; k++) {
+        rs[k].alt = keep; rs[k].semi = "short";
+        rs[k].iv = rs[k].set.filter(function (iv) { return iv[0] <= keep + 1 && iv[1] >= keep - 1; })[0];
+      }
+    }
+    g0 = g1 + 1;
+  }
 }
+var SHORT_NM = 5;
 /* Bewertet eine Route komplett: Reiseflughoehen je Abschnitt, dann ein durchgehendes Profil.
    Grundsaetze: Start immer in Platzhoehe mit normalem Steigflug, im Abflugbereich (NO_CIRC_NM) wird nie
    kreisend gestiegen. Reicht die Steigrate fuer das Gelaende nicht, wird das als Konflikt bzw. knapper
@@ -452,6 +469,49 @@ function evalRoute(G, P, depH, path, id, name, opt) {
       if (sm[a].user || circ[a]) continue;
       var fill = Math.min(lm[a], rmx[a], Uc[a]);
       if (fill > p[a] + 1) p[a] = fill;
+    }
+  })();
+  /* Keine kurzen Taeler: Erzwingt eine kurze Grenze (Luftraum/Wolken auf 1-2 NM) ein Absinken und wird danach
+     innerhalb 15 NM um hoechstens 1000 ft wieder gestiegen, wird stattdessen die tiefere Hoehe gehalten (Nutzer:
+     "Hoehen eher konstant halten"). Gestiegen wird erst wieder, wenn das Gelaende es verlangt (Lr), und dann
+     rechtzeitig mit der eingestellten Steigrate. Nie unter Lr (Gelaende + Reserve), eigene Hoehen unveraendert. */
+  (function () {
+    var WIN = 15, RISE = 1000;
+    for (var b = 1; b < n - 1; b++) {
+      if (sm[b].user || circ[b] || !(p[b] < p[b - 1] - 1)) continue;
+      var m = b;
+      while (m < n - 1 && !sm[m + 1].user && p[m + 1] <= p[m] + 1) m++;
+      if (m >= n - 1) break;
+      var r = m;
+      while (r < n - 1 && !sm[r + 1].user && p[r + 1] > p[r] + 1) r++;
+      if (sm[r].x - sm[m].x > WIN || p[r] - p[m] > RISE || sm[m].dF < 5) { b = m; continue; }
+      var hold = p[m], j;
+      for (j = m + 1; j < n; j++) {
+        /* nie eine vorgeschriebene Halbkreisflughoehe (ueber 3000 ft AGL) durch eine andere Hoehe ersetzen */
+        if (sm[j].user || circ[j] || Lr[j] > hold + 1 || p[j] < hold - 1 || (rs[sm[j].ri].semi === "ok" && Math.abs(p[j] - hold) > 1)) break;
+        p[j] = hold;
+      }
+      /* wo danach doch gestiegen werden muss: rechtzeitig vorher beginnen (nie hoeher als das bisherige Profil) */
+      if (j < n) for (var k = j - 1; k > m; k--) p[k] = Math.max(p[k], p[k + 1] - gC * sm[k + 1].dx);
+      b = Math.max(b, j - 1);
+    }
+  })();
+  /* Keine kurzen Buckel: Steigt das Profil nur fuer einen kurzen Abschnitt (z. B. Halbkreisflughoehe einer kurzen
+     Teilstrecke in Gegenrichtung) und sinkt innerhalb 15 NM wieder auf die Hoehe davor/danach, bleibt es auf dieser
+     Hoehe – soweit Gelaende (Lr) es erlaubt. Nur zwischen zwei ebenen Stuecken (nicht im Steig-/Sinkflug am Platz). */
+  (function () {
+    var WIN = 15, RISE = 1000;
+    function level(i) { return i > 0 && Math.abs(p[i] - p[i - 1]) <= 1; }
+    for (var a = 1; a < n - 1; a++) {
+      if (!(p[a] > p[a - 1] + 1) || sm[a].user || circ[a] || !level(a - 1)) continue;
+      var base = p[a - 1], e = a;
+      while (e < n - 1 && sm[e].x - sm[a].x <= WIN && !(p[e] <= base + 1 && level(e))) e++;
+      if (!(p[e] <= base + 1 && level(e)) || sm[e].x - sm[a].x > WIN) continue;
+      var top = 0, uOk = true, k;
+      for (k = a; k < e; k++) { top = Math.max(top, p[k] - base); if (sm[k].user || circ[k] || (rs[sm[k].ri].semi === "ok" && sm[e].x - sm[a].x > SHORT_NM)) uOk = false; }
+      if (!uOk || top > RISE) continue;
+      for (k = a; k < e; k++) p[k] = Math.max(base, Math.min(p[k], Lr[k]));
+      a = e;
     }
   })();
   /* Zeiten inkl. Kreisen unterwegs und Sinken ueber dem Ziel */

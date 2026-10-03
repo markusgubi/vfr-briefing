@@ -182,8 +182,26 @@ function drawAir() {
 map.on("moveend", function () { clearTimeout(airTimer); airTimer = setTimeout(loadAirView, 350); });
 /* Klick in die Karte: ALLE Lufträume am Punkt, nach Untergrenze sortiert */
 var MAP_CLICK_OFF = 0;   /* nach dem Sprung vom Profil zur Karte den "durchfallenden" Tipp ignorieren */
+/* Abstand (Pixel) eines Kartenpunkts zur gewaehlten Route und der naechste Punkt darauf */
+function routeNear(cp) {
+  if (!RES || !RES.routes || !RES.routes[RES.sel]) return null;
+  var R = RES.routes[RES.sel], best = null, a = null;
+  R.samples.forEach(function (q, i) {
+    var b = map.latLngToContainerPoint([q.lat, q.lon]);
+    if (a) {
+      var dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy, t = L2 ? Math.max(0, Math.min(1, ((cp.x - a.x) * dx + (cp.y - a.y) * dy) / L2)) : 0;
+      var d = Math.hypot(a.x + t * dx - cp.x, a.y + t * dy - cp.y);
+      if (!best || d < best.d) best = { d: d, ll: map.containerPointToLatLng([a.x + t * dx, a.y + t * dy]) };
+    }
+    a = b;
+  });
+  return best;
+}
 map.on("click", function (ev) {
   if (Date.now() < MAP_CLICK_OFF) return;
+  /* Tipp nahe an der Strecke (Finger 24 px, Maus 12 px) zaehlt als Tipp auf die Strecke, nicht auf den Luftraum */
+  var rn = routeNear(ev.containerPoint);
+  if (rn && rn.d <= (MOB.on || matchMedia("(pointer:coarse)").matches ? 24 : 12)) { routeLineClick(RES.routes[RES.sel], { latlng: rn.ll }); return; }
   var lat = ev.latlng.lat, lon = ev.latlng.lng;
   var hits = VIEW_AIR.filter(function (a) { return lon >= a.bb[0] && lon <= a.bb[2] && lat >= a.bb[1] && lat <= a.bb[3] && inGeom(a.geometry, lon, lat); });
   if (!hits.length) { showAsOutline(null); return; }
