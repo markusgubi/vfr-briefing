@@ -1096,9 +1096,9 @@ function setupCursor() {
   pb.addEventListener("pointermove", function (ev) {
     if (EDIT.drag) {
       var cd = svgX(ev); if (!cd) return;
-      /* Ziehen beginnt erst nach 4 Einheiten senkrecht (kein versehentliches Verstellen beim Tippen);
+      /* Ziehen beginnt erst nach 2 Einheiten senkrecht (kein versehentliches Verstellen beim Tippen);
          danach folgt die Hoehe direkt der Fingerposition */
-      if (!EDIT.drag.moved && Math.abs(cd.y - EDIT.drag.y0) < 4) { ev.preventDefault(); return; }
+      if (!EDIT.drag.moved && Math.abs(cd.y - EDIT.drag.y0) < 2) { ev.preventDefault(); return; }
       /* nie ins Gelaende: hoechstens bis zur Mindesthoehe der Teilstrecke (Konfliktgrenze) */
       var a = Math.max(altFromY(cd.y), EDIT.drag.minA);
       EDIT.drag.moved = true; EDIT.dirty = true; EDIT.lastTap = null;
