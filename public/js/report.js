@@ -159,6 +159,8 @@ function finalize(R, G, P) {
     if (n.indexOf("town:") === 0) add("info", "Grenzübertritt über den Ort <b>" + esc(n.slice(5)) + "</b> – Positionsmeldung an FIS mit Ortsangabe, Übertritt laut AIP prüfen.");
     if (n.indexOf("rpworse:") === 0) add("info", "Meldepunkt <b>" + esc(n.slice(8)) + "</b> nahe am Grenzübertritt nicht übernommen: die Route darüber wäre weniger sicher. Übertritt auf der Linie, Verfahren laut AIP prüfen.");
     if (n.indexOf("townworse:") === 0) add("info", "Grenzort <b>" + esc(n.slice(10)) + "</b> nicht übernommen: die Route darüber wäre weniger sicher. Übertritt auf der Linie, Positionsmeldung mit Ortsangabe.");
+    if (n.indexOf("destoff:") === 0) add("info", "Anflug-Meldepunkte für " + esc(G.B.icao || G.B.name) + " (" + esc(n.slice(8)) + ") liegen mehr als " + DEST_OFF_NM + " NM neben der sichersten Linie – kein Umweg eingeplant. Anflug laut Sichtanflugkarte (AIP AD 2) und Freigabe planen.");
+    if (n.indexOf("destworse:") === 0) add("info", "Anflug über Meldepunkt <b>" + esc(n.slice(10)) + "</b> nicht übernommen: die Route darüber wäre weniger sicher. Anflug laut Sichtanflugkarte (AIP AD 2) planen.");
     if (n === "nodest") add("warn", "Kein Meldepunkt für " + esc(G.B.icao || G.B.name) + " in openAIP gefunden – Anflug laut Sichtanflugkarte (AIP AD 2) planen.");
   });
   if (G.rpFailed && G.rpFailed.length) add("warn", "Meldepunkte für " + G.rpFailed.join(", ") + " nicht geladen – Grenzübertritt/Anflug laut AIP planen.");

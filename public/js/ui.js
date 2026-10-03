@@ -115,7 +115,9 @@ async function loadGafor() {
       lines.forEach(function (l) { GAFOR.push({ nr: (f.properties || {}).nr || "", name: (f.properties || {}).name || "", bz: (f.properties || {}).bezugshoehe, pts: l.map(function (c) { return { lat: c[1], lon: c[0] }; }) }); });
     });
     GAFOR.forEach(function (r) {
-      L.polyline(r.pts.map(function (q) { return [q.lat, q.lon]; }), { color: "#16A085", weight: 3, opacity: 0.7, dashArray: "2 6", interactive: true })
+      /* breiter heller Unterstrich, damit die Punktlinie auf der Topokarte gut sichtbar ist */
+      L.polyline(r.pts.map(function (q) { return [q.lat, q.lon]; }), { color: "#fff", weight: 9, opacity: 0.55, interactive: false }).addTo(gaforLayer);
+      L.polyline(r.pts.map(function (q) { return [q.lat, q.lon]; }), { color: "#0E8A6E", weight: 6, opacity: 0.85, dashArray: "1 10", lineCap: "round", interactive: true })
         .bindTooltip("<b>GAFOR " + esc(r.nr) + "</b>" + (r.name ? " " + esc(r.name) : "") + (r.bz ? "<br>Bezugsh\u00f6he " + r.bz + " ft" : "") +
           "<br><small>Linie ungef\u00e4hr (" + esc(j.genauigkeit || "") + ") \u2013 aktuelle Einstufung: GAFOR von Austro Control</small>").addTo(gaforLayer);
     });
@@ -690,12 +692,35 @@ function profLegend() {
   if (f.conf) sw("<rect x='0' y='0' width='26' height='12' fill='#C0392B' fill-opacity='0.25'/>", "Kein sicherer H\u00f6henkorridor");
   if (f.circ) sw("<path d='M13 1 C 6 1 6 4 13 4 C 6 4 6 7 13 7 C 6 7 6 10 13 10' fill='none' stroke='#B02E7A' stroke-width='1.8'/>", "Vollkreise: unterwegs im Tal kreisend steigen");
   if (f.wp) sw("<path d='M13 0 V12' stroke='#1F5FA8' stroke-width='1.2' stroke-dasharray='3 3'/>", "Wegpunkt (Nummer wie in der Karte)");
+  sw("<rect x='1' y='1' width='24' height='10' fill='#2E7DD7' fill-opacity='0.09' stroke='#2E7DD7' stroke-opacity='0.55' stroke-dasharray='4 2'/>", "In der Karte sichtbarer Abschnitt (beim Hineinzoomen)");
   if (f.hl) sw("<rect x='0' y='0' width='26' height='12' fill='#FFD400' fill-opacity='0.4'/>", "Gew\u00e4hlter Hinweis");
   if (f.edit) sw("<circle cx='13' cy='6' r='4.5' fill='#fff' stroke='#B02E7A' stroke-width='2'/>", "Griff ziehen = Reiseh\u00f6he \u00e4ndern, Tipp ins Profil = Wegpunkt einf\u00fcgen");
   return it.join("");
 }
+/* Kartenausschnitt im Profil: der in der Karte sichtbare Teil der Route wird hinterlegt (nur wenn hineingezoomt) */
+function drawViewBand() {
+  var g = document.getElementById("pview"); if (!g || !RES || !RES.pv) return;
+  var me = document.getElementById("map"); if (!me || !me.offsetWidth) return;   /* Karte verborgen: letzten Stand lassen */
+  /* nur der wirklich sichtbare Teil der Karte: ohne den Bereich unter dem Profilfenster */
+  var mr = me.getBoundingClientRect(), pe = $("prof"), yMaxPx = mr.height;
+  if (pe && pe.offsetHeight) { var pr = pe.getBoundingClientRect(); if (pr.top > mr.top + 40 && pr.top < mr.bottom && pr.left < mr.right && pr.right > mr.left) yMaxPx = pr.top - mr.top; }
+  var bb = L.latLngBounds(map.containerPointToLatLng([0, 0]), map.containerPointToLatLng([mr.width, yMaxPx]));
+  var R = RES.routes[RES.sel], pv = RES.pv, runs = [], cur = null, nIn = 0;
+  R.samples.forEach(function (q) {
+    if (bb.contains([q.lat, q.lon])) { nIn++; if (!cur) { cur = { a: q.x, b: q.x }; runs.push(cur); } else cur.b = q.x; }
+    else cur = null;
+  });
+  if (!nIn || nIn >= R.samples.length * 0.97) { g.innerHTML = ""; return; }
+  g.innerHTML = runs.map(function (r) {
+    var x0 = pv.X(Math.max(0, r.a - 0.3)), x1 = pv.X(Math.min(pv.D, r.b + 0.3));
+    return "<rect x='" + x0.toFixed(1) + "' y='" + pv.Tp + "' width='" + Math.max(3, x1 - x0).toFixed(1) + "' height='" + (pv.H - pv.Tp - pv.Bp) +
+      "' fill='#2E7DD7' fill-opacity='0.09' stroke='#2E7DD7' stroke-opacity='0.55' stroke-width='1.2' stroke-dasharray='5 3'/>";
+  }).join("");
+}
+map.on("moveend", drawViewBand);
 function drawProfile(R) {
   $("profSvg").innerHTML = profSvg(R); $("prof").style.display = "block";
+  drawViewBand();
   renderAltBar(R);
   /* waehrend des Ziehens keine Legende aendern: sonst verschiebt sich das Profil unter dem Finger */
   if (!EDIT.drag) $("profLeg").innerHTML = profLegend();
@@ -764,7 +789,7 @@ function profSvg(R) {
     }
     return "";
   }
-  var s = "<svg viewBox='0 0 " + W + " " + H + "' xmlns='http://www.w3.org/2000/svg' font-family='system-ui,sans-serif'>";
+  var s = "<svg viewBox='0 0 " + W + " " + H + "' xmlns='http://www.w3.org/2000/svg' font-family='system-ui,sans-serif'><g id='pview'></g>";
   if (RES.hl) s += "<rect x='" + X(RES.hl.a) + "' y='" + Tp + "' width='" + Math.max(3, X(RES.hl.b) - X(RES.hl.a)) + "' height='" + (H - Tp - Bp) + "' fill='#FFD400' fill-opacity='0.28'/>";
   var step = yMax > (mob ? 7000 : 9000) ? 2000 : 1000, txts = "";
   for (g = step; g < yMax; g += step) {
@@ -954,6 +979,30 @@ function straighten(k) {
   EDIT.pts = keep;
   return a + 1;
 }
+/* Einrasten beim Ziehen: Meldepunkt oder Ort in Fingerreichweite (Bildschirm-Pixel, hoechstens 3 NM) wird
+   genau uebernommen und benannt - erleichtert die Positionsmeldung. Meldepunkte vor groesseren Orten. */
+var SNAP_PX_MOUSE = 18, SNAP_PX_TOUCH = 28;
+function editSnap(ll) {
+  if (!RES || !RES.G) return null;
+  var G = RES.G, pp = map.latLngToContainerPoint(ll), lim = (MOB.on || matchMedia("(pointer:coarse)").matches) ? SNAP_PX_TOUCH : SNAP_PX_MOUSE, best = null;
+  var p = { lat: ll.lat, lon: ll.lng };
+  function tryPt(q, pt, bonus) {
+    if (distNm(q, p) > 3) return;
+    var d = pp.distanceTo(map.latLngToContainerPoint([q.lat, q.lon])); if (d > lim) return;
+    var sc = d - bonus;
+    if (!best || sc < best.sc) best = { sc: sc, pt: pt };
+  }
+  (G.RPS || []).forEach(function (q) { tryPt(q, rpPoint(q, { lm: true }), 8); });
+  (G.PLACES || []).forEach(function (q) { tryPt(q, { lat: q.lat, lon: q.lon, name: q.name, town: q.name, lm: true }, 2 * Math.log10(q.pop / 1000)); });
+  return best ? best.pt : null;
+}
+var snapMk = null;
+function showSnap(pt) {   /* Ring um den Einrastpunkt mit Namen */
+  if (snapMk) { map.removeLayer(snapMk); snapMk = null; }
+  if (!pt) return;
+  snapMk = L.circleMarker([pt.lat, pt.lon], { radius: 13, color: "#B02E7A", weight: 3, fill: false, interactive: false })
+    .bindTooltip("\u2316 " + esc(pt.name), { permanent: true, direction: "top", offset: [0, -12], className: "rptip" }).addTo(map);
+}
 function drawEditMarkers(R) {
   editLayer.clearLayers();
   if (!EDIT.on || !R.custom) return;
@@ -966,11 +1015,12 @@ function drawEditMarkers(R) {
       icon: L.divIcon({ className: "wpk" + (pt.rp ? " rp" : ""), html: "<b>" + lbl + "</b>", iconSize: null, iconAnchor: [12, 12] }) });
     mk.on("dragstart", function () { EDIT.dragging = true; EDIT.dirty = true; hideCursor(); k = straighten(k); });
     mk.on("drag", function (ev) {
-      var ll = ev.target.getLatLng();
-      EDIT.pts[k] = { lat: ll.lat, lon: ll.lng, name: null };   /* verschoben = kein Meldepunkt mehr */
+      var ll = ev.target.getLatLng(), sp = editSnap(ll);
+      EDIT.pts[k] = sp || { lat: ll.lat, lon: ll.lng, name: null };   /* verschoben = kein Meldepunkt mehr, ausser eingerastet */
+      showSnap(sp);
       scheduleQuick();
     });
-    mk.on("dragend", function () { EDIT.dragging = false; commitEdit(); });
+    mk.on("dragend", function () { EDIT.dragging = false; showSnap(null); commitEdit(); });
     mk.on("contextmenu", function () { deleteWp(k); });
     mk.bindPopup("<div class='pop'><b class='h'>Wegpunkt " + lbl + "</b><br><button class='btn2' data-delwp='" + k + "' style='margin-top:6px'>Wegpunkt löschen</button></div>");
     mk.addTo(editLayer);
@@ -1038,8 +1088,8 @@ function drawAddHandles() {
         icon: L.divIcon({ className: "wpadd", html: "+", iconSize: [22, 22], iconAnchor: [11, 11] }) });
       mk.on("click", function () { insertPoint(mid); commitEdit(); });
       mk.on("dragstart", function () { EDIT.dragging = true; hideCursor(); idx = straighten(insertPoint(mid)); });
-      mk.on("drag", function (ev) { var ll = ev.target.getLatLng(); EDIT.pts[idx] = { lat: ll.lat, lon: ll.lng, name: null }; scheduleQuick(); });
-      mk.on("dragend", function () { EDIT.dragging = false; commitEdit(); });
+      mk.on("drag", function (ev) { var ll = ev.target.getLatLng(), sp = editSnap(ll); EDIT.pts[idx] = sp || { lat: ll.lat, lon: ll.lng, name: null }; showSnap(sp); scheduleQuick(); });
+      mk.on("dragend", function () { EDIT.dragging = false; showSnap(null); commitEdit(); });
       mk.addTo(editLayer);
     })(mid);
   }

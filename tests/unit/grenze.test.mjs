@@ -153,3 +153,37 @@ test("Ein Grenzort wird nicht übernommen, wenn die Route darüber weniger siche
   assert.ok(routes[0].rpNotes.includes("townworse:Bergstadt"), routes[0].rpNotes.join(","));
   assert.ok(routes[0].cat <= R0.cat);
 });
+
+test("Ein Ort fast genau auf einer langen geraden Teilstrecke wird als Überflug-Wegpunkt eingefügt.", async () => {
+  const app = loadApp();
+  const t = setup(app, () => 1000);
+  const G = t.G;
+  G.A.country = "AT"; G.B.country = "AT";
+  app.loadCountry = async () => [];
+  G.PLACES = [{ name: "Linienort", lat: 47.01, lon: 13.7, kind: "town", pop: 5000 }, { name: "Fernort", lat: 47.2, lon: 13.7, kind: "town", pop: 90000 }];
+  const R = app.routeFromPoints(G, t.P, [{ ...t.A, name: "TSTA" }, { ...t.B, name: "TSTB" }], null, "direct", "Direkt");
+  R.custom = false;
+  const routes = [R];
+  await app.snapLandmarks(routes, G, t.P);
+  const names = routes[0].pts.map(p => p.name).filter(Boolean);
+  assert.equal(names.join(","), "TSTA,Linienort,TSTB");
+});
+
+test("Ein Anflug-Meldepunkt weit neben der sichersten Linie wird nicht angeflogen (kein Umweg), ein Hinweis nennt ihn.", async () => {
+  const app = loadApp();
+  const t = setup(app, () => 1000);
+  const G = t.G;
+  G.A.country = "AT"; G.B.country = "IT"; G.B.id = "apt-TSTB";
+  G.BORDERS = [{ l: "IT", r: "AT", c: [[13.7, 47.5], [13.7, 46.5]], bb: [13.7, 46.5, 13.7, 47.5] }];
+  G.PLACES = [];
+  app.CTRY.IT = app.CTRY.IT || [[6.6, 43.5, 13.9, 47.1]];
+  const far = { id: "r9", name: "FERNPKT", compulsory: true, country: "IT", lat: 47.17, lon: 14.3, airports: ["apt-TSTB"] };
+  app.loadCountry = async (c, kind) => (kind === "rp" && c === "IT" ? [far] : []);
+  const R = app.evalRoute(G, t.P, 10, app.directPath(G), "direct", "Direkt");
+  R.pts = [{ lat: G.A.lat, lon: G.A.lon }, { lat: G.B.lat, lon: G.B.lon }];
+  const routes = [R];
+  await app.adjustRoutes(routes, G, t.P);
+  const names = routes[0].pts.map(p => p.name).filter(Boolean);
+  assert.ok(!names.includes("FERNPKT"), names.join(", "));
+  assert.ok(routes[0].rpNotes.some(n => n.startsWith("destoff:FERNPKT")), routes[0].rpNotes.join(","));
+});

@@ -169,7 +169,19 @@ Offen:
   werden auf Meldepunkt oder Ort ≥ 2000 Einw. ≤ 3 NM gelegt (Meldepunkt bevorzugt, größere Orte bevorzugt).
   Übernommen NUR, wenn die neu bewertete Route nicht unsicherer ist (snapOk: Einstufung und Konfliktlänge nicht
   schlechter, Sicherheitswert höchstens 3 schlechter, höchstens 3 % + 1 NM länger, Luftraum abgedeckt).
-  Punkte mit p.lm sind beim Bearbeiten ziehbar und auf der Karte beschriftet.
+  Punkte mit p.lm sind beim Bearbeiten ziehbar und auf der Karte beschriftet. Seit 9.5 zusätzlich Überflug-Punkte:
+  Meldepunkte/Orte ≥ 3000 Einw. höchstens 1,5 NM neben einer geraden Teilstrecke ≥ 15 NM (Abstand ≥ 12 NM, nicht
+  in den ersten/letzten 5 NM) werden als Wegpunkt eingefügt – ebenfalls nur mit snapOk. Nutzerwunsch: Punkte
+  überfliegen, wenn sie auf der Strecke liegen, aber keine großen Umwege nur für einen Punkt; Wetter zuerst.
+- Anflug-Meldepunkt im Ausland (seit 9.5): nur, wenn er ≤ 3 NM (DEST_OFF_NM) neben der geplanten Linie liegt UND
+  die Route nicht unsicherer wird; sonst Hinweis mit den Meldepunkten (destoff/destworse). Grenz-Meldepunkt nur
+  ohne Verschlechterung von Einstufung/Konfliktlänge, Grenzort nur mit snapOk, sonst Übertritt auf der Linie.
+- Einrasten beim Bearbeiten (seit 9.5, editSnap): gezogener Wegpunkt rastet an Meldepunkt/Ort in Reichweite ein
+  (Maus 18 px / Finger 28 px, max. 3 NM), Ring mit Namen während des Ziehens (showSnap).
+- Kartenausschnitt im Profil (seit 9.5, drawViewBand): beim Hineinzoomen wird der in der Karte sichtbare Teil der
+  Route (ohne Fläche unter dem Profilfenster) im Profil blau hinterlegt (#pview).
+- orte.json: englische Exonyme durch Landesnamen ersetzt (Wien, München, Venezia …), Stadtteile ≤ 5,5 km um
+  Großstädte entfernt. GAFOR-Linien seit 9.5 dicker (6 px, weißer Unterstrich).
 - Wind bei Start/Landung (seit 9.4, aptWind/pickRunway in route.js): METAR ≤ 90 min am Platz (≤ 5 NM), sonst TAF,
   sonst Modelle (10-m-Wind, zweitschlechtester Wert). Bewertet wird der schlechtere aus amtlich und Modell. Piste
   = größter Gegenwind (Gleichstand: längere Piste; landingOnly/takeOffOnly beachtet), Pisten aus openAIP
@@ -188,7 +200,7 @@ Offen:
   `node tests/e2e/grenze.mjs` (AT→IT ohne Meldepunkt/FIR), `rueckflug.mjs`, `hoehe.mjs`, `gafor.mjs`, `wetterbild.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.4, nächste 9.5).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.5, nächste 9.6).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.

@@ -6,6 +6,13 @@
 var BORDER_RP_NM = 15;   /* Meldepunkt fuer den Grenzuebertritt hoechstens so weit vom Schnittpunkt */
 var BORDER_TOWN_NM = 6;  /* sonst markanter Ort (GeoNames) hoechstens so weit vom Schnittpunkt */
 var DEST_RP_NM = 20;     /* Meldepunkt fuer den Zielplatz hoechstens so weit vom Platz */
+var DEST_OFF_NM = 3;     /* ... und hoechstens so weit seitlich neben der geplanten Linie */
+/* seitlicher Abstand eines Punkts zur Route (NM) */
+function offRoute(R, p) {
+  var sm = R.samples, best = Infinity;
+  for (var i = 1; i < sm.length; i++) best = Math.min(best, segDist(p, sm[i - 1], sm[i]).d);
+  return best;
+}
 
 function firAt(G, p) {
   if (!G.FIRS || !G.FIRS.length) return null;
@@ -142,14 +149,16 @@ async function adjustRoutes(routes, G, P) {
       return o;
     });
     /* Zielplatz im Ausland: Meldepunkt des Platzes (laut openAIP zugeordnet), sonst Pflichtmeldepunkt in der Naehe */
+    /* Nur ein Meldepunkt, der hoechstens DEST_OFF_NM neben der geplanten Linie liegt: kein Umweg nur fuer einen
+       Punkt (Wetter/Sicherheit bestimmen die Linie). Liegen sie abseits, nennt ein Hinweis die Meldepunkte. */
     var destRp = null, destNote = null;
     if (G.B.country && G.B.country !== G.A.country) {
-      var lastC = cr.length ? cr[cr.length - 1] : G.A;
       var own = rp.list.filter(function (q) { return G.B.id && q.airports.indexOf(G.B.id) >= 0; });
-      var near = own.length ? own : rp.list.filter(function (q) { return q.compulsory && distNm(q, G.B) <= DEST_RP_NM; });
-      near.sort(function (a, b) { return (distNm(lastC, a) + distNm(a, G.B)) - (distNm(lastC, b) + distNm(b, G.B)); });
-      if (near.length && distNm(near[0], G.B) > 1) destRp = near[0];
-      if (!destRp) destNote = "nodest";
+      var near = (own.length ? own : rp.list.filter(function (q) { return q.compulsory && distNm(q, G.B) <= DEST_RP_NM; }))
+        .filter(function (q) { return distNm(q, G.B) > 1; })
+        .map(function (q) { return { q: q, off: offRoute(R, q) }; }).sort(function (a, b) { return a.off - b.off; });
+      if (near.length && near[0].off <= DEST_OFF_NM) destRp = near[0].q;
+      else destNote = near.length ? "destoff:" + near.slice(0, 4).map(function (x) { return x.q.name; }).join(", ") : "nodest";
     }
     var destX = destRp ? R.D - distNm(destRp, G.B) : R.D;
     var build = function (sel) {
@@ -182,6 +191,11 @@ async function adjustRoutes(routes, G, P) {
     }
     var bf = build(sel);
     if (!R2) R2 = routeFromPoints(G, P, bf.pts, null, R.id, R.name);
+    /* Anflug-Meldepunkt nur, wenn die Route dadurch nicht weniger sicher wird */
+    if (destRp && !(R2.cat <= R.cat && R2.confLen <= R.confLen + 0.05)) {
+      var dn = destRp.name; destRp = null; destNote = "destworse:" + dn;
+      bf = build(sel); R2 = routeFromPoints(G, P, bf.pts, null, R.id, R.name);
+    }
     var pts = bf.pts, notes = bf.notes;
     R2.custom = false; R2.viaRp = true; R2.rpNotes = notes;
     /* Bezeichnung: ueber Meldepunkte, sonst ueber den Grenzort */
@@ -214,6 +228,7 @@ function nameRoutes(routes) {
    bewertet mindestens genauso sicher ist: Einstufung und Konfliktlaenge nicht schlechter, Sicherheitswert
    hoechstens SNAP_SCORE schlechter, Strecke hoechstens 3 % + 1 NM laenger. Sicherheit geht immer vor. */
 var SNAP_NM = 3, SNAP_POP = 2000, SNAP_SCORE = 3;
+var ONLEG_NM = 1.5, ONLEG_POP = 3000, ONLEG_MIN = 15, ONLEG_GAP = 12;   /* Ueberflug-Punkte auf langen Teilstrecken */
 function landmarkCands(G, p, used) {
   var out = [];
   (G.RPS || []).forEach(function (q) {
@@ -251,6 +266,31 @@ async function snapLandmarks(routes, G, P) {
         var Rt = routeFromPoints(G, P, trial, null, R0.id, R0.name);
         if (snapOk(R0, Rt)) { pts = trial; best = Rt; used[cs[c].pt.name] = 1; n++; break; }
       }
+      if (typeof yieldUi === "function") await yieldUi();
+    }
+    /* Ueberflug: Meldepunkte/Orte, die fast genau auf einer langen geraden Teilstrecke liegen, werden als
+       Wegpunkt eingefuegt (keine Kursaenderung, nur Benennung fuer Positionsmeldungen) */
+    var ins = [], usedX = [];
+    for (var a = 1; a < pts.length; a++) {
+      var p0 = pts[a - 1], p1 = pts[a], len = distNm(p0, p1); if (len < ONLEG_MIN) continue;
+      var cl = [];
+      (G.RPS || []).forEach(function (q) { if (!used[q.name]) cl.push({ q: q, pt: rpPoint(q, { lm: true }), lim: ONLEG_NM, sc: -2 }); });
+      (G.PLACES || []).forEach(function (q) { if (q.pop >= ONLEG_POP && !used[q.name]) cl.push({ q: q, pt: { lat: q.lat, lon: q.lon, name: q.name, town: q.name, lm: true }, lim: ONLEG_NM, sc: -1.5 * Math.log10(q.pop / 1000) }); });
+      cl = cl.map(function (c) { var sd = segDist(c.q, p0, p1); return { c: c, d: sd.d, t: sd.t }; })
+        .filter(function (x) { return x.d <= x.c.lim && x.t * len > 5 && (1 - x.t) * len > 5; })
+        .sort(function (x, y) { return (x.d + x.c.sc) - (y.d + y.c.sc); });
+      var taken = [];
+      cl.forEach(function (x) {
+        if (taken.some(function (y) { return Math.abs(y.t - x.t) * len < ONLEG_GAP; })) return;
+        taken.push(x); used[x.c.pt.name] = 1;
+      });
+      taken.sort(function (x, y) { return x.t - y.t; }).forEach(function (x) { ins.push({ a: a, t: x.t, pt: x.c.pt }); });
+    }
+    if (ins.length) {
+      var pts2 = [];
+      pts.forEach(function (p, i) { ins.filter(function (x) { return x.a === i; }).forEach(function (x) { pts2.push(x.pt); }); pts2.push(p); });
+      var Ri = routeFromPoints(G, P, pts2, null, R0.id, R0.name);
+      if (snapOk(R0, Ri)) { pts = pts2; best = Ri; n += ins.length; }
       if (typeof yieldUi === "function") await yieldUi();
     }
     if (!best) continue;
