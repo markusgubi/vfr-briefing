@@ -6,9 +6,12 @@ compatibility_date = "2026-10-02"
 routes = [{ pattern = "vfr.gubi.co.at", custom_domain = true }]
 workers_dev = true
 
-# Oberflaeche (HTML/CSS/JS) als Static Assets; alle anderen Pfade gehen an den Worker
+# Oberflaeche (HTML/CSS/JS) als Static Assets. run_worker_first: JEDE Anfrage geht zuerst durch den
+# Worker (Passwort-Anmeldung), erst dann werden Dateien ueber die Bindung ASSETS ausgeliefert.
 [assets]
 directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
 
 [observability]
 enabled = true
