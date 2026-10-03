@@ -67,6 +67,7 @@ function recAt(md, hr) {
   return { T: T, Td: Td, sp: sp, low: low, mid: mid, prec: prec, cape: cape,
     visKm: visM != null ? Math.min(20, visM / 1000) : estVis(sp, prec), visEst: visM == null,
     gust: v("wind_gusts_10m") || 0, ws: v("wind_speed_850hPa"), wd: v("wind_direction_850hPa"),
+    ws10: v("wind_speed_10m"), wd10: v("wind_direction_10m"),
     baseMsl: b.msl, baseHow: b.how, baseAgl: isFinite(b.msl) ? b.msl - md.elevFt : null,
     ts: tsProb(cape, prec), elevFt: md.elevFt };
 }
@@ -80,6 +81,7 @@ function recAtH(md, h) {
   return { T: a.T, Td: a.Td, sp: Math.min(a.sp, b.sp), low: Math.max(a.low, b.low), mid: Math.max(a.mid, b.mid),
     prec: Math.max(a.prec, b.prec), cape: Math.max(a.cape, b.cape), visKm: Math.min(a.visKm, b.visKm), visEst: a.visEst || b.visEst,
     gust: Math.max(a.gust, b.gust), ws: (h - h0 < 0.5 ? a : b).ws, wd: (h - h0 < 0.5 ? a : b).wd,
+    ws10: Math.max(a.ws10 || 0, b.ws10 || 0), wd10: (h - h0 < 0.5 ? a : b).wd10,
     baseMsl: lowB.baseMsl, baseHow: lowB.baseHow, baseAgl: lowB.baseAgl, ts: Math.max(a.ts, b.ts), elevFt: a.elevFt };
 }
 function catOf(vis, ts, bAgl) {
@@ -199,7 +201,8 @@ function buildStations(j) {
     var s = get(o), t = o.obsTime || 0;
     if (s.metar && s.metar.t >= t) return;
     var cav = /CAVOK/.test(o.rawOb || "");
-    s.metar = { t: t, raw: o.rawOb || "", visKm: cav ? 10 : visKmOf(o.visib), ceil: cav ? null : ceilOf(o.clouds), gust: o.wgst || null, qnh: o.altim || null, temp: o.temp };
+    s.metar = { t: t, raw: o.rawOb || "", visKm: cav ? 10 : visKmOf(o.visib), ceil: cav ? null : ceilOf(o.clouds), gust: o.wgst || null, qnh: o.altim || null, temp: o.temp,
+      wdir: o.wdir != null ? o.wdir : null, wspd: o.wspd != null ? o.wspd : null };
   });
   (j.taf || []).forEach(function (o) {
     if (!o.icaoId || o.lat == null) return;
@@ -208,13 +211,22 @@ function buildStations(j) {
   return Object.keys(mp).map(function (k) { return mp[k]; });
 }
 function fcVals(f) {
-  var v = { visKm: visKmOf(f.visib), gust: f.wgst != null ? f.wgst : null, wx: f.wxString || null, ceil: undefined };
+  var v = { visKm: visKmOf(f.visib), gust: f.wgst != null ? f.wgst : null, wx: f.wxString || null, ceil: undefined,
+    wdir: f.wdir != null ? f.wdir : null, wspd: f.wspd != null ? f.wspd : null };
   if (Array.isArray(f.clouds) && f.clouds.length) { var c = ceilOf(f.clouds); v.ceil = c == null ? Infinity : c; }
   return v;
 }
 function ceilVal(c) { return c === undefined || c == null ? Infinity : c; }
-function mergeV(a, b) { if (!a) return b; return { visKm: b.visKm != null ? b.visKm : a.visKm, gust: b.gust != null ? b.gust : a.gust, wx: b.wx || a.wx, ceil: b.ceil !== undefined ? b.ceil : a.ceil }; }
-function worseV(a, b) { if (!a) return b; if (!b) return a; return { visKm: minN(a.visKm, b.visKm), gust: maxN(a.gust, b.gust), wx: b.wx || a.wx, ceil: Math.min(ceilVal(a.ceil), ceilVal(b.ceil)) }; }
+function mergeV(a, b) {
+  if (!a) return b;
+  var w = b.wspd != null ? b : a;   /* Wind: neue Gruppe gilt, sonst bisheriger */
+  return { visKm: b.visKm != null ? b.visKm : a.visKm, gust: b.gust != null ? b.gust : a.gust, wx: b.wx || a.wx, ceil: b.ceil !== undefined ? b.ceil : a.ceil, wdir: w.wdir, wspd: w.wspd };
+}
+function worseV(a, b) {
+  if (!a) return b; if (!b) return a;
+  var w = (b.wspd || 0) > (a.wspd || 0) ? b : a;   /* Wind: der staerkere */
+  return { visKm: minN(a.visKm, b.visKm), gust: maxN(a.gust, b.gust), wx: b.wx || a.wx, ceil: Math.min(ceilVal(a.ceil), ceilVal(b.ceil)), wdir: w.wdir, wspd: w.wspd };
+}
 function tafAt(T, t) {
   if (!T || !T.fcsts.length || t < T.from - 1800 || t > T.to) return null;
   var fs = T.fcsts.slice().sort(function (a, b) { return (a.timeFrom || 0) - (b.timeFrom || 0); });

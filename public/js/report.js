@@ -13,11 +13,11 @@ function finalize(R, G, P) {
     var nn = G.nodes[b.e.a];
     if (nn.uw != null || turn >= 4 || a.alt !== b.alt) {
       var up = nn.uw != null && R.pts ? R.pts[nn.uw] : null;
-      wps.push({ lat: nn.lat, lon: nn.lon, name: up && up.name ? up.name : "WP" + wps.length, x: b.x0, t: b.tStart, uw: nn.uw, pi: nn.pi, rp: up ? up.rp : null, border: up ? up.border : null, town: up ? up.town : null });
+      wps.push({ lat: nn.lat, lon: nn.lon, name: up && up.name ? up.name : "WP" + wps.length, x: b.x0, t: b.tStart, uw: nn.uw, pi: nn.pi, rp: up ? up.rp : null, border: up ? up.border : null, town: up ? up.town : null, lm: up ? up.lm : null });
     }
   }
   wps.push({ lat: G.B.lat, lon: G.B.lon, name: G.B.icao || "ZIEL", x: D, t: R.arrMin });
-  /* Ortsnamen (OpenStreetMap) an Wegpunkten: erleichtert Positionsmeldungen ("ueber Gmunden") */
+  /* Ortsnamen (GeoNames) an Wegpunkten: erleichtert Positionsmeldungen ("ueber Gmunden") */
   wps.forEach(function (w, k) {
     if (k === 0 || k === wps.length - 1 || w.rp || w.town) return;
     var t = nearestPlace(G.PLACES, w, 3); if (t) w.town = t.name;
@@ -88,6 +88,19 @@ function finalize(R, G, P) {
     add("warn", "<b>Kreisend steigen</b> bei NM " + Math.round(c.x) + " (~" + fmtH(sampleAt(R, c.x).t) + ") von ~" + fmtFt(c.from) + " auf ~" + (Math.ceil(c.to / 100) * 100) +
       " ft MSL (~" + Math.round(c.min) + " min) \u2013 das Gel\u00e4nde danach steigt schneller als der Steigflug. Nachteil: Zeit, Platzbedarf im Tal.", c.x - 0.5, c.x + 0.5);
   });
+  /* Wind bei Start und Landung mit Pistenempfehlung */
+  [[R.depWind, "Start", G.A, R.depMin], [R.landWind, "Landung", G.B, R.arrMin]].forEach(function (x) {
+    var w = x[0]; if (!w) return;
+    var ap = esc(x[2].icao || x[2].name), wtxt = (w.wd === "VRB" ? "VRB" : p3(Math.round(w.wd / 10) * 10 % 360 || 360) + "\u00b0") + "/" + Math.round(w.ws) + (w.gust && w.gust > w.ws + 2 ? " G" + Math.round(w.gust) : "") + " kt";
+    var h = "<b>" + x[1] + " " + ap + " ~" + fmtH(x[3]) + ":</b> Wind " + wtxt + " (" + esc(w.src) + ")";
+    if (w.rwy) {
+      h += " \u2192 <b>Piste " + esc(w.rwy.d) + "</b>: " + (w.head >= 0 ? "Gegenwind " + Math.round(w.head) : "R\u00fcckenwind " + Math.round(-w.head)) + " kt, Seitenwind " +
+        Math.round(w.cross) + " kt " + w.side + (w.crossG > w.cross + 1 ? " (in B\u00f6en " + Math.round(w.crossG) + " kt)" : "") + (w.rwy.tmp ? " \u2013 Piste laut openAIP zeitweise gesperrt" : "") + ".";
+      if (w.level === 2) h += " <b>Seitenwind \u00fcber deiner Grenze (" + R.xwMax + " kt)</b> \u2013 " + (w.evalCross > w.cross + 1 ? "laut Modellen bis ~" + Math.round(w.evalCross) + " kt. " : "") + "Ausweichplatz oder andere Zeit w\u00e4hlen.";
+      else if (w.level === 1) h += w.evalTail > 5 ? " R\u00fcckenwind auf allen Pisten \u2013 Pistenwahl und Landestrecke pr\u00fcfen." : " In B\u00f6en \u00fcber deiner Seitenwind-Grenze (" + R.xwMax + " kt).";
+    } else h += " \u2013 Pistenrichtung in openAIP nicht vorhanden, Piste selbst w\u00e4hlen.";
+    add(w.level === 2 ? "bad" : w.level === 1 ? "warn" : "info", h, x[1] === "Start" ? 0 : D, x[1] === "Start" ? 0 : D);
+  });
   var o2min = 0, hiAlt = 0;
   for (var oi = 1; oi < R.samples.length; oi++) { var qo = R.samples[oi]; hiAlt = Math.max(hiAlt, qo.p); if (qo.p > 10000) o2min += qo.t - R.samples[oi - 1].t; }
   if (hiAlt > 13000) add("bad", "<b>Sauerstoff:</b> Route f\u00fchrt \u00fcber 13.000 ft \u2013 dort ist Sauerstoff Pflicht (EASA NCO.OP.190).");
@@ -143,7 +156,9 @@ function finalize(R, G, P) {
   });
   (R.rpNotes || []).forEach(function (n) {
     if (n === "norp") add("warn", "Kein veröffentlichter Meldepunkt (openAIP) innerhalb " + BORDER_RP_NM + " NM und kein Ort innerhalb " + BORDER_TOWN_NM + " NM vom Grenzübertritt – Übertrittspunkt laut AIP/VFR-Karte wählen.");
-    if (n.indexOf("town:") === 0) add("info", "Grenzübertritt über den Ort <b>" + esc(n.slice(5)) + "</b> (kein veröffentlichter VFR-Meldepunkt innerhalb " + BORDER_RP_NM + " NM in openAIP) – Positionsmeldung an FIS mit Ortsangabe, Übertritt laut AIP prüfen.");
+    if (n.indexOf("town:") === 0) add("info", "Grenzübertritt über den Ort <b>" + esc(n.slice(5)) + "</b> – Positionsmeldung an FIS mit Ortsangabe, Übertritt laut AIP prüfen.");
+    if (n.indexOf("rpworse:") === 0) add("info", "Meldepunkt <b>" + esc(n.slice(8)) + "</b> nahe am Grenzübertritt nicht übernommen: die Route darüber wäre weniger sicher. Übertritt auf der Linie, Verfahren laut AIP prüfen.");
+    if (n.indexOf("townworse:") === 0) add("info", "Grenzort <b>" + esc(n.slice(10)) + "</b> nicht übernommen: die Route darüber wäre weniger sicher. Übertritt auf der Linie, Positionsmeldung mit Ortsangabe.");
     if (n === "nodest") add("warn", "Kein Meldepunkt für " + esc(G.B.icao || G.B.name) + " in openAIP gefunden – Anflug laut Sichtanflugkarte (AIP AD 2) planen.");
   });
   if (G.rpFailed && G.rpFailed.length) add("warn", "Meldepunkte für " + G.rpFailed.join(", ") + " nicht geladen – Grenzübertritt/Anflug laut AIP planen.");

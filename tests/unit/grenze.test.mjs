@@ -85,3 +85,71 @@ test("Wegpunkte bekommen den nächsten Ort (höchstens 3 NM) als Namen dazu.", (
   assert.equal(R.wps[1].town, "Mittelstadt");
   assert.ok(R.legs[0].to.includes("Mittelstadt"), R.legs[0].to);
 });
+
+test("Staatsgrenzlinien (Natural Earth) ergeben den Grenzübertritt samt Richtung, auch ohne FIR.", () => {
+  const app = loadApp();
+  const { R, t } = route(app, []);
+  // Linie von Nord nach Sued bei lon 13.7: links (Osten bei Blick nach Sueden) = SI, rechts = AT
+  t.G.BORDERS = [{ l: "SI", r: "AT", c: [[13.7, 47.5], [13.7, 46.5]], bb: [13.7, 46.5, 13.7, 47.5] }];
+  const c = app.detectCrossings(R, R.G);
+  assert.equal(c.length, 1);
+  assert.equal(c[0].fromC + ">" + c[0].toC, "AT>SI");
+  assert.ok(Math.abs(c[0].lon - 13.7) < 0.01, "lon " + c[0].lon);
+});
+
+test("Ein Knickpunkt wird auf einen nahen Ort gelegt, wenn die Route dadurch nicht unsicherer wird.", async () => {
+  const app = loadApp();
+  const t = setup(app, () => 1000);
+  const G = t.G;
+  G.A.country = "AT"; G.B.country = "AT";
+  app.loadCountry = async () => [];
+  G.PLACES = [{ name: "Knickstadt", lat: 47.12, lon: 13.68, kind: "town", pop: 8000 }];
+  const R = app.routeFromPoints(G, t.P, [{ ...t.A, name: "TSTA" }, { lat: 47.15, lon: 13.7 }, { ...t.B, name: "TSTB" }], null, "r1", "Sicherste Route");
+  R.custom = false;
+  const routes = [R];
+  await app.snapLandmarks(routes, G, t.P);
+  const names = routes[0].pts.map(p => p.name).filter(Boolean);
+  assert.ok(names.includes("Knickstadt"), names.join(", "));
+  assert.ok(routes[0].cat <= R.cat && routes[0].confLen <= R.confLen + 0.05);
+});
+
+test("Ein Ort wird nicht übernommen, wenn die Route dadurch unsicherer würde.", async () => {
+  const app = loadApp();
+  // Berg genau beim Ort: Gelaende hoch um lon 13.68 sued der Linie
+  const t = setup(app, () => 1000);
+  const G = t.G;
+  const base = app.elevFt;
+  app.elevFt = (lat, lon) => (Math.abs(lon - 13.68) < 0.05 && lat < 47.13 ? 11000 : base(lat, lon));
+  G.edges.forEach(e => app.edgeStatic(G, e, []));
+  G.A.country = "AT"; G.B.country = "AT";
+  app.loadCountry = async () => [];
+  G.PLACES = [{ name: "Bergdorf", lat: 47.11, lon: 13.68, kind: "town", pop: 8000 }];
+  const R = app.routeFromPoints(G, t.P, [{ ...t.A, name: "TSTA" }, { lat: 47.16, lon: 13.7 }, { ...t.B, name: "TSTB" }], null, "r1", "Sicherste Route");
+  R.custom = false;
+  const routes = [R];
+  await app.snapLandmarks(routes, G, t.P);
+  const names = routes[0].pts.map(p => p.name).filter(Boolean);
+  assert.ok(!names.includes("Bergdorf"), names.join(", "));
+});
+
+test("Ein Grenzort wird nicht übernommen, wenn die Route darüber weniger sicher wäre; der Übertritt bleibt auf der Linie.", async () => {
+  const app = loadApp();
+  const { R, t } = route(app, []);
+  const G = t.G, base = app.elevFt;
+  app.elevFt = (lat, lon) => (Math.abs(lon - 13.72) < 0.05 && lat < 46.98 ? 11000 : base(lat, lon));
+  G.edges.forEach(e => app.edgeStatic(G, e, []));
+  const R0 = app.evalRoute(G, t.P, 10, app.directPath(G), "direct", "Direkt");
+  G.BORDERS = [{ l: "SI", r: "AT", c: [[13.7, 47.5], [13.7, 46.5]], bb: [13.7, 46.5, 13.7, 47.5] }];
+  G.A.country = "AT"; G.B.country = "AT";
+  G.PLACES = [{ name: "Bergstadt", lat: 46.94, lon: 13.72, kind: "town", pop: 9000 }];
+  app.loadCountry = async () => [];
+  app.CTRY.SI = app.CTRY.SI || [[13.3, 45.4, 16.6, 46.9]];
+  R0.pts = [{ lat: G.A.lat, lon: G.A.lon }, { lat: G.B.lat, lon: G.B.lon }];
+  const routes = [R0];
+  await app.adjustRoutes(routes, G, t.P);
+  const names = routes[0].pts.map(p => p.name).filter(Boolean);
+  assert.ok(!names.includes("Bergstadt"), names.join(", "));
+  assert.ok(names.some(n => /^GRENZE AT\/SI/.test(n)), names.join(", "));
+  assert.ok(routes[0].rpNotes.includes("townworse:Bergstadt"), routes[0].rpNotes.join(","));
+  assert.ok(routes[0].cat <= R0.cat);
+});

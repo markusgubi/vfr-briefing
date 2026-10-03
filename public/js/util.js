@@ -11,7 +11,7 @@ var MODELS = [
 ];
 var PL = [950, 925, 850, 800, 700];
 var HOURLY = ["temperature_2m", "dew_point_2m", "cloud_cover_low", "cloud_cover_mid", "visibility",
-  "precipitation", "cape", "wind_gusts_10m", "wind_speed_850hPa", "wind_direction_850hPa"]
+  "precipitation", "cape", "wind_gusts_10m", "wind_speed_850hPa", "wind_direction_850hPa", "wind_speed_10m", "wind_direction_10m"]
   .concat(PL.map(function (p) { return "relative_humidity_" + p + "hPa"; }))
   .concat(PL.map(function (p) { return "geopotential_height_" + p + "hPa"; }));
 var CAT_TXT = ["GUT", "EINGESCHR.", "KRITISCH"], CAT_CLS = ["ok", "warn", "bad"], CAT_COL = ["#1F7A4C", "#D08A0C", "#C0392B"];
@@ -20,6 +20,7 @@ var S = { from: null, to: null }, RES = null, STN = [];
 function $(id) { return document.getElementById(id); }
 function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 function p2(n) { return String(n).padStart(2, "0"); }
+function p3(n) { return String(n).padStart(3, "0"); }
 function fmtH(min) { var m = Math.round(min); m = ((m % 1440) + 1440) % 1440; return p2(Math.floor(m / 60)) + ":" + p2(m % 60); }
 function deg3(x) { var v = Math.round(((x % 360) + 360) % 360); if (v === 0) v = 360; return String(v).padStart(3, "0"); }
 function fmtFt(x) { return isFinite(x) ? String(Math.round(x / 50) * 50) : "\u2013"; }

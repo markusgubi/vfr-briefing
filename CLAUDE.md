@@ -157,14 +157,25 @@ Offen:
    Nutzers (StartType/ToType="Unknown", Time als Windows-FILETIME UTC, LevelChange immer "B"). Vorher
    ignorierte SkyDemon die Höhen (zeigte "MSL"). Noch vom Nutzer in SkyDemon zu bestätigen
    (Test: tests/unit/export.test.mjs).
-- Grenzen & Orte (seit 9.3): Grenzübertritt auch erkannt, wenn das Nachbarland keine FIR in openAIP hat (Verlassen
-  der letzten FIR Richtung Auslandsziel, c.noFir). Übertrittspunkt: (1) VFR-Meldepunkt ≤ 15 NM, (2) markanter Ort
-  ≤ 6 NM (borderTown, Größe stark gewichtet: 10× größer = bis 2 NM weiter), (3) Grenzpunkt mit nächstem Ortsnamen.
-  Orte aus OpenStreetMap/Overpass (loadPlaces: city/town + village ≥ 1000 Einw., 30 Tage Cache, 12 s Zeitlimit,
-  Ausfall = keine Orte). Wegpunkte bekommen den nächsten Ort ≤ 3 NM (w.town, Navlog "WP3 · Gmunden"), auf der
-  Karte werden Orte ≤ 3 NM neben der Route beschriftet (drawTowns, mind. 7 NM Abstand). Orte nur zur Benennung/
-  Navigation, nie für Sicherheitsentscheidungen. Overpass aus der Cloud-Umgebung nicht erreichbar, nur simuliert
-  getestet (tests/e2e/grenze.mjs, Mock-Orte in mock.mjs).
+- Grenzen & Orte (seit 9.4 statische Daten, Overpass/openAIP-FIR waren mit echten Daten unbrauchbar):
+  Staatsgrenzen aus public/data/grenzen.json (Natural Earth 10m boundary lines, gemeinfrei, ~1 km; {l,r,c},
+  Land links/rechts der Linienrichtung). borderCrossings schneidet das Profil mit den Linien; ohne Linien Rückfall
+  auf openAIP-FIR (inkl. c.noFir). Orte aus public/data/orte.json (GeoNames cities1000, CC BY 4.0, Bereich
+  lon 4–20,5 / lat 43–51,5, [name,lat,lon,cc,pop]). Übertrittspunkt: (1) VFR-Meldepunkt ≤ 15 NM, (2) markanter
+  Ort ≤ 6 NM (borderTown, 10× größer = bis 2 NM weiter), (3) Grenzpunkt mit nächstem Ortsnamen. Wegpunkte bekommen
+  den nächsten Ort ≤ 3 NM (w.town), auf der Karte Orte ≤ 3 NM neben der Route (drawTowns, mind. 7 NM Abstand).
+  Quellenangabe GeoNames/Natural Earth in "Datenquellen" und Kartenzeile nicht entfernen. Test: tests/e2e/grenze.mjs.
+- Wendepunkte über Landmarken (seit 9.4, snapLandmarks nach adjustRoutes): Knickpunkte (Douglas-Peucker 1 NM)
+  werden auf Meldepunkt oder Ort ≥ 2000 Einw. ≤ 3 NM gelegt (Meldepunkt bevorzugt, größere Orte bevorzugt).
+  Übernommen NUR, wenn die neu bewertete Route nicht unsicherer ist (snapOk: Einstufung und Konfliktlänge nicht
+  schlechter, Sicherheitswert höchstens 3 schlechter, höchstens 3 % + 1 NM länger, Luftraum abgedeckt).
+  Punkte mit p.lm sind beim Bearbeiten ziehbar und auf der Karte beschriftet.
+- Wind bei Start/Landung (seit 9.4, aptWind/pickRunway in route.js): METAR ≤ 90 min am Platz (≤ 5 NM), sonst TAF,
+  sonst Modelle (10-m-Wind, zweitschlechtester Wert). Bewertet wird der schlechtere aus amtlich und Modell. Piste
+  = größter Gegenwind (Gleichstand: längere Piste; landingOnly/takeOffOnly beachtet), Pisten aus openAIP
+  (Cache-Schlüssel oaip3). Seitenwind über "Max. Seitenwind" (xwMax, Standard 15 kt) → KRITISCH; Seitenwind in
+  Böen darüber oder Rückenwind > 5 kt auf allen Pisten → EINGESCHR. Ohne Pistendaten nur Windangabe.
+  Test: tests/unit/wind.test.mjs.
 - Meldepunkte/Frequenzen/FIR-Grenzen nutzen openAIP-Felder (reporting-points: compulsory, airports;
   airports: frequencies; airspaces Typ 10 = FIR, Land aus "country"). Mit echten Daten prüfen (LOLW → LJPZ).
 - Beschriftungen in Grafiken dürfen sich nie überschneiden (lbl()-Kollisionsprüfung im Profil nutzen).
@@ -177,7 +188,7 @@ Offen:
   `node tests/e2e/grenze.mjs` (AT→IT ohne Meldepunkt/FIR), `rueckflug.mjs`, `hoehe.mjs`, `gafor.mjs`, `wetterbild.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.3, nächste 9.4).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.4, nächste 9.5).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.

@@ -19,7 +19,7 @@ var EditCtl = L.Control.extend({
 var editCtl = new EditCtl().addTo(map);
 L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
   maxZoom: 15, subdomains: "abc",
-  attribution: "Karte: &copy; OpenStreetMap, SRTM | Stil: &copy; OpenTopoMap (CC-BY-SA) | Luftraum: openAIP"
+  attribution: "Karte: &copy; OpenStreetMap, SRTM | Stil: &copy; OpenTopoMap (CC-BY-SA) | Luftraum: openAIP | Orte: GeoNames"
 }).addTo(map);
 /* Wetterbild als Ueberlagerung (nur Anzeige, fliesst NICHT in die Bewertung ein):
    Radar von RainViewer (letztes Bild), Satellit Infrarot 10,8 um von EUMETSAT (Meteosat, WMS). */
@@ -169,7 +169,7 @@ function setupAc(inpId, boxId, key) {
   inp.addEventListener("blur", function () { setTimeout(function () { box.style.display = "none"; }, 150); });
   inp.addEventListener("keydown", function (e) { if (e.key === "Enter" && S.from && S.to) plan(); });
 }
-var KEEP = ["tas", "maxAlt", "terrClr", "cloudClr", "prefAgl", "climb", "desc", "retStay"];
+var KEEP = ["tas", "maxAlt", "terrClr", "cloudClr", "prefAgl", "climb", "desc", "retStay", "xwMax"];
 function saveSettings() {
   try {
     var o = { v74: true, from: S.from, to: S.to, avoidClr: $("avoidClr").checked, prefGafor: $("prefGafor").checked, retOn: $("retOn").checked, asFilter: $("asFilter").value };
@@ -205,7 +205,7 @@ function readP() {
     prefAgl: clampNum($("prefAgl").value, 1000, 5000, 2000), climb: clampNum($("climb").value, 200, 2000, 500),
     desc: clampNum($("desc").value, 200, 2000, 500), avoidClr: $("avoidClr").checked,
     preferGafor: !!GAFOR && $("prefGafor").checked,
-    ret: $("retOn").checked, stay: clampNum($("retStay").value, 0, 600, 60)
+    ret: $("retOn").checked, stay: clampNum($("retStay").value, 0, 600, 60), xwMax: clampNum($("xwMax").value, 5, 35, 15)
   };
   P.prefAgl = Math.max(P.prefAgl, P.terrClr);
   return P;
@@ -284,11 +284,11 @@ async function plan() {
       return fetchModel(mi, G.wpts, P.date).then(function (x) { progSet("wx" + mi, 1, "ok"); return x; }, function (er) { progSet("wx" + mi, 1, "err", er.message); return null; });
     }));
     var pSun = Promise.resolve(sunFor(A, B, P.date));
-    /* Orte (OpenStreetMap) fuer Ortsnamen und Grenzpunkte: optional, hoechstens 12 s warten */
+    /* Orte und Staatsgrenzen (feste Dateien): fuer Ortsnamen, Grenzuebertritte und Wendepunkte */
     progSet("plc", 0.1);
-    var pPlaces = Promise.race([loadPlaces(bw, bs, be, bn), new Promise(function (r) { setTimeout(function () { r(null); }, 12000); })])
-      .then(function (l) { progSet("plc", 1, l ? "ok" : "err", l ? l.length + " Orte" : "nicht erreichbar"); return l || []; },
-        function () { progSet("plc", 1, "err", "nicht erreichbar"); return []; });
+    var pPlaces = Promise.all([loadPlaces(bw, bs, be, bn), loadBorders(bw - 0.5, bs - 0.5, be + 0.5, bn + 0.5)])
+      .then(function (r) { progSet("plc", 1, "ok", r[0].length + " Orte"); return r; },
+        function () { progSet("plc", 1, "err", "nicht verf\u00fcgbar"); return [[], []]; });
     await pDem;
     G.depElev = A.elevFt != null ? A.elevFt : (elevFt(A.lat, A.lon) || 0);
     G.destElev = B.elevFt != null ? B.elevFt : (elevFt(B.lat, B.lon) || 0);
@@ -313,8 +313,9 @@ async function plan() {
     progSet("route", 0.2); await yieldUi();
     RES = { G: G, P: P, apts: got[1].list || [], routes: [], hl: null };
     RES.routes = computeRoutes(G, P);
-    G.PLACES = await pPlaces;
+    var pb = await pPlaces; G.PLACES = pb[0]; G.BORDERS = pb[1];
     await adjustRoutes(RES.routes, G, P);
+    await snapLandmarks(RES.routes, G, P);
     /* Eigene Route bleibt bei Neuberechnung (z. B. andere Abflugzeit) erhalten, wenn Start/Ziel gleich sind */
     var keepSel = 0;
     if (EDIT.pts && EDIT.dirty && EDIT.A && EDIT.B && EDIT.A.lat === A.lat && EDIT.A.lon === A.lon && EDIT.B.lat === B.lat && EDIT.B.lon === B.lon) {
@@ -420,6 +421,8 @@ function render(sel) {
     (R.gaforPct != null ? "<span>Entlang GAFOR-Strecken</span><b>" + R.gaforPct + " %</b>" : "") +
     (G.sun ? "<span>Sonne Start / Ziel</span><b>\u2191 " + fmtH(G.sun.depRise * 60) + " \u00b7 \u2193 " + fmtH(G.sun.destSet * 60) + "</b>" +
       "<span>BCMT Start / ECET Ziel</span><b>" + fmtH(G.sun.depBcmt * 60) + " \u00b7 " + fmtH(G.sun.destEcet * 60) + "</b>" : "") +
+    (R.landWind ? "<span>Landung " + esc(G.B.icao || "") + "</span><b>" + windShort(R.landWind) + "</b>" : "") +
+    (R.depWind ? "<span>Start " + esc(G.A.icao || "") + "</span><b>" + windShort(R.depWind) + "</b>" : "") +
     "</div></details>";
   h += "<details class='card'><summary><h3>Start- &amp; Zielplatz (METAR/TAF)</h3></summary>";
   R.fields.forEach(function (f, k) {
@@ -522,6 +525,14 @@ function retHtml() {
   return "<div class='retbox " + cls + "'>" + h + "<small>Eigene Routensuche " + esc(B) + " \u2192 " + esc(A) + " mit denselben Wetter-, Gel\u00e4nde- und Luftraumdaten, ab Ankunft + " + X.stay +
     " min Aufenthalt alle 30 min (Grenze auf 10 min genau). ECET " + esc(A) + " " + ecet + ". Zum Ansehen der R\u00fcckroute Start/Ziel tauschen und neu suchen.</small></div>";
 }
+/* Kurzform fuer die Uebersicht: "Piste 26 · GW 11 · SW 5 R (G 8)" */
+function windShort(w) {
+  var wt = (w.wd === "VRB" ? "VRB" : p3(Math.round(w.wd / 10) * 10 % 360 || 360)) + "/" + Math.round(w.ws) + (w.gust && w.gust > w.ws + 2 ? "G" + Math.round(w.gust) : "") + " kt";
+  if (!w.rwy) return wt;
+  var col = w.level === 2 ? "#C0392B" : w.level === 1 ? "#C1810B" : "inherit";
+  return "<span style='color:" + col + "'>" + wt + " \u00b7 Piste " + esc(w.rwy.d) + " \u00b7 " + (w.head >= 0 ? "GW " + Math.round(w.head) : "RW " + Math.round(-w.head)) +
+    " \u00b7 SW " + Math.round(w.cross) + (w.side === "von rechts" ? " R" : w.side === "von links" ? " L" : "") + (w.crossG > w.cross + 1 ? " (B\u00f6en " + Math.round(w.crossG) + ")" : "") + "</span>";
+}
 function verdictHtml(R) {
   return "<div class='verdict " + CAT_CLS[R.cat] + "'><div class='big'>" + verdictText(R.cat) + "</div><div class='meta'>" +
     esc(R.name) + " \u00b7 Sicherheitswert " + R.score + "/100 \u00b7 Vertrauen " + (R.conf ? R.conf.v : "\u2013") + " %" +
@@ -571,7 +582,7 @@ function onOutClick(e) {
   if (e.target.id === "bAltAuto") { EDIT.ua = {}; EDIT.dirty = true; render(evalUser()); return; }
   if (e.target.id === "bUserDel") { discardUser(); return; }
 }
-/* Orte entlang der Route beschriften (OpenStreetMap): hoechstens 3 NM neben der Linie, groessere zuerst,
+/* Orte entlang der Route beschriften (GeoNames): hoechstens 3 NM neben der Linie, groessere zuerst,
    mindestens 7 NM Abstand entlang der Route - zum Navigieren "von Ort zu Ort" und fuer Positionsmeldungen */
 function drawTowns(R) {
   var pl = RES.G.PLACES || []; if (!pl.length) return;
@@ -582,9 +593,11 @@ function drawTowns(R) {
     if (best && best.d <= 3 && best.x > 2 && best.x < R.D - 2) cand.push({ q: q, x: best.x });
   });
   cand.sort(function (a, b) { return b.q.pop - a.q.pop; });
-  var used = [];
+  /* Beschriftete Wegpunkte (Meldepunkt, Landmarke, Grenzort) haben schon ein Namensschild: dort keine Orte */
+  var used = [], lab = (R.wps || []).filter(function (w) { return w.rp || w.lm || (w.border && w.town); });
   cand.forEach(function (c) {
     if (used.some(function (u) { return Math.abs(u.x - c.x) < 7; })) return;
+    if (lab.some(function (w) { return Math.abs(w.x - c.x) < 4 || distNm(w, c.q) < 3; })) return;
     used.push(c);
     L.marker([c.q.lat, c.q.lon], { interactive: false, keyboard: false,
       icon: L.divIcon({ className: "town", html: "<i></i>" + esc(c.q.name), iconSize: null, iconAnchor: [4, 4] }) }).addTo(routeLayer);
@@ -601,15 +614,18 @@ function drawMap(sel) {
   drawRouteLines(R);
   drawEditMarkers(R);
   (R.crossings || []).forEach(function (c) {
+    /* Uebertritt ueber einen beschrifteten Wegpunkt (Meldepunkt/Ort): Faehnchen steht dort im Namensschild */
+    if ((R.wps || []).some(function (w) { return w.border && (w.rp || w.town) && w.border.from === c.fromC && w.border.to === c.toC && Math.abs(w.x - c.x) < 8; })) return;
     L.marker([c.lat, c.lon], { interactive: true, icon: L.divIcon({ className: "brd", html: "\u2691 " + esc(c.fromC) + "/" + esc(c.toC), iconSize: null, iconAnchor: [-6, 24] }) })
       .bindTooltip("Grenz\u00fcbertritt " + esc(c.fromC) + " \u2192 " + esc(c.toC) + " bei NM " + Math.round(c.x) + " (~" + fmtH(c.t) + ")").addTo(routeLayer);
   });
   drawTowns(R);
   R.wps.forEach(function (w, k) {
     if (k === 0 || k === R.wps.length - 1) return;
-    if ((w.rp || (w.border && w.town)) && !(EDIT.on && R.custom)) {
+    if ((w.rp || w.lm || (w.border && w.town)) && !(EDIT.on && R.custom)) {
       L.circleMarker([w.lat, w.lon], { radius: 6, color: "#fff", weight: 2, fillColor: "#1F5FA8", fillOpacity: 1, bubblingMouseEvents: false })
-        .bindTooltip(esc(w.name), { permanent: true, direction: "right", offset: [8, 0], className: "rptip" }).addTo(routeLayer);
+        .bindTooltip((w.border ? "\u2691 " : "") + esc(w.name) + (w.border ? " <small>" + esc(w.border.from) + "\u2192" + esc(w.border.to) + "</small>" : ""),
+          { permanent: true, direction: "right", offset: [8, 0], className: "rptip" }).addTo(routeLayer);
       return;
     }
     var q = sampleAt(R, w.x), r = R.rs[q.ri];
@@ -732,7 +748,10 @@ function profSvg(R) {
   RES.pv = { W: W, H: H, Lp: Lp, Rp: Rp, Tp: Tp, Bp: Bp, yMax: yMax, D: D, X: X, Y: Y, f2: f2 };
   var boxes = [];
   function lbl(x, y, txt, size, color, anchor, bold, offs) {
-    var w = String(txt).length * size * 0.57, h = size * 1.15;
+    /* Breite je Zeichen geschaetzt (Grossbuchstaben breiter, fett etwas breiter), damit nichts ueberlappt */
+    var w = 0, h = size * 1.15;
+    String(txt).split("").forEach(function (ch) { w += /[A-ZÄÖÜ]/.test(ch) ? 0.68 : /[0-9]/.test(ch) ? 0.58 : /[\s.,:'|·]/.test(ch) ? 0.3 : 0.53; });
+    w *= size * (bold ? 1.06 : 1);
     offs = offs || [0, -h, h, -2 * h, 2 * h];
     for (var k = 0; k < offs.length; k++) {
       var yy = y + offs[k], x0 = anchor === "end" ? x - w : anchor === "middle" ? x - w / 2 : x;
@@ -879,7 +898,7 @@ function startEdit() {
   /* Ziehbar sind nur markante Punkte: echte Richtungswechsel (> 0,75 NM Abweichung von der Geraden),
      Meldepunkte und Grenzuebertritte. Die Linie bleibt exakt gleich (uebrige Punkte = Formpunkte). */
   if (!base.custom) {
-    EDIT.pts.forEach(function (p, i) { if (i > 0 && i < EDIT.pts.length - 1) p.shape = !(p.rp || p.border); });
+    EDIT.pts.forEach(function (p, i) { if (i > 0 && i < EDIT.pts.length - 1) p.shape = !(p.rp || p.border || p.lm); });
     (function dp(i0, i1) {
       var md = 0, mi = -1;
       for (var i = i0 + 1; i < i1; i++) { var d = segDist(EDIT.pts[i], EDIT.pts[i0], EDIT.pts[i1]).d; if (d > md) { md = d; mi = i; } }

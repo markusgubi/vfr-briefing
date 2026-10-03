@@ -563,6 +563,15 @@ function evalRoute(G, P, depH, path, id, name, opt) {
     if (depH < bcmt) dawn = true; else if (G.sun.depRise != null && depH < G.sun.depRise) early = true;
   }
   if (night || dawn || arrMin > 1440) cat = 2; else if (dusk || early) cat = Math.max(cat, 1);
+  /* Wind bei Start und Landung: Seitenwind ueber der Grenze (Mittelwind) = KRITISCH, nur in Boeen oder
+     Rueckenwind > 5 kt auf der besten Piste = EINGESCHRAENKT */
+  var xwMax = P.xwMax || 15, depWind = aptWind(G, G.A, depH * 60, "dep"), landWind = aptWind(G, G.B, arrMin, "land"), windIssue = null;
+  [[landWind, "Landung", G.B], [depWind, "Start", G.A]].forEach(function (x) {
+    var w = x[0]; if (!w || !w.rwy) return;
+    var lv = w.evalCross > xwMax ? 2 : (w.evalCrossG > xwMax || w.evalTail > 5) ? 1 : 0;
+    w.level = lv;
+    if (lv) { cat = Math.max(cat, lv); if (!windIssue || lv > windIssue.lv) windIssue = { lv: lv, what: x[1], apt: x[2], w: w }; }
+  });
   var avgRisk = D ? rsum / D : 0, score = 100 - 45 * maxRisk - 15 * avgRisk;
   if (isFinite(minCloud) && minCloud < 2500) score -= Math.min(25, Math.max(0, (2500 - minCloud) / 2500 * 25));
   if (minTerr < 1500) score -= Math.min(15, Math.max(0, (1500 - minTerr) / 1500 * 15));
@@ -578,7 +587,8 @@ function evalRoute(G, P, depH, path, id, name, opt) {
     G: G, userAlt: opt.userAlt || null, D: D, samples: sm, circMin: circMin, spiralMin: 0, steep: steep, descRate: P.desc, tod: sm[tod] ? { x: sm[tod].x, p: p[tod], t: sm[tod].t } : null,
     depMin: depH * 60, arrMin: arrMin, ete: arrMin - depH * 60, maxAlt: Math.max.apply(null, p), cruiseMax: Math.max.apply(null, rs.map(function (r) { return r.alt; })),
     minTerr: minTerr, minTerrX: minTerrX, terrReserve: P.terrClr + 300, minCloud: minCloud, maxRisk: maxRisk, avgRisk: avgRisk, worstReason: worstReason, conflicts: conflicts,
-    entries: entries, clr: clr, cat: cat, score: Math.max(0, Math.round(score)), night: night, dusk: dusk, dawn: dawn, early: early };
+    entries: entries, clr: clr, cat: cat, score: Math.max(0, Math.round(score)), night: night, dusk: dusk, dawn: dawn, early: early,
+    depWind: depWind, landWind: landWind, windIssue: windIssue, xwMax: xwMax };
 }
 function sampleAt(R, x) {
   var sm = R.samples;
@@ -730,6 +740,8 @@ function issueOf(R) {
   }
   var f = R.entries.filter(function (x) { return x.inside && x.as.kind === "forbidden"; })[0];
   if (f) return "Ber\u00fchrung von " + f.as.name + " (verboten)";
+  if (R.windIssue && R.windIssue.lv === 2) return "Seitenwind beim " + (R.windIssue.what === "Start" ? "Start" : "Landen") + " in " + (R.windIssue.apt.icao || R.windIssue.apt.name) +
+    " ~" + Math.round(R.windIssue.w.evalCross) + " kt (Grenze " + R.xwMax + " kt)";
   if (R.night) return "Ankunft nach ECET (Nacht)";
   if (R.dawn) return "Abflug vor BCMT (Nacht)";
   if (R.maxRisk >= 0.35 && R.worstReason) return R.worstReason.t + " bei NM " + Math.round(R.worstReason.x);
@@ -741,6 +753,8 @@ function issueOf(R) {
   if (R.minTerr < R.terrReserve) return "Gel\u00e4ndeabstand nur ~" + Math.floor(R.minTerr / 50) * 50 + " ft bei NM " + Math.round(R.minTerrX) + " (weniger als 300 ft Reserve)";
   var stp = (R.steep || []).filter(function (st) { return st.fpm > 0; }).sort(function (a, b) { return b.fpm - a.fpm; })[0];
   if (stp && stp.fpm > R.descRate * 1.5) return "steiler Sinkflug zum Ziel (~" + Math.round(stp.fpm / 50) * 50 + " ft/min) bei NM " + Math.round(stp.x0);
+  if (R.windIssue) { var wi = R.windIssue; return (wi.w.evalCrossG > R.xwMax ? "Seitenwind in B\u00f6en ~" + Math.round(wi.w.evalCrossG) + " kt" : "R\u00fcckenwind ~" + Math.round(wi.w.evalTail) + " kt") +
+    " beim " + (wi.what === "Start" ? "Start" : "Landen") + " in " + (wi.apt.icao || wi.apt.name); }
   if (R.circMin > 1) return "unterwegs kreisend steigen n\u00f6tig (~" + Math.round(R.circMin) + " min)";
   return null;
 }
@@ -838,5 +852,66 @@ async function returnPlan(G, P, R, stayMin, onStep) {
   for (var k = i; k <= j; k++) if (steps[k].cat === 1 && !steps[k].dusk) { out.worseFrom = steps[k].t; out.worseIssue = steps[k].issue; break; }
   /* spaetester Abflug mit Tageslichtreserve (Landung mind. 30 min vor Sonnenuntergang) */
   for (k = j; k >= i; k--) if (!steps[k].dusk) { out.latestDay = steps[k].t; out.latestDayArr = steps[k].arr; break; }
+  return out;
+}
+
+/* ==================== 11c. Wind am Platz, Pistenwahl, Seitenwind ====================
+   Wind zur Start-/Landezeit: amtlich (METAR, wenn Zeitpunkt nahe jetzt; sonst TAF-Grundprognose zur Zeit) und
+   Bodenwind (10 m) der Wettermodelle. Vorsichtsprinzip: bewertet wird der schlechtere Wert aus amtlicher Meldung
+   und zweitschlechtestem Modell. Piste = die mit dem meisten Gegenwind (Richtung rechtweisend aus openAIP). */
+function windOn(wd, ws, hdg) {
+  if (wd === "VRB" || wd == null || !isFinite(+wd)) return { head: 0, cross: ws, vrb: true };   /* umlaufend: schlimmster Fall */
+  var a = (+wd - hdg) * RAD;
+  return { head: ws * Math.cos(a), cross: ws * Math.sin(a) };   /* cross > 0 = Wind von rechts */
+}
+function pickRunway(rwys, w, mode) {
+  var best = null;
+  (rwys || []).forEach(function (r) {
+    if (mode === "land" && r.toOnly) return;
+    if (mode === "dep" && r.landOnly) return;
+    var c = windOn(w.wd, w.ws, r.hdg);
+    if (!best || c.head > best.c.head + 0.5 || (Math.abs(c.head - best.c.head) <= 0.5 && (r.lenM || 0) > (best.r.lenM || 0))) best = { r: r, c: c };
+  });
+  return best;
+}
+function aptWind(G, apt, minLocal, mode) {
+  if (!apt) return null;
+  var key = (apt.icao || apt.lat) + "|" + mode + "|" + Math.round(minLocal / 10), cache = G.windCache || (G.windCache = {});
+  if (cache[key] !== undefined) return cache[key];
+  var h = minLocal / 60, off = null, models = [];
+  if (typeof STN !== "undefined" && STN.length) {
+    var ns = nearestStn(apt, 5);
+    if (ns) {
+      var s = ns.s, t = (G.t0 || 0) + minLocal * 60, now = Date.now() / 1000;
+      if (s.metar && s.metar.wspd != null && Math.abs(t - now) <= 5400 && now - s.metar.t <= 5400) off = { wd: s.metar.wdir, ws: s.metar.wspd, gust: s.metar.gust || null, src: "METAR " + s.id };
+      else { var tf = tafAt(s.taf, t); if (tf && tf.hard && tf.hard.wspd != null) off = { wd: tf.hard.wdir, ws: tf.hard.wspd, gust: tf.hard.gust || null, src: "TAF " + s.id }; }
+    }
+  }
+  if (G.wx && G.wpts && G.wpts.length) {
+    var wi = 0, bd = Infinity;
+    G.wpts.forEach(function (w, k) { var d = distNm(w, apt); if (d < bd) { bd = d; wi = k; } });
+    G.wx.forEach(function (md) { if (!md) return; var r = recAtH(md[wi], h); if (r && r.ws10 != null && r.wd10 != null) models.push({ wd: r.wd10, ws: r.ws10, gust: r.gust || null }); });
+  }
+  if (!off && !models.length) { cache[key] = null; return null; }
+  /* Grundlage fuer die Pistenwahl: amtlich, sonst Vektormittel der Modelle */
+  var base = off;
+  if (!base) {
+    var vm = vecMean(models.map(function (m) { return { ws: m.ws, wd: m.wd }; }));
+    var gs = models.map(function (m) { return m.gust || 0; }).sort(function (a, b) { return b - a; });
+    base = { wd: Math.round(vm.wd), ws: vm.ws, gust: gs[Math.min(1, gs.length - 1)] || null, src: models.length + " Modelle (10 m)" };
+  }
+  var pr = pickRunway(apt.rwy, base, mode), out = { wd: base.wd, ws: base.ws, gust: base.gust, src: base.src, rwy: pr ? pr.r : null, n: (apt.rwy || []).length };
+  if (pr) {
+    function comp(w) { var c = windOn(w.wd, w.ws, pr.r.hdg), g = w.gust && w.gust > w.ws ? windOn(w.wd, w.gust, pr.r.hdg) : c; return { cross: Math.abs(c.cross), crossG: Math.abs(g.cross), tail: Math.max(0, -c.head) }; }
+    var ms = models.map(comp);
+    function k2(f) { var a = ms.map(f).sort(function (x, y) { return y - x; }); return a.length ? a[Math.min(1, a.length - 1)] : 0; }   /* zweitschlechtestes Modell */
+    var oc = off ? comp(off) : { cross: 0, crossG: 0, tail: 0 };
+    var bc = windOn(base.wd, base.ws, pr.r.hdg), bg = base.gust && base.gust > base.ws ? windOn(base.wd, base.gust, pr.r.hdg) : bc;
+    out.head = bc.head; out.cross = Math.abs(bc.cross); out.crossG = Math.abs(bg.cross); out.side = bc.vrb ? "umlaufend" : bc.cross >= 0 ? "von rechts" : "von links";
+    out.evalCross = Math.max(oc.cross, k2(function (x) { return x.cross; }));
+    out.evalCrossG = Math.max(oc.crossG, k2(function (x) { return x.crossG; }));
+    out.evalTail = Math.max(oc.tail, k2(function (x) { return x.tail; }));
+  }
+  cache[key] = out;
   return out;
 }

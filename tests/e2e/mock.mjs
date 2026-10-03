@@ -69,10 +69,16 @@ const REPORTING = {
   ]
 };
 
+// Pisten (frei erfunden bzw. vereinfacht, nur fuer Tests); trueHeading wie bei openAIP
+const RWY = {
+  LOLW: [["09", 89], ["27", 269]], LOWZ: [["08", 81], ["26", 261]], LIPV: [["05", 52], ["23", 232]],
+  LOWS: [["15", 155], ["33", 335]], LOWL: [["08", 84], ["26", 264]], LJPZ: [["15", 152], ["33", 332]]
+};
 function aptItem(a, c) {
   return { _id: "apt-" + a.icaoCode, icaoCode: a.icaoCode, name: a.name, country: c, type: a.type,
     geometry: { type: "Point", coordinates: [a.lon, a.lat] }, elevation: { value: a.elev / 3.28084, unit: 0 },
-    frequencies: FREQ[a.icaoCode] || [] };
+    frequencies: FREQ[a.icaoCode] || [],
+    runways: (RWY[a.icaoCode] || []).map(([d, h]) => ({ designator: d, trueHeading: h, operations: 0, dimension: { length: { value: 1000, unit: 0 } } })) };
 }
 function rpItem(r) {
   return { _id: r._id, name: r.name, compulsory: r.compulsory, country: r.country, airports: r.airports,
@@ -110,7 +116,7 @@ export function openmeteo(url, scenario) {
     const gh = { 950: 540, 925: 760, 850: 1480, 800: 1950, 700: 3010 };
     const val = {
       temperature_2m: 15, dew_point_2m: scenario === "tief" && alpine ? 12 : 5, cloud_cover_low: low, cloud_cover_mid: 10,
-      visibility: 30000, precipitation: 0, cape: 50, wind_gusts_10m: 12, wind_speed_850hPa: 15, wind_direction_850hPa: 270
+      visibility: 30000, precipitation: 0, cape: 50, wind_gusts_10m: 12, wind_speed_10m: 8, wind_direction_10m: 270, wind_speed_850hPa: 15, wind_direction_850hPa: 270
     };
     // Szenario "zeit": vor 11 Uhr wie "tief" (Wolken im Gebirge), ab 11 Uhr wie "gut"
     const badRh = { 950: 80, 925: 85, 850: 96, 800: 98, 700: 90 };
@@ -127,16 +133,4 @@ export function openmeteo(url, scenario) {
     return { latitude: lat, longitude: lon, elevation: elevM, hourly };
   });
   return out.length === 1 ? out[0] : out;
-}
-
-// Orte (OpenStreetMap/Overpass) - frei erfunden, nur fuer Tests
-export const PLACES = [
-  { name: "Teststadt Nord", lat: 47.95, lon: 13.80, place: "town", population: "12000" },
-  { name: "Talort", lat: 47.45, lon: 13.20, place: "town", population: "5000" },
-  { name: "Grenzort Test", lat: 46.57, lon: 13.10, place: "village", population: "6500" },
-  { name: "Weiler", lat: 46.60, lon: 13.25, place: "village", population: "1100" },
-  { name: "Suedstadt", lat: 46.00, lon: 12.80, place: "city", population: "80000" }
-];
-export function overpass() {
-  return { elements: PLACES.map((p, i) => ({ type: "node", id: i + 1, lat: p.lat, lon: p.lon, tags: { name: p.name, place: p.place, population: p.population } })) };
 }

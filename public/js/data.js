@@ -131,7 +131,10 @@ function normApt(a) {
   var e = a.elevation || {};
   return { id: a._id || null, icao: a.icaoCode || null, name: a.name || "?", country: a.country || "", type: a.type, freq: normFreq(a.frequencies),
     lat: a.geometry.coordinates[1], lon: a.geometry.coordinates[0],
-    elevFt: typeof e.value === "number" ? Math.round(e.unit === 1 ? e.value : e.value * M2FT) : null };
+    elevFt: typeof e.value === "number" ? Math.round(e.unit === 1 ? e.value : e.value * M2FT) : null,
+    /* Pisten (Richtung rechtweisend); gesperrte (operations 2) weglassen */
+    rwy: (a.runways || []).filter(function (r) { return r && typeof r.trueHeading === "number" && r.operations !== 2; })
+      .map(function (r) { return { d: String(r.designator || ""), hdg: r.trueHeading, tmp: r.operations === 1, lenM: r.lenM || null, landOnly: !!r.landingOnly, toOnly: !!r.takeOffOnly }; }) };
 }
 var AIRDB = {}, APTDB = {}, RPDB = {}, LOADING = {};
 var OAIP_PATH = { asp: "airspaces", apt: "airports", rp: "reporting-points" }, NORM = { asp: normAsp, apt: normApt, rp: normRp };
@@ -171,24 +174,27 @@ async function cachePut(url, data) {
     await c.put(url, new Response(JSON.stringify(data), { headers: { "Content-Type": "application/json", "x-t": String(Date.now()) } }));
   } catch (e) {}
 }
-/* Orte (Staedte, Orte ab 1000 Einwohnern) aus OpenStreetMap (Overpass) - fuer Ortsnamen an Wegpunkten, auf der
-   Karte und als markante Grenzuebertrittspunkte. Nur Anzeige/Benennung, nie fuer Sicherheitsentscheidungen.
-   Fehler = keine Orte (Planung laeuft weiter). 30 Tage Cache je 0,5-Grad-Raster. */
-var OVERPASS = "https://overpass-api.de/api/interpreter";
+/* Orte ab 1000 Einwohnern (GeoNames cities1000, CC BY 4.0) und Staatsgrenzen (Natural Earth 1:10m, gemeinfrei)
+   als feste Dateien in public/data (Mitteleuropa) - kein externer Dienst noetig. Orte nur fuer Benennung/Navigation
+   und Grenzuebertrittspunkte, nie fuer Sicherheitsentscheidungen. */
+var PLACES_ALL = null, BORDERS_ALL = null;
 async function loadPlaces(w, s, e, n) {
-  var r = function (v, up) { return (up ? Math.ceil(v * 2) : Math.floor(v * 2)) / 2; };
-  w = r(w); s = r(s); e = r(e, true); n = r(n, true);
-  var key = "https://cache.local/osm/places/" + [s, w, n, e].join(",");
-  var hit = await cacheGet(key, 30 * 86400000);
-  if (hit) return hit;
-  var bb = "(" + s + "," + w + "," + n + "," + e + ")";
-  var q = "[out:json][timeout:25];(node[\"place\"~\"^(city|town)$\"]" + bb + ";node[\"place\"=\"village\"][\"population\"~\"^[0-9]{4,}$\"]" + bb + ";);out qt;";
-  var j = await fetchJSON(OVERPASS + "?data=" + encodeURIComponent(q), 2);
-  var out = (j.elements || []).filter(function (x) { return x.tags && x.tags.name; }).map(function (x) {
-    return { name: x.tags["name:de"] || x.tags.name, lat: x.lat, lon: x.lon, kind: x.tags.place, pop: +(x.tags.population || 0) || (x.tags.place === "city" ? 100000 : x.tags.place === "town" ? 10000 : 1000) };
-  });
-  await cachePut(key, out);
-  return out;
+  if (!PLACES_ALL) {
+    var j = await fetchJSON("data/orte.json", 2);
+    PLACES_ALL = j.p.map(function (a) { return { name: a[0], lat: a[1], lon: a[2], cc: a[3], pop: a[4], kind: a[4] >= 100000 ? "city" : a[4] >= 10000 ? "town" : "village" }; });
+  }
+  return PLACES_ALL.filter(function (q) { return q.lon >= w && q.lon <= e && q.lat >= s && q.lat <= n; });
+}
+async function loadBorders(w, s, e, n) {
+  if (!BORDERS_ALL) {
+    var j = await fetchJSON("data/grenzen.json", 2);
+    BORDERS_ALL = j.linien.map(function (l) {
+      var bb = [180, 90, -180, -90];
+      l.c.forEach(function (c) { bb[0] = Math.min(bb[0], c[0]); bb[1] = Math.min(bb[1], c[1]); bb[2] = Math.max(bb[2], c[0]); bb[3] = Math.max(bb[3], c[1]); });
+      return { l: l.l, r: l.r, c: l.c, bb: bb };
+    });
+  }
+  return BORDERS_ALL.filter(function (l) { return bbOverlap([w, s, e, n], l.bb); });
 }
 /* naechster Ort zu einem Punkt (hoechstens maxNm), bei Gleichstand der groessere */
 function nearestPlace(places, p, maxNm) {
@@ -208,7 +214,9 @@ function normRp(a) {
     airports: (Array.isArray(a.airports) ? a.airports : []).map(function (x) { return typeof x === "string" ? x : x && (x._id || x.id); }).filter(Boolean) };
 }
 function slim(x, t) {
-  if (t === "apt") return { _id: x._id, icaoCode: x.icaoCode, name: x.name, country: x.country, type: x.type, geometry: x.geometry, elevation: x.elevation, frequencies: x.frequencies };
+  if (t === "apt") return { _id: x._id, icaoCode: x.icaoCode, name: x.name, country: x.country, type: x.type, geometry: x.geometry, elevation: x.elevation, frequencies: x.frequencies,
+    runways: (x.runways || []).map(function (r) { var l = r.dimension && r.dimension.length; return { designator: r.designator, trueHeading: r.trueHeading, operations: r.operations,
+      landingOnly: r.landingOnly, takeOffOnly: r.takeOffOnly, lenM: l && typeof l.value === "number" ? (l.unit === 1 ? l.value / M2FT : l.value) : null }; }) };
   if (t === "rp") return { _id: x._id, name: x.name, compulsory: x.compulsory, country: x.country, geometry: x.geometry, airports: x.airports };
   return { _id: x._id, name: x.name, type: x.type, icaoClass: x.icaoClass, lowerLimit: x.lowerLimit, upperLimit: x.upperLimit,
     geometry: x.geometry, country: x.country, frequencies: x.frequencies, onDemand: x.onDemand, onRequest: x.onRequest, byNotam: x.byNotam };
@@ -216,7 +224,7 @@ function slim(x, t) {
 async function loadCountry(c, t) {
   var k = c + t;
   if (!LOADING[k]) LOADING[k] = (async function () {
-    var ck = "https://cache.local/oaip2/" + c + "/" + t;
+    var ck = "https://cache.local/oaip3/" + c + "/" + t;   /* oaip3: mit Pisten */
     var raw = await cacheGet(ck, 86400000);
     if (!raw) {
       raw = [];

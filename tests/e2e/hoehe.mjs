@@ -174,8 +174,9 @@ async function run(mob) {
       await page.waitForTimeout(900);
     }
   }
-  const labels = await page.evaluate(() => { const nsp = EDIT.pts.filter((p, i) => i > 0 && i < EDIT.pts.length - 1 && !p.shape).length;
-    const t = [...document.querySelectorAll("#profBody svg text")].map(e => e.textContent); return { nsp, ok: Array.from({ length: nsp }, (_, j) => String(j + 1)).filter(n => !t.includes(n)) }; });
+  /* Wie die Karte: Nummer, bei benannten Punkten (Meldepunkt, Ort) der Name */
+  const labels = await page.evaluate(() => { const nsp = EDIT.pts.filter((p, i) => i > 0 && i < EDIT.pts.length - 1 && !p.shape);
+    const t = [...document.querySelectorAll("#profBody svg text")].map(e => e.textContent); return { nsp: nsp.length, ok: nsp.map((p, j) => p.name || String(j + 1)).filter(n => !t.includes(n)) }; });
   ok(!labels.ok.length, `${tag} Profil zeigt alle Wegpunktnummern wie die Karte (fehlend: ${labels.ok.join(",")})`);
   await page.screenshot({ path: `${OUT}/hoehe-${tag}.png` });
   ok(!errors.length, `${tag} keine JS-Fehler ${JSON.stringify(errors)}`);

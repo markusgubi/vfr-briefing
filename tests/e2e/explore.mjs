@@ -99,7 +99,9 @@ for (const [from, to, sc, tm, mob] of CASES) {
   // Hoehen ziehen: erste Teilstrecke hoch, letzte runter, dann mittlere hoch
   if (mob) { await page.click("#mnav button[data-p='pProf']"); await page.waitForTimeout(300); }
   const legs = await page.evaluate(() => RES.routes[RES.sel].legX.map(l => ({ leg: l.leg, alt: l.alt })));
-  const plan = [[legs[0].leg, legs[0].alt + 2000], [legs[legs.length - 1].leg, Math.max(3000, legs[legs.length - 1].alt - 3000)]];
+  /* letzte Teilstrecke tiefer - liegt sie schon tief (nahe der Mindesthoehe), stattdessen hoeher */
+  const lz = legs[legs.length - 1];
+  const plan = [[legs[0].leg, legs[0].alt + 2000], [lz.leg, lz.alt >= 6000 ? lz.alt - 3000 : lz.alt + 1000]];
   if (legs.length > 2) plan.push([legs[1].leg, legs[1].alt + 1000]);
   for (const [leg, alt] of plan) {
     const p = await profPoint(page, leg, alt);
