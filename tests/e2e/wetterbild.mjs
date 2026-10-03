@@ -18,7 +18,8 @@ ok(st.on && /Radar \d\d:\d\d/.test(st.info) && tiles > 0, "Radar-Ebene sichtbar:
 const irPng = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAADJUlEQVR4nO3UMQHAMAzAsHW4wrkQNxg5LCHw5TMz30PWvXc7gUXvdgCwxwAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAg7Ae6zQXAb+hJ6AAAAABJRU5ErkJggg==", "base64");
 let satT = 0;
 await page.route("**/sat/ir/**", r => { satT++; return r.fulfill({ status: 200, contentType: "image/png", body: irPng }); });
-await page.route("**/sat/nat/**", r => { satT++; return r.fulfill({ status: 200, contentType: "image/png", body: png }); });
+const natPng = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAADK0lEQVR4nO3UQQFAUBQAQaQRQiYNFPpJtCLGO+xMgj3tft3nt5G1nnc6gUHHdAAwxwAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAgzAAg7Af2wwXAElVQDQAAAABJRU5ErkJggg==", "base64");   /* links gruenes Land, rechts weisse Wolke */
+await page.route("**/sat/nat/**", r => { satT++; return r.fulfill({ status: 200, contentType: "image/png", body: natPng }); });
 await page.selectOption("#wxLayer", "ir"); await page.waitForTimeout(1500);
 st = await page.evaluate(() => {
   const cv = [...document.querySelectorAll(".leaflet-tile-container canvas")].find(c => c.width === 256);
@@ -29,9 +30,15 @@ st = await page.evaluate(() => {
 ok(st.on && /Infrarot/.test(st.info) && satT > 0, "Satellit Wolken sichtbar: " + st.info + " (" + satT + " Kacheln)");
 ok(st.px && st.px[0] === 0 && st.px[1] > 180 && st.px[2] > 230, "wolkenfrei durchsichtig, Wolke weiss: " + JSON.stringify(st.px));
 await page.screenshot({ path: OUT + "/wetterbild.png" });
-await page.selectOption("#wxLayer", "nat"); await page.waitForTimeout(1200);
-st = await page.evaluate(() => ({ on: !!wxOverlay && map.hasLayer(wxOverlay), info: document.getElementById("wxInfo").textContent }));
+await page.selectOption("#wxLayer", "nat"); await page.waitForTimeout(1500);
+st = await page.evaluate(() => {
+  const cv = [...document.querySelectorAll(".leaflet-tile-container canvas")].find(c => c.width === 256);
+  let px = null;
+  if (cv) { const g = cv.getContext("2d"), a = g.getImageData(20, 128, 1, 1).data, b = g.getImageData(230, 128, 1, 1).data; px = [a[3], b[3], b[0]]; }
+  return { on: !!wxOverlay && map.hasLayer(wxOverlay), info: document.getElementById("wxInfo").textContent, px };
+});
 ok(st.on && /Echtfarben/.test(st.info), "Satellit Echtfarben sichtbar: " + st.info);
+ok(st.px && st.px[0] === 0 && st.px[1] > 180 && st.px[2] > 230, "Echtfarben: Land durchsichtig, Wolke weiss: " + JSON.stringify(st.px));
 // eigener Server erreicht EUMETSAT nicht -> Rohbild direkt von EUMETSAT
 await page.unroute("**/sat/ir/**");
 await page.route("**/sat/ir/**", r => r.fulfill({ status: 502, contentType: "application/json", body: "{}" }));

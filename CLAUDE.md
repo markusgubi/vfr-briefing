@@ -95,7 +95,8 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
   maxNativeZoom 7) oder Satellit EUMETSAT. Seit 9.7 über den Worker (/sat/{ir|nat}/z/x/y.png, 5 min Cache,
   /sat/caps prüft die Ebenen): "Wolken" = msg_fes:ir108, im Browser umgefärbt (Grauwert < IR_LO durchsichtig,
   > IR_HI weiß), Tag und Nacht; "Echtfarben" = msg_fes:rgb_naturalenhncd (nur bei Tag, Auswahl entfällt, wenn
-  EUMETSAT die Ebene nicht führt). Fällt /sat aus, Rückfall auf das Rohbild direkt von EUMETSAT. Aus der Cloud-
+  EUMETSAT die Ebene nicht führt), seit 9.8 ebenfalls nur Wolken (min(Grün, Blau) zwischen NAT_LO und NAT_HI),
+  weil das deckende Bild (3–5 km je Bildpunkt) beim Hineinzoomen die Karte verschwommen überdeckte. Fällt /sat aus, Rückfall auf das Rohbild direkt von EUMETSAT. Aus der Cloud-
   Umgebung nicht erreichbar, nur mit simulierten Quellen getestet (`node tests/e2e/wetterbild.mjs`).
 - Lange Strecken (seit 8.5): keine 250-NM-Grenze mehr, Hinweis "Lange Strecke" (Kraftstoff, Zwischenlandung
   entscheidet der Pilot). Gelände-Zoom adaptiv (demZoom: 10/9/8, DEM-Puffer 150/300/450 ft), Netz bis 70 Schritte,
@@ -204,7 +205,7 @@ Offen:
   `node tests/e2e/grenze.mjs` (AT→IT ohne Meldepunkt/FIR), `rueckflug.mjs`, `hoehe.mjs`, `gafor.mjs`, `wetterbild.mjs`, `tauschen.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.7, nächste 9.8).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.8, nächste 9.9).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.

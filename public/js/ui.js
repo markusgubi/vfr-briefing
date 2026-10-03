@@ -26,6 +26,10 @@ L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
    (aufbereitet: nur Wolken sichtbar) oder Echtfarben bei Tag. */
 var wxOverlay = null, wxTimer = null;
 var IR_LO = 105, IR_HI = 215;   /* Grauwert IR-Bild: darunter wolkenfrei (durchsichtig), darueber voll weiss */
+var NAT_LO = 95, NAT_HI = 185;  /* Echtfarben: kleinerer Wert aus Gruen/Blau - Land und Wasser darunter, Wolken darueber */
+function ramp(x, lo, hi) { return Math.max(0, Math.min(1, (x - lo) / (hi - lo))); }
+function cloudIr(l) { return ramp(l, IR_LO, IR_HI); }
+function cloudNat(r, g, b) { return ramp(Math.min(g, b), NAT_LO, NAT_HI); }
 /* Echtfarben nur anbieten, wenn EUMETSAT die Ebene gerade fuehrt */
 fetch("sat/caps").then(function (r) { return r.json(); }).then(function (c) {
   if (c && c.nat === false) { var o = document.querySelector("#wxLayer option[value='nat']"); if (o) o.remove(); }
@@ -50,10 +54,14 @@ async function setWxLayer(v) {
       watch(L.tileLayer(j.host + fr.path + "/256/{z}/{x}/{y}/2/1_1.png", { opacity: 0.6, maxNativeZoom: 7, maxZoom: 15, zIndex: 5,
         attribution: "Radar: <a href='https://www.rainviewer.com' target='_blank' rel='noopener'>RainViewer</a>" }));
       wxTimer = setTimeout(function () { if ($("wxLayer").value === "radar") setWxLayer("radar"); }, 10 * 60000);
-    } else if (v === "ir") {
-      /* Wolken aus Infrarot 10,8 um: kalt (Wolken) = weiss und deckend, warm (Boden) = durchsichtig.
-         Die Kacheln kommen ueber den eigenen Server (/sat), damit die Bildpunkte umgefaerbt werden duerfen. */
-      info = "Wolken aus Meteosat Infrarot (EUMETSAT), neuestes Bild; tiefe Wolken/Nebel kaum sichtbar";
+    } else if (v === "ir" || v === "nat") {
+      /* Nur die Wolken zeigen, alles andere durchsichtig: die Karte bleibt scharf (Meteosat hat ueber
+         Oesterreich nur ~3-5 km je Bildpunkt). IR 10,8 um: kalt = Wolke (Tag und Nacht, tiefe Wolken kaum).
+         Echtfarben (nur bei Tag): Wolken sind hell in Gruen und Blau (Land gruen/braun, Wasser dunkel) -
+         zeigt auch tiefe Wolken, Schnee sieht aber aus wie Wolke. Kacheln ueber den eigenen Server (/sat). */
+      var nat = v === "nat";
+      info = nat ? "Wolken aus Meteosat Echtfarben (EUMETSAT) \u2013 nur bei Tag, Schnee sieht wie Wolke aus"
+        : "Wolken aus Meteosat Infrarot (EUMETSAT), neuestes Bild; tiefe Wolken/Nebel kaum sichtbar";
       var okT = 0, errT = 0;
       var lay = new (L.GridLayer.extend({ createTile: function (c, done) {
         var cv = document.createElement("canvas"); cv.width = cv.height = 256;
@@ -63,7 +71,7 @@ async function setWxLayer(v) {
             var g = cv.getContext("2d"); g.drawImage(img, 0, 0);
             var d = g.getImageData(0, 0, 256, 256), a = d.data;
             for (var i = 0; i < a.length; i += 4) {
-              var l = a[i] * 0.3 + a[i + 1] * 0.59 + a[i + 2] * 0.11, f = Math.max(0, Math.min(1, (l - IR_LO) / (IR_HI - IR_LO)));
+              var f = nat ? cloudNat(a[i], a[i + 1], a[i + 2]) : cloudIr(a[i] * 0.3 + a[i + 1] * 0.59 + a[i + 2] * 0.11);
               var w = 205 + 50 * f;
               a[i] = w; a[i + 1] = w; a[i + 2] = Math.min(255, w + 8); a[i + 3] = Math.round(a[i + 3] * Math.pow(f, 0.8) * 0.92);
             }
@@ -71,11 +79,11 @@ async function setWxLayer(v) {
           } catch (e) { done(e, cv); }
         };
         img.onerror = function () { done(new Error("Kachel"), cv); };
-        img.src = "sat/ir/" + c.z + "/" + c.x + "/" + c.y + ".png";
+        img.src = "sat/" + v + "/" + c.z + "/" + c.x + "/" + c.y + ".png";
         return cv;
       } }))({ maxNativeZoom: 8, maxZoom: 15, zIndex: 5, attribution: "Satellit: &copy; EUMETSAT" });
       lay.on("tileerror", function () {
-        if (++errT === 4 && !okT && $("wxLayer").value === "ir") {   /* eigener Server erreicht EUMETSAT nicht: Rohbild direkt */
+        if (++errT === 4 && !okT && $("wxLayer").value === v) {   /* eigener Server erreicht EUMETSAT nicht: Rohbild direkt */
           map.removeLayer(lay);
           info = "Meteosat Infrarot direkt (EUMETSAT), ohne Aufbereitung";
           watch(L.tileLayer.wms("https://view.eumetsat.int/geoserver/ows", { layers: "msg_fes:ir108", format: "image/png", transparent: true,
@@ -84,11 +92,7 @@ async function setWxLayer(v) {
         }
       });
       lay.addTo(map); wxOverlay = lay;
-      wxTimer = setTimeout(function () { if ($("wxLayer").value === "ir") setWxLayer("ir"); }, 15 * 60000);
-    } else if (v === "nat") {
-      info = "Meteosat Echtfarben (EUMETSAT) \u2013 nur bei Tag, nachts dunkel";
-      watch(L.tileLayer("sat/nat/{z}/{x}/{y}.png", { maxNativeZoom: 8, maxZoom: 15, zIndex: 5, opacity: 0.95, attribution: "Satellit: &copy; EUMETSAT" }));
-      wxTimer = setTimeout(function () { if ($("wxLayer").value === "nat") setWxLayer("nat"); }, 15 * 60000);
+      wxTimer = setTimeout(function () { if ($("wxLayer").value === v) setWxLayer(v); }, 15 * 60000);
     }
     $("wxInfo").textContent = info + " \u2013 nur Orientierung, keine Bewertung.";
   } catch (e) { $("wxInfo").textContent = "Wetterbild nicht verf\u00fcgbar (" + e.message + ")."; }
