@@ -199,6 +199,15 @@ Offen:
   (b) FIR-Frequenz (openAIP); (c) nur die Stelle mit Namen (FIS_UNIT, z. B. "Wien Information"), ohne Zahl.
   Amtliche Quellen (Austro Control eAIP, openflightmaps) sind aus der Cloud-Umgebung gesperrt – eine eigene
   Frequenztabelle nur aus vom Nutzer gelieferten AIP-Auszügen. Test: tests/unit/frequenz.test.mjs, luftraum.mjs.
+- AIP-Austria-Auszug (seit 9.12, public/data/aip-lo.json, gebaut mit `python3 tools/aip_lo.py enr21.txt enr22.txt`
+  aus pdftotext -layout der vom Nutzer gelieferten PDFs LO_ENR_2_1 / LO_ENR_2_2): zuständige Stellen und
+  Betriebszeiten je TMA/CTA (ENR 2.1), ATS-Frequenzen (Wien Radar Pool, Wien Information 134.625/124.400, APP WIEN
+  118.525), RMZ-Frequenzen (ENR 2.2 Abschn. 3), Grenzen der APP-Sektoren (Abschn. 5) und FIS-Sektoren APPROACH/
+  NORTH/SOUTH (Abschn. 6; UPPER erst ab FL660, weggelassen). "entlang der Bundesgrenze" folgt grenzen.json (~1 km).
+  Reihenfolge in unitFreq: openAIP-Luftraum → Platz → openAIP-ACC/FIS-Sektor → aipContact (AIP) → FIR → Stellenname.
+  Welche FIC-Frequenz zu NORTH/SOUTH gehört, steht nicht in ENR 2.1/2.2 (ENR 6) – beide angezeigt. Wien Radar hat
+  keine Frequenz je Luftraum im AIP → "Sektorfrequenz über FIS/ICAO-Karte". Bei neuer AIRAC-Ausgabe neu bauen.
+  Test: tests/unit/aip.test.mjs, luftraum.mjs (CTA GLOCKNER).
 - Knopf "tauschen" (seit 9.6, swapFromTo): Von/Nach mit einem Klick tauschen, wird gespeichert; Test tests/e2e/tauschen.mjs.
 - orte.json: englische Exonyme durch Landesnamen ersetzt (Wien, München, Venezia …), Stadtteile ≤ 5,5 km um
   Großstädte entfernt. GAFOR-Linien seit 9.5 dicker (6 px, weißer Unterstrich).
@@ -220,7 +229,7 @@ Offen:
   `node tests/e2e/grenze.mjs` (AT→IT ohne Meldepunkt/FIR), `rueckflug.mjs`, `hoehe.mjs`, `gafor.mjs`, `wetterbild.mjs`, `tauschen.mjs`, `luftraum.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.11, nächste 9.12).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.12, nächste 9.13).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.

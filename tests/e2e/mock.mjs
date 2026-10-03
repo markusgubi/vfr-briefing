@@ -55,6 +55,7 @@ const AIRSPACES = {
     asp("SALZBURG CTR", 4, 3, gnd, ft(4500), circle(13.0043, 47.7933, 7)),
     asp("LO R 16 TEST", 1, 8, gnd, ft(7000), circle(13.55, 47.75, 4)),
     asp("NATIONALPARK TEST S1", 29, 8, gnd, ft(5000, 0), box(13.3, 47.95, 13.6, 48.15)),
+    asp("CTA GLOCKNER", 26, 3, ft(14500), { value: 195, unit: 6, referenceDatum: 2 }, box(12.9, 46.95, 13.2, 47.15)),
     asp("CTA TESTBERG", 26, 3, ft(14500), { value: 195, unit: 6, referenceDatum: 2 }, box(12.0, 46.9, 12.3, 47.1)),
     asp("WIEN ACC TEST", 27, 8, ft(9500), { value: 245, unit: 6, referenceDatum: 2 }, box(11.8, 46.7, 12.5, 47.3),
       { frequencies: [{ value: "134.350", name: "WIEN RADAR", primary: true }] }),

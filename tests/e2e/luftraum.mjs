@@ -60,6 +60,16 @@ for (const mob of [false, true]) {
   const fq2 = await page.evaluate(() => [...document.querySelectorAll(".asel")].map(e => e.textContent).join(" | "));
   ok(/CTA TESTBERG.*Freigabe: WIEN RADAR 134\.350.*ACC-Sektor WIEN ACC TEST/.test(fq2), `${tag} CTA-Frequenz aus ACC-Sektor: ${fq2}`);
   await page.screenshot({ path: `${OUT}/luftraum-${tag}-cta.png` });
+  // CTA GLOCKNER ohne Frequenz in openAIP: Kontakt aus dem AIP-Auszug (ENR 2.1/2.2)
+  await page.evaluate(() => map.closePopup());
+  await page.evaluate(() => map.setView([47.05, 13.05], 10, { animate: false }));
+  await page.waitForFunction(() => VIEW_AIR.some(a => /CTA GLOCKNER/.test(a.name)) && AIP_LO, null, { timeout: 15000 });
+  const pt3 = await page.evaluate(() => { const p = map.latLngToContainerPoint([47.05, 13.05]), r = document.getElementById("map").getBoundingClientRect(); return { x: r.x + p.x, y: r.y + p.y }; });
+  if (mob) await page.touchscreen.tap(pt3.x, pt3.y); else await page.mouse.click(pt3.x, pt3.y);
+  await page.waitForTimeout(500);
+  const fq3 = await page.evaluate(() => [...document.querySelectorAll(".asel")].map(e => e.textContent).join(" | "));
+  ok(/CTA GLOCKNER.*WIEN RADAR \(ACC.*WIEN INFORMATION 134\.625 \/ 124\.400.*FIS-Sektor SOUTH.*AIP ENR 2\.1\/2\.2/.test(fq3), `${tag} CTA GLOCKNER aus AIP: ${fq3}`);
+  await page.screenshot({ path: `${OUT}/luftraum-${tag}-aip.png` });
   ok(!errors.length, `${tag} keine JS-Fehler ` + JSON.stringify(errors));
   await browser.close();
 }

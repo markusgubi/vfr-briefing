@@ -285,7 +285,7 @@ function aspRefPoint(as) {
   for (var i = 1; i < ring.length; i++) { var q = { lon: ring[i][0] + (lon - ring[i][0]) * 0.05, lat: ring[i][1] + (lat - ring[i][1]) * 0.05 }; if (inGeom(g, q.lon, q.lat)) return q; }
   return null;
 }
-function sectorFreq(as, G, p) {
+function sectorFreq(as, G, p, onlySectors) {
   function fmt(l) { return l.slice(0, 2).map(function (f) { return (f.n ? esc(f.n) + " " : "") + esc(f.v); }).join(" / "); }
   p = p || aspRefPoint(as);
   var svc = (G && G.SVC) || (typeof VIEW_SVC !== "undefined" ? VIEW_SVC : []), firs = (G && G.FIRS && G.FIRS.length ? G.FIRS : (typeof VIEW_FIRS !== "undefined" ? VIEW_FIRS : []));
@@ -300,12 +300,80 @@ function sectorFreq(as, G, p) {
       var s0 = hits[0];
       return " – " + fmt(s0.freq.map(function (f) { return { v: f.v, n: f.n || s0.name }; })) + " <small>(" + (s0.type === 27 ? "ACC" : "FIS") + "-Sektor " + esc(s0.name) + ", openAIP)</small>";
     }
+    if (onlySectors) return null;
     var f = firs.filter(covers)[0];
     if (f) return " – " + fmt(f.freq.map(function (x) { return { v: x.v, n: x.n || f.name }; })) + " <small>(FIR " + esc(f.name) + ", openAIP – dort Freigabe anfragen bzw. weiterverbinden lassen)</small>";
   }
+  if (onlySectors) return null;
   var u = FIS_UNIT[as.country];
   if (u) return " – erste Ansprechstelle <b>" + u + "</b> (FIS), Frequenz laut ICAO-Karte/AIP";
   return null;
+}
+/* AIP Austria (public/data/aip-lo.json, aus ENR 2.1/2.2 vom Nutzer): zustaendige Stellen je TMA/CTA mit
+   Betriebszeiten, APP- und FIS-Sektoren mit Grenzen. Liefert die Kontaktangabe fuer Lufträume in Österreich. */
+var AIP_LO = null;
+function polyHit(c, p) {
+  var inside = false;
+  for (var i = 0, j = c.length - 1; i < c.length; j = i++) {
+    var xi = c[i][0], yi = c[i][1], xj = c[j][0], yj = c[j][1];
+    if ((yi > p.lat) !== (yj > p.lat) && p.lon < (xj - xi) * (p.lat - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function lim(l) { return l.ft + (l.agl ? 1500 : 0); }   /* AGL-Grenzen grob (Gelaende ~1500 ft) – nur fuer die Zuordnung */
+/* Teil eines Sektors an Punkt p fuer Hoehe alt: deckend, sonst der hoechste Teil darunter */
+function sectorAt(set, p, alt) {
+  var best = null;
+  Object.keys(set || {}).forEach(function (n) {
+    set[n].forEach(function (q) {
+      if (!polyHit(q.c, p)) return;
+      var lo = lim(q.lo), hi = lim(q.hi), cov = alt >= lo && alt < hi, sc = cov ? 0 : alt >= hi ? alt - hi : 1e6;
+      if (!best || sc < best.sc) best = { sc: sc, n: n, q: q, cov: cov };
+    });
+  });
+  return best;
+}
+function hrsTxt(h) {
+  var m = /^(\d\d)(\d\d)-(\d\d)(\d\d) \((\d\d)(\d\d)-(\d\d)(\d\d)\)$/.exec(h || "");
+  return m ? m[1] + ":" + m[2] + "\u2013" + m[3] + ":" + m[4] + " UTC (Sommer " + m[5] + ":" + m[6] + "\u2013" + m[7] + ":" + m[8] + ")" : h === "H24" ? "H24" : "";
+}
+function aipContact(as, G, p) {
+  if (!AIP_LO) return null;
+  var name = String(as.name || "").toUpperCase().replace(/\s+/g, " ").trim(), ent = AIP_LO.units[name];
+  var rz = AIP_LO.rmz[name.replace("VÖSLAU", "VOESLAU")];
+  if (rz) return " \u2013 <b>" + esc(rz.call) + "</b> " + esc(rz.f) + " <small>[AIP ENR 2.2]</small>";
+  p = p || aspRefPoint(as);
+  if (!ent && !(p && as.country === "AT")) return null;
+  var alt = isFinite(as.loFt) ? as.loFt + 100 : 3000, parts = [];
+  function fmtF(call, f) { return "<b>" + esc(call) + "</b> " + esc(f); }
+  /* (1) Anflugkontrolle: nur wenn laut ENR 2.1 zustaendig (bzw. ohne Tabelleneintrag) und der APP-Sektor dort liegt */
+  var app = p && sectorAt(AIP_LO.app, p, alt);
+  if (app && app.cov) {
+    var city = app.n.replace(/^APP /, ""), listed = !ent || ent.some(function (u) { return u.call.indexOf(city) === 0; });
+    if (listed) {
+      var ap = aptPool(G).filter(function (a) { return normTxt(a.name).indexOf(normTxt(city === "WIEN" ? "Wien" : city)) === 0 && (a.freq || []).length; })[0];
+      var fl = ap ? pickFreq(ap.freq, FQ_APP, /APP|RADAR|APPROACH|DIRECTOR/i) : [];
+      var u0 = ent && ent.filter(function (u) { return u.call.indexOf(city) === 0; })[0];
+      if (city === "WIEN") parts.push(fmtF("WIEN INFORMATION", (AIP_LO.freq["APP WIEN|WIEN INFORMATION"] || []).join(" / ")) + " <small>(APP WIEN)</small>");
+      else parts.push(fmtF(u0 ? u0.call : city + " RADAR", fl.length ? fl[0].v : "– Frequenz laut AD 2.18") + (u0 && hrsTxt(u0.h) ? " <small>(" + hrsTxt(u0.h) + ")</small>" : ""));
+    }
+  }
+  /* (2) Flugverkehrskontrolle (ACC) laut ENR 2.1 – Frequenz je Sektor, im AIP nicht dem Luftraum zugeordnet */
+  if (!parts.length && ent && ent.some(function (u) { return u.call === "WIEN RADAR"; }))
+    parts.push("<b>WIEN RADAR</b> (ACC, Sektorfrequenz \u00fcber FIS/ICAO-Karte)");
+  /* (3) Fluginformationsdienst am Ort: Sektor aus ENR 2.2 */
+  var fis = p && sectorAt(AIP_LO.fis, p, alt);
+  if (fis) {
+    var fu = ent && ent.filter(function (u) { return u.call === "WIEN INFORMATION"; })[0];
+    var fq = fis.n === "FIC WIEN APPROACH" ? AIP_LO.freq["APP WIEN|WIEN INFORMATION"] : AIP_LO.freq["FIC WIEN|WIEN INFORMATION"];
+    parts.push(fmtF("WIEN INFORMATION", (fq || []).join(" / ")) + " <small>(FIS-Sektor " + fis.n.replace("FIC WIEN ", "") +
+      (fu && hrsTxt(fu.h) ? ", " + hrsTxt(fu.h) : "") + (fis.n !== "FIC WIEN APPROACH" && (fq || []).length > 1 ? "; welche der Frequenzen laut ENR 6" : "") + ")</small>");
+  }
+  /* (4) Nachbarlaender laut ENR 2.1 (z. B. MÜNCHEN RADAR) nur nennen */
+  var other = ent ? ent.filter(function (u) { return !/^(WIEN|GRAZ|INNSBRUCK|KLAGENFURT|LINZ|SALZBURG) /.test(u.call); }).map(function (u) { return u.call; }) : [];
+  if (!parts.length) return null;
+  return " \u2013 " + parts.join(" \u00b7 ") + (other.length ? " <small>(je nach Teil auch " + esc(other.join(", ")) + ")</small>" : "") +
+    " <small>[AIP ENR 2.1/2.2, " + esc(AIP_LO.stand.replace(/ENR 2\.1 bis |ENR 2\.2 bis /g, "")) + "]</small>";
 }
 function unitFreq(as, G, p) {
   function fmt(l) { return l.slice(0, 2).map(function (f) { return (f.n ? esc(f.n) + " " : "") + esc(f.v); }).join(" / "); }
@@ -317,5 +385,5 @@ function unitFreq(as, G, p) {
     if (!l.length && !isCtr) l = pickFreq(ap.freq, FQ_TWR, /TOWER|TWR/i);
     if (l.length) return " – " + fmt(l) + " <small>(openAIP, " + esc(ap.icao || ap.name) + ")</small>";
   }
-  return sectorFreq(as, G, p) || " (Frequenz laut AIP/ICAO-Karte)";
+  return sectorFreq(as, G, p, true) || aipContact(as, G, p) || sectorFreq(as, G, p) || " (Frequenz laut AIP/ICAO-Karte)";
 }

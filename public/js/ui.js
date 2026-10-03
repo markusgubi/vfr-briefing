@@ -1493,6 +1493,8 @@ function setupCursor() {
   });
   loadCountry("AT", "apt").catch(function () {});
   loadGafor();
+  /* AIP-Austria-Auszug (Dienststellen, APP-/FIS-Sektoren) fuer Frequenzangaben */
+  fetch("data/aip-lo.json").then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { if (j && j.units) AIP_LO = j; }).catch(function () {});
   loadAirView();
   setSts("Bereit \u2013 Start und Ziel w\u00e4hlen, dann \u201eSicherste Route berechnen\u201c.");
 })();
