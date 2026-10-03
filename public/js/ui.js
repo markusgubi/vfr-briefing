@@ -136,7 +136,7 @@ map.on("click", function (ev) {
   hits.sort(function (x, y) { return x.loFt - y.loFt; });
   var lim = +$("asFilter").value, hidden = lim ? hits.filter(function (a) { return a.loFt > lim; }).length : 0;
   CLICK_HITS = hits; CLICK_PT = { lat: lat, lon: lon };
-  var h = "<div class='pop'><b class='h'>" + hits.length + " Luftr\u00e4um" + (hits.length > 1 ? "e" : "") + " an diesem Punkt</b>" +
+  var h = "<div class='pop'><b class='h'>" + hits.length + (hits.length > 1 ? " Luftr\u00e4ume" : " Luftraum") + " an diesem Punkt</b>" +
     "<div class='note' style='margin:2px 0 3px'>Antippen = Umriss auf der Karte zeigen</div>";
   hits.forEach(function (a, i) {
     var at = actTxt(a), col = a.kind === "info" && isNature(a) ? NATURE_C : KIND[a.kind].c;
