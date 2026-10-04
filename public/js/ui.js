@@ -417,7 +417,7 @@ async function plan() {
   if (!A || !B) { setSts("Bitte Start und Ziel aus der Vorschlagsliste wählen.", "err"); return; }
   A = S.from = freshApt(A); B = S.to = freshApt(B);
   var P = readP(); saveSettings();
-  GAFOR_ON = P.preferGafor;
+  GAFOR_ON = P.preferGafor; RWV = { mode: "land", dt: 0, sel: null };
   var d = distNm(A, B);
   if (d < 3) { setSts("Start und Ziel liegen zu nah beieinander.", "err"); return; }
   if (!P.date) { setSts("Bitte Datum wählen.", "err"); return; }
@@ -621,6 +621,7 @@ function render(sel) {
     "<span>Modelle</span><b style='font-weight:400'>" + esc(G.modelsOk.join(", ")) +
     (G.modelsFail.length ? "<br><i style='color:#C0392B;font-style:normal'>ohne Daten: " + esc(G.modelsFail.join(", ")) + "</i>" : "") + "</b>" +
     "</div></details>";
+  h += "<div class='card' id='rwyCard'>" + rwyCardHtml(R) + "</div>";
   $("out").innerHTML = h;
   $("exp").innerHTML = expHtml(R);
   drawMap(sel);
@@ -696,6 +697,100 @@ function retHtml() {
   return "<div class='retbox " + cls + "'>" + h + "<small>Eigene Routensuche " + esc(B) + " \u2192 " + esc(A) + " mit denselben Wetter-, Gel\u00e4nde- und Luftraumdaten, ab Ankunft + " + stayTxt(X.stay) +
     " Aufenthalt alle 30 min (Grenze auf 10 min genau). ECET " + esc(A) + " " + ecet + ". Zum Ansehen der R\u00fcckroute Start/Ziel tauschen und neu suchen.</small></div>";
 }
+/* ==================== Pisten & Wind (Ergebnis, ganz unten) ====================
+   Windrose mit den Pisten des Platzes (aus openAIP), Wind zur Lande- bzw. Startzeit (amtlich, sonst Modelle)
+   und abgeleitete aktive Piste (groesster Gegenwind, wie pickRunway). Interaktiv: Landung/Start umschalten,
+   Zeit +-2 h verschieben, Piste antippen. Nur Anzeige – die Bewertung nutzt immer die geplante Zeit. */
+var RWV = { mode: "land", dt: 0, sel: null };
+function rwyPairs(rw) {   /* Gegenrichtungen zu einer Bahn zusammenfassen (09/27) */
+  var used = {}, out = [];
+  rw.forEach(function (r, i) {
+    if (used[i]) return; used[i] = 1;
+    var j = -1;
+    rw.forEach(function (q, k) { if (j < 0 && !used[k] && Math.abs(((q.hdg - r.hdg + 540) % 360) - 180) > 165 && (!r.lenM || !q.lenM || Math.abs(r.lenM - q.lenM) < 150)) j = k; });
+    if (j >= 0) used[j] = 1;
+    out.push({ a: i, b: j, hdg: r.hdg, lenM: r.lenM || (j >= 0 ? rw[j].lenM : null), sfc: r.sfc || (j >= 0 ? rw[j].sfc : null) });
+  });
+  /* parallele Bahnen seitlich versetzen */
+  out.forEach(function (p, k) { p.off = 0; for (var m = 0; m < k; m++) if (Math.abs(((out[m].hdg - p.hdg + 540) % 360) - 180) > 170 || Math.abs(((out[m].hdg - p.hdg + 540) % 360) - 180) < 10) p.off++; });
+  return out;
+}
+function rwyCardHtml(R) {
+  var G = RES.G, land = RWV.mode === "land", apt = land ? G.B : G.A, t0 = land ? R.arrMin : R.depMin, t = t0 + RWV.dt;
+  var w = aptWind(G, apt, t, land ? "land" : "dep"), rw = apt.rwy || [], ap = esc(apt.icao || apt.name), xw = R.xwMax || 15;
+  var h = "<h3>Pisten &amp; Wind</h3><div class='btnrow rwtabs'>" +
+    "<button class='btn2" + (land ? " on" : "") + "' data-rwm='land'>Landung " + esc(G.B.icao || "Ziel") + "</button>" +
+    "<button class='btn2" + (land ? "" : " on") + "' data-rwm='dep'>Start " + esc(G.A.icao || "Start") + "</button></div>" +
+    "<label class='rwtime'>Zeit <b>" + fmtH(t) + "</b> " + (RWV.dt ? "(" + (RWV.dt > 0 ? "+" : "−") + Math.abs(RWV.dt) + " min ab " + (land ? "Ankunft" : "Abflug") + ")" : "(" + (land ? "geplante Ankunft" : "geplanter Abflug") + ")") +
+    "<input type='range' id='rwT' min='-120' max='120' step='30' value='" + RWV.dt + "'></label>";
+  if (!w) return h + "<div class='note'>Für " + ap + " liegen weder METAR/TAF noch Modellwind vor.</div>";
+  var calm = w.wd === "VRB" || w.ws < 3, sel = RWV.sel != null && rw[RWV.sel] ? rw[RWV.sel] : null, act = w.rwy;
+  var wt = (w.wd === "VRB" ? "umlaufend" : "aus " + p3(Math.round(w.wd / 10) * 10 % 360 || 360) + "°") + " mit " + Math.round(w.ws) + (w.gust && w.gust > w.ws + 2 ? ", Böen " + Math.round(w.gust) : "") + " kt";
+  /* Windrose */
+  var S = 220, c = S / 2, rr = 92, svg = "<svg class='rwrose' viewBox='0 0 " + S + " " + S + "' role='img' aria-label='Windrose " + ap + "'>";
+  function pt(b, d) { return [c + d * Math.sin(b * RAD), c - d * Math.cos(b * RAD)]; }
+  svg += "<circle cx='" + c + "' cy='" + c + "' r='" + rr + "' fill='#F4F7FA' stroke='#C9D3DC'/>";
+  for (var b = 0; b < 360; b += 30) { var p1 = pt(b, rr - (b % 90 ? 4 : 8)), p2_ = pt(b, rr); svg += "<line x1='" + p1[0].toFixed(1) + "' y1='" + p1[1].toFixed(1) + "' x2='" + p2_[0].toFixed(1) + "' y2='" + p2_[1].toFixed(1) + "' stroke='#9AA8B5'/>"; }
+  [["N", 0], ["O", 90], ["S", 180], ["W", 270]].forEach(function (x) { var q = pt(x[1], rr + 10); svg += "<text x='" + q[0].toFixed(1) + "' y='" + (q[1] + 4).toFixed(1) + "' text-anchor='middle' font-size='11' fill='#61717F'>" + x[0] + "</text>"; });
+  var prs = rwyPairs(rw), maxL = Math.max.apply(null, prs.map(function (p) { return p.lenM || 0; }).concat([1]));
+  prs.forEach(function (p) {
+    var L = 42 + 34 * ((p.lenM || maxL) / maxL), off = (p.off ? (p.off % 2 ? 1 : -1) * Math.ceil(p.off / 2) * 16 : 0), on = function (r) { return r != null && r >= 0 && (rw[r] === act || rw[r] === sel); };
+    var ox = off * Math.cos(p.hdg * RAD), oy = off * Math.sin(p.hdg * RAD), e1 = pt(p.hdg, L / 2), e0 = pt(p.hdg + 180, L / 2);
+    var hot = on(p.a) || on(p.b), col = hot ? (sel && !(rw[p.a] === act || (p.b >= 0 && rw[p.b] === act)) ? "#1F5FA8" : "#1E7B4A") : "#7A8794";
+    svg += "<line x1='" + (e0[0] + ox).toFixed(1) + "' y1='" + (e0[1] + oy).toFixed(1) + "' x2='" + (e1[0] + ox).toFixed(1) + "' y2='" + (e1[1] + oy).toFixed(1) + "' stroke='" + col + "' stroke-width='" + (p.sfc === "Gras" ? 9 : 11) + "' stroke-linecap='butt'" + (p.sfc === "Gras" ? " stroke-dasharray='3 2'" : "") + "/>";
+    [[p.a, e0], [p.b, e1]].forEach(function (x) {   /* Bezeichnung am Anfang der Bahn (dort wird aufgesetzt) */
+      if (x[0] == null || x[0] < 0) return;
+      var r = rw[x[0]], q = pt(r.hdg + 180, L / 2 + 11), big = r === act || r === sel;
+      svg += "<text x='" + (q[0] + ox).toFixed(1) + "' y='" + (q[1] + oy + 4).toFixed(1) + "' text-anchor='middle' font-size='" + (big ? 13 : 11) + "' font-weight='" + (big ? 700 : 400) + "' fill='" + (big ? col : "#3A4752") + "' data-rws='" + x[0] + "' style='cursor:pointer'>" + esc(r.d) + "</text>";
+    });
+  });
+  /* Landerichtung (bzw. Startrichtung) der aktiven/gewaehlten Piste als weisser Pfeil auf der Bahn */
+  var dirR = sel || act;
+  if (dirR) {
+    var pr0 = prs.filter(function (p) { return rw[p.a] === dirR || (p.b >= 0 && rw[p.b] === dirR); })[0], o2 = pr0 && pr0.off ? (pr0.off % 2 ? 1 : -1) * Math.ceil(pr0.off / 2) * 16 : 0;
+    var dx = o2 * Math.cos(dirR.hdg * RAD), dy = o2 * Math.sin(dirR.hdg * RAD), a0 = pt(dirR.hdg + 180, 24), a1 = pt(dirR.hdg, 24), h1 = pt(dirR.hdg + 14, 15), h2 = pt(dirR.hdg - 14, 15);
+    function f(q) { return (q[0] + dx).toFixed(1) + "," + (q[1] + dy).toFixed(1); }
+    svg += "<polyline points='" + f(a0) + " " + f(a1) + "' stroke='#fff' stroke-width='2' fill='none'/><polyline points='" + f(h1) + " " + f(a1) + " " + f(h2) + "' stroke='#fff' stroke-width='2' fill='none'/>";
+  }
+  /* Modellwinde (Streuung) duenn, Grundlage dick: Pfeil kommt AUS der Windrichtung zur Mitte */
+  function arrow(wd, len, colr, wdt) {
+    var s0 = pt(wd, rr - 2), s1 = pt(wd, rr - 2 - len), l1 = pt(wd + 7, rr - 2 - len + 8), l2 = pt(wd - 7, rr - 2 - len + 8);
+    return "<line x1='" + s0[0].toFixed(1) + "' y1='" + s0[1].toFixed(1) + "' x2='" + s1[0].toFixed(1) + "' y2='" + s1[1].toFixed(1) + "' stroke='" + colr + "' stroke-width='" + wdt + "' stroke-linecap='round'/>" +
+      "<polyline points='" + l1[0].toFixed(1) + "," + l1[1].toFixed(1) + " " + s1[0].toFixed(1) + "," + s1[1].toFixed(1) + " " + l2[0].toFixed(1) + "," + l2[1].toFixed(1) + "' fill='none' stroke='" + colr + "' stroke-width='" + wdt + "' stroke-linejoin='round'/>";
+  }
+  (w.models || []).forEach(function (m) { if (isFinite(m.wd) && m.ws >= 1) svg += arrow(m.wd, 20, "#A9B6C2", 2); });
+  if (!calm) svg += arrow(w.wd, 26, w.level === 2 ? "#C0392B" : w.level === 1 ? "#C1810B" : "#1F5FA8", 4);
+  else svg += "<text x='" + c + "' y='" + (c + 42) + "' text-anchor='middle' font-size='11' fill='#61717F'>" + (w.wd === "VRB" ? "umlaufend" : "schwach") + "</text>";
+  svg += "</svg>";
+  /* Tabelle aller Pisten mit Gegen-/Seitenwind */
+  var rows = rw.map(function (r, i) {
+    if (land ? r.toOnly : r.landOnly) return "";
+    var cmp = windOn(w.wd, w.ws, r.hdg), g = w.gust && w.gust > w.ws ? windOn(w.wd, w.gust, r.hdg) : cmp, cr = Math.abs(cmp.cross), cg = Math.abs(g.cross);
+    var bad = cr > xw, warn = !bad && (cg > xw || -cmp.head > 5);
+    return "<tr data-rws='" + i + "' class='" + (r === act ? "act" : "") + (r === sel ? " sel" : "") + "'><td><b>" + esc(r.d) + "</b>" + (r === act ? " <span class='rwact'>aktiv</span>" : "") + (r.tmp ? " <small>zeitw. gesperrt</small>" : "") + "</td>" +
+      "<td>" + (r.lenM ? r.lenM + " m" : "–") + (r.sfc ? " <small>" + r.sfc + "</small>" : "") + "</td>" +
+      "<td" + (-cmp.head > 5 ? " class='w'" : "") + ">" + (cmp.vrb ? "–" : cmp.head >= 0 ? "↑ " + Math.round(cmp.head) : "↓ " + Math.round(-cmp.head) + " Rückenw.") + "</td>" +
+      "<td class='" + (bad ? "b" : warn ? "w" : "") + "'>" + Math.round(cr) + (cmp.vrb ? "" : cmp.cross >= 0 ? " R" : " L") + (cg > cr + 1 ? " (G " + Math.round(cg) + ")" : "") + "</td></tr>";
+  }).join("");
+  h += "<div class='rwwrap'>" + svg + "<div class='rwinfo'><div class='rwwind'>Wind " + wt + "<small>" + esc(w.src) + (w.off ? "" : " – grau: einzelne Modelle") + "</small></div>";
+  if (!rw.length) h += "<div class='note'>Pistenrichtungen für " + ap + " sind in openAIP nicht vorhanden – Piste nach Wind selbst wählen (Platzinfo/AIP).</div>";
+  else if (calm) h += "<div class='rwpick'>Wind " + (w.wd === "VRB" ? "umlaufend" : "schwach") + " – keine Piste klar bevorzugt" + (act ? "; rechnerisch <b>" + esc(act.d) + "</b>" : "") + ". Piste laut Platzfunk/ATIS bzw. Platzrunde.</div>";
+  else if (act) h += "<div class='rwpick'>Voraussichtlich aktive Piste: <b>" + esc(act.d) + "</b> (" + (w.head >= 0 ? "Gegenwind " + Math.round(w.head) : "Rückenwind " + Math.round(-w.head)) + " kt, Seitenwind " + Math.round(w.cross) + " kt " + w.side + ")</div>";
+  if (rw.length) h += "<table class='nav rwtab'><tr><th>Piste</th><th>Länge</th><th>Gegenw.</th><th>Seitenw.</th></tr>" + rows + "</table>";
+  h += "</div></div><div class='note'>Aus dem Wind abgeleitet (größter Gegenwind; bei Gleichstand längere Piste). Maßgeblich ist die Angabe von ATIS/Turm/Platzfunk; Platzrunde, Lärmschutz und Sperren im AIP/VFR-Guide prüfen. Seitenwind-Grenze " + xw + " kt. Zeitschieber nur zur Ansicht – die Bewertung gilt für die geplante Zeit.</div>";
+  return h;
+}
+function rwyRedraw() { var el = $("rwyCard"); if (el && RES) el.innerHTML = rwyCardHtml(RES.routes[RES.sel]); }
+function onRwyEvent(e) {
+  if (!RES || !e.target.closest || !e.target.closest("#rwyCard")) return false;
+  var m = e.target.closest("[data-rwm]"), s = e.target.closest("[data-rws]");
+  if (e.type === "input" && e.target.id === "rwT") { RWV.dt = +e.target.value; rwyRedraw(); var r = $("rwT"); if (r) r.focus(); return true; }
+  if (e.type !== "click") return false;
+  if (m) { RWV.mode = m.getAttribute("data-rwm"); RWV.sel = null; rwyRedraw(); return true; }
+  if (s) { var i = +s.getAttribute("data-rws"); RWV.sel = RWV.sel === i ? null : i; rwyRedraw(); return true; }
+  return true;
+}
+$("out").addEventListener("input", onRwyEvent);
 /* Kurzform fuer die Uebersicht: "Piste 26 · GW 11 · SW 5 R (G 8)" */
 function windShort(w) {
   var wt = (w.wd === "VRB" ? "VRB" : p3(Math.round(w.wd / 10) * 10 % 360 || 360)) + "/" + Math.round(w.ws) + (w.gust && w.gust > w.ws + 2 ? "G" + Math.round(w.gust) : "") + " kt";
@@ -736,6 +831,7 @@ function highlight(k) {
   drawProfile(R);
 }
 function onOutClick(e) {
+  if (onRwyEvent(e)) return;
   var r = e.target.closest("[data-r]");
   if (r) { render(+r.getAttribute("data-r")); return; }
   var b = e.target.closest("[data-h]");
@@ -1031,8 +1127,8 @@ function profSvg(R) {
   /* Beim Bearbeiten: genau die ziehbaren Wegpunkte mit derselben Nummer wie auf der Karte (Teilstrecken-Grenzen) */
   if (EDIT.on && R.custom && EDIT.pts) {
     var nsp = EDIT.pts.filter(function (p, i) { return i > 0 && i < EDIT.pts.length - 1 && !p.shape; }), lx = {};
-    R.rs.forEach(function (r) { lx[r.e.leg] = r.x1; });
-    wpl = nsp.map(function (p, j) { return { x: lx[j], name: p.name || String(j + 1), prof: !!p.fromProf, pt: p }; }).filter(function (w) { return w.x != null; });
+    (R.G.legB || []).forEach(function (b) { lx[b.leg] = b.x1; });
+    wpl = nsp.map(function (p, j) { return { x: lx[j], name: p.name || String(j + 1), num: String(j + 1), prof: !!p.fromProf, pt: p }; }).filter(function (w) { return w.x != null; });
   }
   wpl.forEach(function (w) {
     s += w.prof   /* im Profil eingefuegter Punkt: hervorgehoben, Tipp darauf = rueckgaengig */
@@ -1077,7 +1173,10 @@ function profSvg(R) {
         lbl(bx - r - 4, by + f2 * 0.35, nm, f2, "#B02E7A", "end", true, [0, f2 * 1.2, f2 * 2.4]);
       return;
     }
-    txts += lbl(X(w.x), Tp + f2 * 1.2, nm, f2, "#1F5FA8", "middle", true, [0, f2 * 1.2, f2 * 2.4, f2 * 3.6, H - Bp - Tp - f2 * 1.6]);
+    var oy = [0, f2 * 1.2, f2 * 2.4, f2 * 3.6, H - Bp - Tp - f2 * 1.6];
+    /* passt der Name nirgends ohne Ueberschneidung: nur die Nummer (wie auf der Karte), Name im Navlog */
+    txts += lbl(X(w.x), Tp + f2 * 1.2, nm, f2, "#1F5FA8", "middle", true, oy) ||
+      (w.num && w.num !== nm ? lbl(X(w.x), Tp + f2 * 1.2, w.num, f2, "#1F5FA8", "middle", true, oy) : "");
   });
   RES.pvWp = wpl.map(function (w) { return { x: w.x, prof: w.prof, pt: w.pt }; });
   if (!(EDIT.on && R.custom)) R.legs.forEach(function (l, k) {   /* im Bearbeiten-Modus zeigen die Griffe die Hoehen */
@@ -1274,8 +1373,12 @@ function profInsert(R, x) {
 }
 function routeLineClick(R, ev) {
   if (!EDIT.on || !R.custom) { var x = nearestX(R, ev.latlng); showCursor(x, "map"); segPopup(R, x, ev.latlng); return; }
-  insertPoint({ lat: ev.latlng.lat, lon: ev.latlng.lng });
-  commitEdit();
+  /* genau auf die Linie legen (Klick darf bis zu 24 px daneben liegen): Linie und Bewertung bleiben gleich */
+  var p = { lat: ev.latlng.lat, lon: ev.latlng.lng }, best = null;
+  for (var k = 0; k < EDIT.pts.length - 1; k++) { var sd = segDist(p, EDIT.pts[k], EDIT.pts[k + 1]); if (!best || sd.d < best.d) best = { d: sd.d, k: k, t: sd.t }; }
+  var q = lerp(EDIT.pts[best.k], EDIT.pts[best.k + 1], best.t);
+  insertPoint({ lat: q.lat, lon: q.lon });
+  commitEdit().then(function () { setSts("Wegpunkt auf der Linie eingef\u00fcgt \u2013 Bewertung unver\u00e4ndert. Ziehen, um die Strecke zu \u00e4ndern."); });
 }
 /* Fenster auf der Karte: Abstand zu Kopfzeile/Legende (oben) und Knoepfen (rechts), damit nichts verdeckt wird */
 function popOpts(o) {
@@ -1370,13 +1473,14 @@ async function addWxPoints(G, far) {
 /* Hoehen-Griffe im Profil */
 function editSvg(R, X, Y, f2, lbl, reserve) {
   var legs = {}, out = "", txt = "";
-  R.rs.forEach(function (r) {
-    var l = legs[r.e.leg] || (legs[r.e.leg] = { leg: r.e.leg, x0: r.x0, x1: r.x1, alt: r.alt, user: r.user });
-    l.x1 = r.x1;
+  /* Teilstrecken aus den Wegpunkt-Grenzen (G.legB); Hoehe des Abschnitts in ihrer Mitte */
+  (R.G.legB || []).forEach(function (b) {
+    var xm = (b.x0 + b.x1) / 2, r = R.rs.filter(function (r) { return r.x1 >= xm; })[0] || R.rs[R.rs.length - 1];
+    legs[b.leg] = { leg: b.leg, x0: b.x0, x1: b.x1, alt: r.alt, user: r.user };
   });
   R.legX = Object.keys(legs).map(function (k) { return legs[k]; });
   /* wird die Hoehe der Teilstrecke irgendwo tatsaechlich geflogen? (sonst Griff gestrichelt + Hinweis) */
-  R.samples.forEach(function (q) { var l = legs[R.rs[q.ri].e.leg]; if (l && Math.abs(q.p - l.alt) <= 1) l.reach = true; });
+  R.samples.forEach(function (q) { var l = legs[legAtX(R, q.x)]; if (l && Math.abs(q.p - l.alt) <= 1) l.reach = true; });
   /* zuerst alle Griffe reservieren, damit keine Beschriftung darauf landet */
   R.legX.forEach(function (l) {
     var x0 = X(l.x0) + 3, x1 = X(l.x1) - 3, y = Y(l.alt), xm = (x0 + x1) / 2;
@@ -1451,7 +1555,7 @@ function altBarClick(e) {
    im Ab-/Anflugbereich von der Platzhoehe ansteigend), auf 100 ft aufgerundet */
 function legMinAlt(R, leg) {
   var m = 0;
-  R.samples.forEach(function (q) { if (R.rs[q.ri].e.leg === leg && isFinite(q.hard)) m = Math.max(m, q.hard); });
+  R.samples.forEach(function (q) { if (legAtX(R, q.x) === leg && isFinite(q.hard)) m = Math.max(m, q.hard); });
   return Math.ceil(m / 100) * 100;
 }
 function altFromY(y) {

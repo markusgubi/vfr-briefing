@@ -1,5 +1,19 @@
 "use strict";
 /* ==================== 12. Details je Route ==================== */
+/* Zeit (min) an Streckenposition x, linear innerhalb des Abschnitts */
+function timeAtX(R, x) {
+  for (var i = 0; i < R.rs.length; i++) {
+    var r = R.rs[i];
+    if (x <= r.x1 + 1e-9 || i === R.rs.length - 1) return r.tStart + (r.tEnd - r.tStart) * Math.max(0, Math.min(1, (x - r.x0) / Math.max(1e-9, r.x1 - r.x0)));
+  }
+  return R.depMin;
+}
+/* Teilstrecke (Bearbeiten, eigene Hoehen) an Position x */
+function legAtX(R, x) {
+  var B = R.G && R.G.legB; if (!B) return 0;
+  for (var i = 0; i < B.length; i++) if (x <= B[i].x1 + 1e-6) return B[i].leg;
+  return B[B.length - 1].leg;
+}
 function finalize(R, G, P) {
   if (R.final) return;
   R.final = true;
@@ -16,6 +30,14 @@ function finalize(R, G, P) {
       wps.push({ lat: nn.lat, lon: nn.lon, name: up && up.name ? up.name : "WP" + wps.length, x: b.x0, t: b.tStart, uw: nn.uw, pi: nn.pi, rp: up ? up.rp : null, border: up ? up.border : null, town: up ? up.town : null, lm: up ? up.lm : null });
     }
   }
+  /* Wegpunkte, die genau auf der Linie liegen (keine eigene Netzunterteilung, siehe polyGraph) */
+  (G.vwp || []).forEach(function (v) {
+    if (wps.some(function (w) { return Math.abs(w.x - v.x) < 0.05; })) return;
+    var up = R.pts ? R.pts[v.uw] : null;
+    wps.push({ lat: v.lat, lon: v.lon, name: up && up.name ? up.name : "WP", x: v.x, t: timeAtX(R, v.x), uw: v.uw, pi: v.pi, rp: up ? up.rp : null, border: up ? up.border : null, town: up ? up.town : null, lm: up ? up.lm : null });
+  });
+  wps.sort(function (a, b) { return a.x - b.x; });
+  wps.forEach(function (w, k) { if (k > 0 && /^WP\d*$/.test(w.name)) w.name = "WP" + k; });
   wps.push({ lat: G.B.lat, lon: G.B.lon, name: G.B.icao || "ZIEL", x: D, t: R.arrMin });
   /* Ortsnamen (GeoNames) an Wegpunkten: erleichtert Positionsmeldungen ("ueber Gmunden") */
   wps.forEach(function (w, k) {
@@ -26,10 +48,11 @@ function finalize(R, G, P) {
   R.legs = [];
   for (k = 1; k < wps.length; k++) {
     var w0 = wps[k - 1], w1 = wps[k];
-    var es = R.rs.filter(function (r) { return r.x0 >= w0.x - 1e-6 && r.x1 <= w1.x + 1e-6; });
+    /* Abschnitte, die die Teilstrecke beruehren (ein Abschnitt kann ueber einen Wegpunkt auf der Linie reichen) */
+    var es = R.rs.filter(function (r) { return r.x1 > w0.x + 1e-6 && r.x0 < w1.x - 1e-6; });
     var tc = courseDeg(w0, w1), wind = vecMean(es.map(function (r) { return r.wind; })), g = gsCalc(P.tas, tc, wind);
-    var dist = es.reduce(function (s, r) { return s + r.e.len; }, 0);
-    var mins = es.length ? es[es.length - 1].tEnd - es[0].tStart : 0;
+    var dist = es.reduce(function (s, r) { return s + Math.min(r.x1, w1.x) - Math.max(r.x0, w0.x); }, 0);
+    var mins = es.length ? timeAtX(R, Math.min(w1.x, D)) - timeAtX(R, w0.x) : 0;
     R.legs.push({ from: (w0.border ? "\u2691 " : "") + w0.name + (w0.town && w0.town !== w0.name ? " \u00b7 " + w0.town : ""),
       to: (w1.border ? "\u2691 " : "") + w1.name + (w1.town && w1.town !== w1.name ? " \u00b7 " + w1.town : ""), tc: tc, mc: tc - MAGVAR, mh: tc + g.wca - MAGVAR, dist: dist, alt: es.length ? es[0].alt : 0,
       wind: wind, gs: mins > 0 ? dist / (mins / 60) : g.gs, mins: mins, eto: k === wps.length - 1 ? R.arrMin : w1.t,
@@ -58,9 +81,9 @@ function finalize(R, G, P) {
     Math.round(R.minTerrX) + " \u2013 weniger als 300 ft Reserve \u00fcber dem eingestellten Mindestabstand (" + P.terrClr + " ft). Fr\u00fch steigen oder Strecke anpassen.", R.minTerrX - 1, R.minTerrX + 1);
   /* Eigene Hoehen: ueber Max. Hoehe? Mit der Steigrate (rechtzeitig) erreichbar? */
   if (R.userAlt) Object.keys(R.userAlt).forEach(function (l) {
-    var a = R.userAlt[l], rs = R.rs.filter(function (r) { return r.e.leg === +l; });
-    if (!rs.length) return;
-    var x0 = rs[0].x0, x1 = rs[rs.length - 1].x1, n = +l + 1;
+    var a = R.userAlt[l], lb = R.G && R.G.legB ? R.G.legB[+l] : null;
+    if (!lb) return;
+    var x0 = lb.x0, x1 = lb.x1, n = +l + 1;
     if (a > P.maxAlt) add("warn", "<b>Eigene H\u00f6he " + a + " ft</b> (Teilstrecke " + n + ") liegt \u00fcber der eingestellten Max. H\u00f6he von " + P.maxAlt + " ft.", x0, x1);
     var hit = R.samples.filter(function (q) { return q.x >= x0 - 1e-6 && q.x <= x1 + 1e-6 && Math.abs(q.p - a) <= 1; })[0];
     var inLeg = R.samples.filter(function (q) { return q.x >= x0 - 1e-6 && q.x <= x1 + 1e-6; });

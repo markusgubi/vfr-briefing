@@ -139,8 +139,13 @@ function normApt(a) {
     elevFt: typeof e.value === "number" ? Math.round(e.unit === 1 ? e.value : e.value * M2FT) : null,
     /* Pisten (Richtung rechtweisend); gesperrte (operations 2) weglassen */
     rwy: (a.runways || []).filter(function (r) { return r && typeof r.trueHeading === "number" && r.operations !== 2; })
-      .map(function (r) { return { d: String(r.designator || ""), hdg: r.trueHeading, tmp: r.operations === 1, lenM: r.lenM || null, landOnly: !!r.landingOnly, toOnly: !!r.takeOffOnly }; }) };
+      .map(function (r) { var dm = r.dimension || {};
+        return { d: String(r.designator || ""), hdg: r.trueHeading, tmp: r.operations === 1, lenM: rwyM(dm.length) || r.lenM || null, widM: rwyM(dm.width),
+          sfc: r.surface && RWY_SFC[r.surface.mainComposite] || null, landOnly: !!r.landingOnly, toOnly: !!r.takeOffOnly }; }) };
 }
+/* Pistenmasse (openAIP: unit 0 = m, 1 = ft) und Belag (nur sicher bekannte Codes) */
+function rwyM(v) { return v && typeof v.value === "number" && v.value > 0 ? Math.round(v.unit === 1 ? v.value * 0.3048 : v.value) : null; }
+var RWY_SFC = { 0: "Asphalt", 1: "Beton", 2: "Gras" };
 var AIRDB = {}, APTDB = {}, RPDB = {}, LOADING = {};
 var OAIP_PATH = { asp: "airspaces", apt: "airports", rp: "reporting-points" }, NORM = { asp: normAsp, apt: normApt, rp: normRp };
 /* openAIP direkt aus dem Browser (eigene IP, kein Cloudflare-Rate-Limit),

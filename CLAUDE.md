@@ -113,6 +113,12 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
 - Bearbeiten macht nur markante Punkte ziehbar (Douglas-Peucker 0,75 NM, Meldepunkte, Grenzübertritte);
   die Linie selbst bleibt exakt gleich. Einfügen über "+"-Griffe in der Mitte jeder Teilstrecke (antippen oder
   ziehen; ausgeblendet, wenn < 34 px neben einem Wegpunkt) und über eine breite unsichtbare Tippfläche der Linie.
+  Seit 9.19 wird der Linienklick genau auf die Linie projiziert (vorher landete der Punkt bis 24 px daneben →
+  Strecke und Einstufung änderten sich, z. B. gelb → grün). Einfügen ist bewertungsneutral: polyGraph nimmt nur
+  echte Knicke (> COLIN_NM = 0,02 NM neben der Linie) oder Wechsel der eigenen Höhe in die Geometrie; Wegpunkte
+  auf der Linie stehen in G.vwp (Navlog/Profil) und Teilstrecken-Grenzen in G.legB (legAtX, timeAtX in report.js;
+  Griffe, legMinAlt und Hinweise zu eigenen Höhen nutzen legB statt e.leg). Tests: tests/unit/konsistenz.test.mjs,
+  `node tests/e2e/konsistenz.mjs` (Klick neben die Linie).
 - Handy/Tablet: Tipp ins Höhenprofil springt zur Karte und zeigt die Stelle (durchfallender Tipp wird ignoriert).
   Die Karte wird nur eingepasst, wenn sie sichtbar ist (sonst Zoom 0 bei 0-px-Karte → Ziehen springt um Grad).
 - Bearbeiten ohne Änderung (Stift an/aus) legt keine "Eigene Route" an. Nur wirklich geänderte eigene Routen
@@ -246,6 +252,12 @@ Offen:
 - Knopf "tauschen" (seit 9.6, swapFromTo): Von/Nach mit einem Klick tauschen, wird gespeichert; Test tests/e2e/tauschen.mjs.
 - orte.json: englische Exonyme durch Landesnamen ersetzt (Wien, München, Venezia …), Stadtteile ≤ 5,5 km um
   Großstädte entfernt. GAFOR-Linien seit 9.5 dicker (6 px, weißer Unterstrich).
+- Pisten & Wind (seit 9.19, rwyCardHtml in ui.js, letzte Karte im Ergebnis, nur Anzeige): Windrose mit den Pisten
+  aus openAIP (Gegenrichtungen zu einer Bahn zusammengefasst, Bezeichnung am Aufsetzende, Gras gestrichelt, Länge
+  aus dimension.length, Belag nur Asphalt/Beton/Gras), Wind wie aptWind (amtlich bzw. Modelle; einzelne Modelle
+  grau), aktive Piste = pickRunway mit weißem Richtungspfeil. Umschalten Landung/Start, Zeitschieber ±2 h (30 min),
+  Piste antippen = markieren. Schwacher/umlaufender Wind: keine Piste klar bevorzugt. Hinweis: maßgeblich ATIS/
+  Turm/Platzfunk. Bewertung bleibt bei der geplanten Zeit. Test: `node tests/e2e/pisten.mjs`.
 - Wind bei Start/Landung (seit 9.4, aptWind/pickRunway in route.js): METAR ≤ 90 min am Platz (≤ 5 NM), sonst TAF,
   sonst Modelle (10-m-Wind, zweitschlechtester Wert). Bewertet wird der schlechtere aus amtlich und Modell. Piste
   = größter Gegenwind (Gleichstand: längere Piste; landingOnly/takeOffOnly beachtet), Pisten aus openAIP
@@ -261,10 +273,10 @@ Offen:
   Rechenlogik mit künstlichem Gelände, ohne Netz). Lokal mit `npm run dev` testen.
 - Browser-Tests mit simulierten Datenquellen (tests/e2e, brauchen Playwright und laufendes `npm run dev`):
   `node tests/e2e/run.mjs LOLW LOWZ gut`, `node tests/e2e/edit.mjs`, `node tests/e2e/lang.mjs` (> 250 NM),
-  `node tests/e2e/grenze.mjs` (AT→IT ohne Meldepunkt/FIR), `rueckflug.mjs`, `hoehe.mjs`, `gafor.mjs`, `wetterbild.mjs`, `tauschen.mjs`, `luftraum.mjs`, `layout.mjs`, `strecke.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
+  `node tests/e2e/grenze.mjs` (AT→IT ohne Meldepunkt/FIR), `rueckflug.mjs`, `hoehe.mjs`, `gafor.mjs`, `wetterbild.mjs`, `tauschen.mjs`, `luftraum.mjs`, `layout.mjs`, `strecke.mjs`, `pisten.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.18, nächste 9.19).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.19, nächste 9.20).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.

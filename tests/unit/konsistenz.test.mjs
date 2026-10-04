@@ -40,3 +40,30 @@ test("Tiefe Wolken zwischen zwei Netzknoten werden auch bei berechneten Routen e
   assert.ok(direct, "Direktstrecke vorhanden");
   assert.ok(direct.cat >= 1 || direct.minCloud < 1000, "Wolkennest auf der Direktstrecke muss sich auswirken");
 });
+
+test("Ein auf der Linie eingefügter Wegpunkt ändert die Bewertung nicht (auch mit eigenen Höhen).", () => {
+  const app = loadApp();
+  const { G, P } = setup(app, x => 1000 + 4000 * Math.max(0, Math.sin(x / 6)) ** 2);
+  mitWolkenNest(app, G);
+  app.RES = { G, P, apts: [] };
+  let n = 0;
+  for (const R of app.computeRoutes(G, P)) {
+    const pts = R.pts.map(p => Object.assign({}, p));
+    for (const ua of [null, { 0: 9500 }]) {
+      const E = app.routeFromPoints(G, P, pts, ua);
+      for (let k = 0; k < pts.length - 1; k++) for (const f of [0.31, 0.5, 0.77]) {
+        const q = app.lerp(pts[k], pts[k + 1], f);
+        const p2 = pts.slice(0, k + 1).concat([{ lat: q.lat, lon: q.lon, name: null }], pts.slice(k + 1));
+        const F = app.routeFromPoints(G, P, p2, ua ? { 0: 9500, 1: 9500 } : null);
+        assert.equal(F.cat, E.cat, R.name); assert.equal(F.score, E.score, R.name);
+        assert.equal(F.ete, E.ete, R.name); assert.equal(F.maxAlt, E.maxAlt, R.name);
+        assert.deepEqual(F.conflicts.map(c => c.cause), E.conflicts.map(c => c.cause), R.name);
+        app.finalize(F, G, P);
+        assert.ok(F.wps.some(w => w.uw === k + 1), "eingefügter Wegpunkt fehlt im Navlog");
+        assert.equal(F.legs.length, F.wps.length - 1);
+        n++;
+      }
+    }
+  }
+  assert.ok(n > 20);
+});

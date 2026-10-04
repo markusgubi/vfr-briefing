@@ -1,4 +1,4 @@
-// VFR-Briefing 9.18 - Cloudflare Worker
+// VFR-Briefing 9.19 - Cloudflare Worker
 // Jede Anfrage laeuft zuerst durch die Passwort-Anmeldung (src/auth.js, Secret APP_PASSWORD).
 // Danach: API-Routen /test | /cfg | GET /awx?bbox= | GET /dem/z/x/y.png | GET /sat/{ir|nat}/z/x/y.png | GET /sat/caps,
 // alles andere aus public/ (Static Assets).
@@ -105,8 +105,8 @@ async function handleTest(env) {
   await probe("Satellitenbild EUMETSAT (IR 10.8)", () => fetch(SAT_WMS + "?service=WMS&version=1.3.0&request=GetMap&layers=msg_fes:ir108&styles=&crs=EPSG:3857&bbox=1252344.3,5948635.3,1878516.4,6574807.4&width=64&height=64&format=image/png"));
   const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
   const allOk = rows.every(r => r.ok) && !!key;
-  let html = "<!DOCTYPE html><html lang=\"de\"><meta charset=\"utf-8\"><title>VFR 9.18 Diagnose</title><body style=\"font-family:monospace;max-width:900px;margin:40px auto;line-height:1.6\">";
-  html += "<h2>VFR 9.18 &middot; Diagnose</h2>";
+  let html = "<!DOCTYPE html><html lang=\"de\"><meta charset=\"utf-8\"><title>VFR 9.19 Diagnose</title><body style=\"font-family:monospace;max-width:900px;margin:40px auto;line-height:1.6\">";
+  html += "<h2>VFR 9.19 &middot; Diagnose</h2>";
   html += "<p>Secret OPENAIP_KEY: <b style=\"color:" + (key ? "green" : "crimson") + "\">" + (key ? "gesetzt (" + key.length + " Zeichen)" : "FEHLT") + "</b></p>";
   html += "<p>Secret APP_PASSWORD (Anmeldung): <b style=\"color:" + (env.APP_PASSWORD ? "green" : "crimson") + "\">" + (env.APP_PASSWORD ? "gesetzt" : "FEHLT") + "</b></p>";
   html += "<p>openAIP und Open-Meteo werden direkt im Browser abgefragt und hier nicht getestet.</p>";

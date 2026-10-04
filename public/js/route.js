@@ -664,20 +664,44 @@ function densAlt(elev, T, qnh) { var pa = elev + (1013.25 - qnh) * 27, isa = 15 
 var WX_FAR_NM = 15;
 /* pts[k].shape = Formpunkt (aus dem Suchnetz, kein eigener Wegpunkt). Teilstrecken ("legs", fuer eigene
    Hoehen) laufen von Wegpunkt zu Wegpunkt; Formpunkte teilen keine Teilstrecke. */
-function polyGraph(Gb, pts) {
+/* Geometrie fuer die Bewertung: nur echte Knicke. Punkte, die (fast) genau auf der Linie liegen (z. B. ein
+   beim Bearbeiten eingefuegter Wegpunkt), aendern die Unterteilung NICHT – sonst wuerde dieselbe Strecke durch
+   blosses Einfuegen anders bewertet. Behalten wird ein Punkt nur bei einem Knick (> COLIN_NM neben der Linie)
+   oder wenn dort die eigene Hoehe wechselt. Teilstrecken-Grenzen stehen in G.legB (x je Teilstrecke). */
+var COLIN_NM = 0.02;
+function polyGraph(Gb, pts, userAlt) {
   var G = Object.create(Gb), nodes = [], edges = [], along = 0, leg = 0;
-  pts.forEach(function (p, k) {
-    if (k === 0) { nodes.push({ i: 0, j: 0, lat: p.lat, lon: p.lon, along: 0, uw: 0, pi: 0 }); return; }
-    var a = pts[k - 1], len = distNm(a, p), n = Math.max(1, Math.ceil(len / 5));
+  function uav(l) { return userAlt && userAlt[l] != null ? userAlt[l] : null; }
+  var keep = pts.map(function () { return false; }), last = 0, lg = 0;
+  keep[0] = keep[pts.length - 1] = true;
+  for (var k = 1; k < pts.length - 1; k++) {
+    var bnd = !pts[k].shape;   /* Grenze zwischen Teilstrecke lg und lg + 1 */
+    if (segDist(pts[k], pts[last], pts[k + 1]).d > COLIN_NM || (bnd && uav(lg) !== uav(lg + 1))) { keep[k] = true; last = k; }
+    if (bnd) lg++;
+  }
+  var legB = [{ leg: 0, x0: 0 }], vwp = [], segLeg = 0;
+  nodes.push({ i: 0, j: 0, lat: pts[0].lat, lon: pts[0].lon, along: 0, uw: 0, pi: 0 });
+  var a = pts[0];
+  for (k = 1; k < pts.length; k++) {
+    var p = pts[k];
+    if (!keep[k]) {
+      var xa = along + distNm(a, p);
+      if (!p.shape) { vwp.push({ uw: k, pi: k, x: xa, lat: p.lat, lon: p.lon }); legB[leg].x1 = xa; leg++; legB.push({ leg: leg, x0: xa }); }
+      continue;
+    }
+    var len = distNm(a, p), n = Math.max(1, Math.ceil(len / 5));
     for (var m = 1; m <= n; m++) {
       var q = lerp(a, p, m / n);
       nodes.push({ i: nodes.length, j: 0, lat: q.lat, lon: q.lon, along: along + len * m / n,
         uw: m === n && !p.shape ? k : null, pi: m === n ? k : null });
-      edges.push({ a: nodes.length - 2, b: nodes.length - 1, leg: leg });
+      edges.push({ a: nodes.length - 2, b: nodes.length - 1, leg: segLeg });
     }
-    if (!p.shape) leg++;
-    along += len;
-  });
+    along += len; a = p;
+    if (!p.shape && k < pts.length - 1) { legB[leg].x1 = along; leg++; legB.push({ leg: leg, x0: along }); }
+    segLeg = leg;
+  }
+  legB[leg].x1 = along;
+  G.legB = legB; G.vwp = vwp;
   nodes.forEach(function (nd) {
     var ds = Gb.wpts.map(function (w, k) { return { k: k, d: distNm(nd, w) }; }).sort(function (a, b) { return a.d - b.d; });
     var lim = Math.max(ds[0].d * 1.25, ds[0].d + 1);
@@ -695,7 +719,7 @@ function polyGraph(Gb, pts) {
 function inBox(p, bb) { return p.lon >= bb[0] && p.lon <= bb[2] && p.lat >= bb[1] && p.lat <= bb[3]; }
 function inAirBoxes(G, p) { return !G.airBoxes || G.airBoxes.some(function (bb) { return inBox(p, bb); }); }
 function routeFromPoints(Gb, P, pts, userAlt, id, name) {
-  var G = polyGraph(Gb, pts), path = G.edges.map(function (e, k) { return k; });
+  var G = polyGraph(Gb, pts, userAlt), path = G.edges.map(function (e, k) { return k; });
   var R = evalRoute(G, P, P.depH, path, id || "user", name || "Eigene Route", { userAlt: userAlt || null });
   R.pts = pts.map(function (p) { var o = {}; for (var k in p) o[k] = p[k]; return o; });
   R.custom = true;
@@ -975,7 +999,7 @@ function aptWind(G, apt, minLocal, mode) {
     var gs = models.map(function (m) { return m.gust || 0; }).sort(function (a, b) { return b - a; });
     base = { wd: Math.round(vm.wd), ws: vm.ws, gust: gs[Math.min(1, gs.length - 1)] || null, src: models.length + " Modelle (10 m)" };
   }
-  var pr = pickRunway(apt.rwy, base, mode), out = { wd: base.wd, ws: base.ws, gust: base.gust, src: base.src, rwy: pr ? pr.r : null, n: (apt.rwy || []).length };
+  var pr = pickRunway(apt.rwy, base, mode), out = { wd: base.wd, ws: base.ws, gust: base.gust, src: base.src, rwy: pr ? pr.r : null, n: (apt.rwy || []).length, models: models, off: !!off };
   if (pr) {
     function comp(w) { var c = windOn(w.wd, w.ws, pr.r.hdg), g = w.gust && w.gust > w.ws ? windOn(w.wd, w.gust, pr.r.hdg) : c; return { cross: Math.abs(c.cross), crossG: Math.abs(g.cross), tail: Math.max(0, -c.head) }; }
     var ms = models.map(comp);
