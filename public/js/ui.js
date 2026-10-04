@@ -279,7 +279,7 @@ async function loadGafor() {
     $("legend").querySelector(".lg").appendChild(d);
     gaforLayer.addTo(map);
     $("prefGafor").disabled = false;
-    $("gaforInfo").textContent = "(nur bei gleicher Sicherheit; Linien ungef\u00e4hr aus der GAFOR-Karte)";
+    $("gaforInfo").textContent = "(bis 10 min Umweg, nie auf Kosten der Einstufung; Linien ungef\u00e4hr aus der GAFOR-Karte)";
     $("gaforOn").addEventListener("change", function () { if (this.checked) gaforLayer.addTo(map); else map.removeLayer(gaforLayer); });
   } catch (e) { GAFOR = null; }
 }
@@ -433,6 +433,9 @@ async function plan() {
     var bw = w - 0.2, bs = s - 0.2, be = e + 0.2, bn = n + 0.2;
     var awxKey = [Math.floor((bs - 0.1) * 2) / 2, Math.floor((bw - 0.1) * 2) / 2, Math.ceil((bn + 0.1) * 2) / 2, Math.ceil((be + 0.1) * 2) / 2].join(",");
     G.t0 = new Date(P.date + "T00:00:00").getTime() / 1000;
+    /* Zeitpunkt der Berechnung festhalten: ob ein METAR "aktuell" ist, wird immer gegen diesen Zeitpunkt
+       geprueft – sonst bewertet z. B. das spaetere Bearbeiten dieselbe Strecke mit anderen Wetterdaten */
+    G.now = Date.now() / 1000;
     /* Alle Downloads parallel: Gelaende, Luftraum, Plaetze, METAR/TAF und die 5 Wettermodelle */
     var demZ = demZoom(w - 0.07, s - 0.05, e + 0.07, n + 0.05);
     var pDem = ensureDem(w - 0.07, s - 0.05, e + 0.07, n + 0.05, demZ, function (k, t) { progSet("dem", k / t, null, k + "/" + t + " Kacheln"); })

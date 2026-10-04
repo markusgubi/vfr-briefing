@@ -118,8 +118,16 @@ Sprache der Oberfläche und aller Hinweise: Deutsch. Der Nutzer arbeitet am Mac 
 - Bearbeiten ohne Änderung (Stift an/aus) legt keine "Eigene Route" an. Nur wirklich geänderte eigene Routen
   bleiben beim Neuberechnen erhalten und werden mit der neu geplanten Abflugzeit bewertet.
 - GAFOR (seit 8.2): nur mit Haken "GAFOR-Strecken bevorzugen" (P.preferGafor/GAFOR_ON). Dann zusätzliche
-  GAFOR-Variante in der Suche; in der Rangfolge zählt GAFOR-Nähe NUR bei gleicher Sicherheit (Einstufung,
-  Konfliktlänge, Sicherheitswert). Die normale Suche bleibt ohne GAFOR-Einfluss. Sicherheit geht immer vor.
+  GAFOR-Varianten in der Suche (Bonus 0,15/0,4/0,8 je NM auf GAFOR-Kanten). Rangfolge seit 9.18 (Nutzer: "nur
+  wenn Umweg nicht mehr als 10 min, immer GAFOR"): bei gleicher Einstufung und Konfliktlänge gewinnt die Route
+  mit ≥ 15 Prozentpunkten mehr GAFOR-Anteil (GAFOR_DSHARE), wenn sie ≤ 10 min länger dauert (GAFOR_MIN),
+  ihr Sicherheitswert ≤ 5 schlechter ist (GAFOR_SCORE) und sie nicht > 10 % mehr über hohem Gelände führt
+  (GAFOR_EXPO, R.expo). Name "(entlang GAFOR)" ab 50 % Anteil. Die normale Suche bleibt ohne GAFOR-Einfluss.
+  Einstufung und Konflikte gehen immer vor. Tests: tests/unit/gafor.test.mjs.
+- Planungszeitpunkt (seit 9.18, G.now): Gültigkeit von METAR/TAF und Vorlaufzeit gelten ab dem Moment der
+  Berechnung, nicht ab der aktuellen Uhrzeit. Vorher konnte Bearbeiten/Neubewerten derselben Strecke später
+  eine andere Einstufung ergeben (z. B. METAR > 90 min alt → gelb wurde grün). Ab 45 min nach der Berechnung
+  Hinweis "Berechnet um …" mit Aufforderung, neu zu berechnen. Test: tests/unit/planzeit.test.mjs.
 - Tageslicht (seit 9.0): Sonnenzeiten werden lokal berechnet (sunTimes in util.js, NOAA-Näherung, ±2 min,
   Ortszeit Europe/Vienna), kein Netzabruf mehr. Tag = BCMT bis ECET (SERA). Ankunft nach ECET bzw. Abflug vor
   BCMT = Nacht → KRITISCH (nur NVFR). Ankunft ab 30 min vor Sonnenuntergang bis ECET bzw. Abflug zwischen BCMT
@@ -256,7 +264,7 @@ Offen:
   `node tests/e2e/grenze.mjs` (AT→IT ohne Meldepunkt/FIR), `rueckflug.mjs`, `hoehe.mjs`, `gafor.mjs`, `wetterbild.mjs`, `tauschen.mjs`, `luftraum.mjs`, `layout.mjs`, `strecke.mjs`. Die Mock-Daten in tests/e2e/mock.mjs sind
   frei erfunden und nur für Tests.
 - Testroute zum Prüfen: LOLW → LOWZ (Alpen) und LOLW → LJPZ (Ausland, Meldepunkte).
-- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.17, nächste 9.18).
+- Versionsnummer in Titel, Untertitel, GPX-Creator, /test und package.json mitführen (aktuell 9.18, nächste 9.19).
 - Kleine, nachvollziehbare Commits; Änderungen am Sicherheitsverhalten im Commit-Text begründen.
 - Jede Einstufung EINGESCHR./KRITISCH braucht eine sichtbare Begründung (issueOf + Hinweis).
 - Testgebiete sind iPhone (390 px), iPad quer (1180 px, Touch) und Desktop.

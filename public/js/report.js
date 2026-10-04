@@ -189,7 +189,7 @@ function finalize(R, G, P) {
     var ns = nearestStn(f.apt, 15), T = f.w ? f.w.T : null, qnh = G.qnh;
     if (ns && ns.s.metar) {
       if (ns.s.metar.qnh) qnh = ns.s.metar.qnh;
-      if (Math.abs(f.t - (Date.now() / 60000 - G.t0 / 60)) < 120 && ns.s.metar.temp != null) T = ns.s.metar.temp;
+      if (Math.abs(f.t - ((G.now || Date.now() / 1000) / 60 - G.t0 / 60)) < 120 && ns.s.metar.temp != null) T = ns.s.metar.temp;
     }
     f.stn = ns; f.qnh = qnh; f.T = T; f.da = T != null ? densAlt(f.elev, T, qnh) : null;
     if (f.da != null && f.da - f.elev > 2000) add("warn", "Dichteh\u00f6he " + esc(f.apt.icao || f.apt.name) + " ~" + fmtFt(f.da) + " ft \u2013 Start-/Landestrecke und Steigleistung pr\u00fcfen.");
@@ -199,6 +199,11 @@ function finalize(R, G, P) {
   if (R.wxFar && R.wxFar.length) add("warn", "Wetterdaten f\u00fcr Teile dieser Route nur von bis zu " + Math.round(Math.max.apply(null, R.wxFar.map(function (w) { return w.d; }))) +
     " NM entfernten Punkten \u2013 werden nachgeladen.", R.wxFar[0].x);
   if (G.airFailed && G.airFailed.length) add("bad", "Luftraumdaten f\u00fcr " + G.airFailed.join(", ") + " fehlen \u2013 Lufträume dort NICHT gepr\u00fcft!");
+  /* Berechnung aelter als 45 min: METAR/TAF koennen inzwischen neu sein (bewertet wird mit dem Stand der Berechnung) */
+  if (G.now && Date.now() / 1000 - G.now > 2700) {
+    var cd = new Date(G.now * 1000);
+    add("warn", "<b>Berechnet um " + p2(cd.getHours()) + ":" + p2(cd.getMinutes()) + "</b> \u2013 seitdem k\u00f6nnen neue METAR/TAF vorliegen. Bewertet wird mit dem Stand der Berechnung: f\u00fcr aktuelle Meldungen \u201eSicherste Route berechnen\u201c erneut dr\u00fccken.");
+  }
   add("info", "Tempor\u00e4re Luftraumbeschr\u00e4nkungen und Aktivierungen per NOTAM sind nicht enthalten \u2013 NOTAM vor dem Flug pr\u00fcfen.");
   var ord = { bad: 0, warn: 1, info: 2, ok: 3 };
   H.sort(function (a, b) { return ord[a.l] - ord[b.l]; });
@@ -223,7 +228,7 @@ function finalize(R, G, P) {
   R.bands = Object.keys(bands).map(function (kk) { return bands[kk]; });
   var ag = 0, an = 0;
   R.rs.forEach(function (r) { [r.wa, r.wb].forEach(function (w) { if (w) { ag += w.agree; an++; } }); });
-  var agree = an ? ag / an : 0, leadH = (G.t0 + R.depMin * 60 - Date.now() / 1000) / 3600;
+  var agree = an ? ag / an : 0, leadH = (G.t0 + R.depMin * 60 - (G.now || Date.now() / 1000)) / 3600;
   var lead = leadH <= 12 ? 1 : leadH <= 24 ? 0.93 : leadH <= 48 ? 0.85 : leadH <= 72 ? 0.75 : leadH <= 120 ? 0.6 : 0.45;
   var compl = G.modelsOk.length / MODELS.length, offN = 0;
   [R.rs[0].wa, R.rs[R.rs.length - 1].wb].forEach(function (w) { if (w && w.off) offN++; });

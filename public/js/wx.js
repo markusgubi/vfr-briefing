@@ -251,9 +251,9 @@ function nearestStn(p, maxNm) {
   STN.forEach(function (s) { var d = distNm(p, s); if (d <= bd) { bd = d; best = s; } });
   return best ? { s: best, d: bd } : null;
 }
-function officialAt(p, t) {
+function officialAt(p, t, now0) {
   var ns = nearestStn(p, 10); if (!ns) return null;
-  var s = ns.s, now = Date.now() / 1000, res = { visKm: null, ceilMsl: null, gust: null, soft: null }, used = [];
+  var s = ns.s, now = now0 || Date.now() / 1000, res = { visKm: null, ceilMsl: null, gust: null, soft: null }, used = [];
   var m = s.metar;
   if (m && Math.abs(t - now) <= 5400 && now - m.t <= 5400) {
     res.visKm = m.visKm; res.ceilMsl = m.ceil != null ? s.elevFt + m.ceil : null; res.gust = m.gust; used.push("METAR " + s.id);

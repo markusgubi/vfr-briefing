@@ -218,7 +218,8 @@ function nameRoutes(routes) {
   routes.sort(rankCmp);
   routes.forEach(function (R, i) {
     var base = i === 0 ? (R.id === "direct" ? "Sicherste Route (= Direktstrecke)" : "Sicherste Route") : R.id === "direct" ? "Direktstrecke" : "Alternative";
-    R.name = base + (R.viaRp ? (R.viaLabel != null ? R.viaLabel : " über Meldepunkte") : "");
+    R.name = base + (R.viaRp ? (R.viaLabel != null ? R.viaLabel : " über Meldepunkte") : "") +
+      (GAFOR && GAFOR_ON && R.id !== "direct" && gaforShare(R) >= 0.5 ? " (entlang GAFOR)" : "");
   });
 }
 

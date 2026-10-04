@@ -158,7 +158,7 @@ function nodeWx(G, ni, h) {
   var nd = G.nodes[ni];
   var w = combineWx(nd.wps.map(function (wi) { return wpWx(G, wi, h); }));
   if (!w) { G.nw[key] = null; return null; }
-  var off = officialAt(nd, G.t0 + h * 3600);
+  var off = officialAt(nd, G.t0 + h * 3600, G.now);
   if (off) {
     w.off = off;
     if (off.visKm != null && off.visKm < w.visKm) { w.visKm = off.visKm; w.visSrc = off.src; }
@@ -220,7 +220,7 @@ function ceilFromBase(base, P) {
   if (c < 3000) c = Math.min(Math.max(c, base - 500), Math.max(c, 3000));
   return c;
 }
-function makeMode(P, lambda, gafor) { return { lambda: lambda, clrPen: P.avoidClr ? 400 : 2, dangerPen: 150, gafor: !!gafor }; }
+function makeMode(P, lambda, gafor) { return { lambda: lambda, clrPen: P.avoidClr ? 400 : 2, dangerPen: 150, gafor: gafor || 0 }; }
 function edgeCost(r, mode) {
   var c = r.e.len * (1 + mode.lambda * r.risk);
   if (r.terrainHigh) c += 1e5;
@@ -235,7 +235,7 @@ function edgeCost(r, mode) {
   if (r.descDef > 0) c += r.e.len * Math.min(3, r.descDef / 500);
   if (r.descDefS > 0) c += 4 * r.e.len * Math.min(3, r.descDefS / 500) + (r.descDefS > 500 ? 300 : 0);
   /* GAFOR-Bonus nur in der eigenen GAFOR-Suche (zusaetzlicher Kandidat), nie in der normalen Suche */
-  if (mode.gafor && r.e.gafor) c -= r.e.len * 0.15;
+  if (mode.gafor && r.e.gafor) c -= r.e.len * mode.gafor;
   return c;
 }
 function bestPath(G, P, depH, mode, extra) {
@@ -643,7 +643,7 @@ function evalRoute(G, P, depH, path, id, name, opt) {
   score -= D ? 8 * expo / D : 0;
   var rawScore = score, confLen = conflicts.reduce(function (s, c) { return s + c.x1 - c.x0 + 0.5; }, 0);
   if (cat === 2) score = Math.min(score, 30); else if (cat === 1) score = Math.min(score, 70);
-  return { rawScore: rawScore, confLen: Math.round(confLen * 2) / 2, circles: circles, tight: tight, id: id, name: name, rs: rs, path: path, key: path.join(","),
+  return { rawScore: rawScore, expo: D ? expo / D : 0, confLen: Math.round(confLen * 2) / 2, circles: circles, tight: tight, id: id, name: name, rs: rs, path: path, key: path.join(","),
     G: G, userAlt: opt.userAlt || null, D: D, samples: sm, circMin: circMin, spiralMin: 0, steep: steep, descRate: P.desc, tod: sm[tod] ? { x: sm[tod].x, p: p[tod], t: sm[tod].t } : null,
     depMin: depH * 60, arrMin: arrMin, ete: arrMin - depH * 60, maxAlt: Math.max.apply(null, p), cruiseMax: Math.max.apply(null, rs.map(function (r) { return r.alt; })),
     minTerr: minTerr, minTerrX: minTerrX, terrReserve: P.terrClr + 300, minCloud: minCloud, maxRisk: maxRisk, avgRisk: avgRisk, worstReason: worstReason, conflicts: conflicts,
@@ -735,19 +735,34 @@ function similar(a, b, G) {
   Object.keys(ma).forEach(function (i) { n++; if (mb[i] != null && Math.abs(ma[i] - mb[i]) <= 1) k++; });
   return n ? k / n : 1;
 }
-/* Rangfolge streng nach Sicherheit: Einstufung, Konfliktlaenge, Sicherheitswert. Erst bei GLEICHER Sicherheit
-   entscheidet die Naehe zu GAFOR-Strecken, danach die Flugzeit. */
-function gaforShare(R) { return R.rs.reduce(function (a, r) { return a + (r.e.gafor ? r.e.len : 0); }, 0) / Math.max(1, R.D); }
+/* Rangfolge streng nach Sicherheit: Einstufung, Konfliktlaenge, Sicherheitswert, dann Flugzeit.
+   Mit "GAFOR-Strecken bevorzugen" (seit 9.18, Nutzerwunsch): bei gleicher Einstufung und Konfliktlaenge gewinnt
+   die Route mit deutlich mehr GAFOR-Anteil (GAFOR_DSHARE), wenn sie hoechstens GAFOR_MIN Minuten laenger dauert
+   ihr Sicherheitswert hoechstens GAFOR_SCORE schlechter ist und sie nicht nennenswert mehr ueber hohem Gelaende
+   fuehrt (GAFOR_EXPO). Einstufung/Konflikte gehen immer vor. */
+var GAFOR_MIN = 10, GAFOR_SCORE = 5, GAFOR_DSHARE = 0.15, GAFOR_EXPO = 0.1;
+function gaforShare(R) {
+  if (R.gShare == null) R.gShare = R.rs.reduce(function (a, r) { return a + (r.e.gafor ? r.e.len : 0); }, 0) / Math.max(1, R.D);
+  return R.gShare;
+}
+function gaforCmp(x, y) {
+  var d = gaforShare(x) - gaforShare(y);
+  if (Math.abs(d) < GAFOR_DSHARE) return 0;
+  var g = d > 0 ? x : y, o = d > 0 ? y : x;
+  if (g.ete > o.ete + GAFOR_MIN || g.rawScore < o.rawScore - GAFOR_SCORE || (g.expo || 0) > (o.expo || 0) + GAFOR_EXPO) return 0;
+  return d > 0 ? -1 : 1;
+}
 function rankCmp(x, y) {
-  return x.cat - y.cat || x.confLen - y.confLen || Math.round(y.rawScore) - Math.round(x.rawScore) ||
-    (GAFOR && GAFOR_ON ? Math.round(10 * (gaforShare(y) - gaforShare(x))) : 0) || x.ete - y.ete;
+  return x.cat - y.cat || x.confLen - y.confLen || (GAFOR && GAFOR_ON ? gaforCmp(x, y) : 0) ||
+    Math.round(y.rawScore) - Math.round(x.rawScore) || x.ete - y.ete;
 }
 function candidatePaths(G, P, depH, quick) {
   var out = [];
   function add(p) { if (p && !out.some(function (q) { return q.join() === p.join(); })) out.push(p); }
   var p1 = bestPath(G, P, depH, makeMode(P, 5)); add(p1);
   add(bestPath(G, P, depH, makeMode(P, 12)));
-  if (GAFOR && GAFOR_ON) add(bestPath(G, P, depH, makeMode(P, 5, true)));   /* GAFOR-Variante, gewinnt nur bei gleicher Sicherheit */
+  /* GAFOR-Varianten mit steigendem Bonus (nur Suche); ob sie gewinnen, entscheidet rankCmp */
+  if (GAFOR && GAFOR_ON) (quick ? [0.4] : [0.15, 0.4, 0.8]).forEach(function (b) { add(bestPath(G, P, depH, makeMode(P, 5, b))); });
   if (!quick) {
     add(bestPath(G, P, depH, makeMode(P, 2)));
     if (p1) {
@@ -942,7 +957,7 @@ function aptWind(G, apt, minLocal, mode) {
   if (typeof STN !== "undefined" && STN.length) {
     var ns = nearestStn(apt, 5);
     if (ns) {
-      var s = ns.s, t = (G.t0 || 0) + minLocal * 60, now = Date.now() / 1000;
+      var s = ns.s, t = (G.t0 || 0) + minLocal * 60, now = G.now || Date.now() / 1000;
       if (s.metar && s.metar.wspd != null && Math.abs(t - now) <= 5400 && now - s.metar.t <= 5400) off = { wd: s.metar.wdir, ws: s.metar.wspd, gust: s.metar.gust || null, src: "METAR " + s.id };
       else { var tf = tafAt(s.taf, t); if (tf && tf.hard && tf.hard.wspd != null) off = { wd: tf.hard.wdir, ws: tf.hard.wspd, gust: tf.hard.gust || null, src: "TAF " + s.id }; }
     }
